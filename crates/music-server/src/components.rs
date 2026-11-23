@@ -64,7 +64,8 @@ pub(crate) struct ModelSet {
     pub id: String,
     /// The set's name by language code.
     pub label: BTreeMap<String, String>,
-    /// Video memory the set needs to run, in gigabytes.
+    /// Video memory the set needs to run, in gigabytes; 0 where it is not measured yet.
+    #[serde(default)]
     pub vram_gb: f64,
     /// What the set needs besides memory, such as `cuda13`.
     #[serde(default)]

@@ -12,7 +12,6 @@ pub(super) const ENGINE: &str = "audio.cpp";
 pub(super) fn family_name(id: &str) -> Option<&'static str> {
     Family::parse(id).map(Family::name)
 }
-const HEARTMULA_INSTALL: &str = "audio-cpp-heartmula";
 const FAMILY: &str = "minimax_music3";
 const PROFILE: &str = "quality-q8";
 const QUANTIZATION: &str = "Q8_0";
@@ -251,41 +250,44 @@ struct ManagedModel {
     lease: Arc<tokio::sync::Mutex<()>>,
 }
 
-fn managed_model(family: Family, state: &AppState) -> Option<ManagedModel> {
-    if matches!(family, Family::Yue) {
-        return Some(ManagedModel {
-            family,
-            scope: "audio-cpp-yue2",
-            assets: audio_cpp_yue2::ASSETS.iter().map(|(asset, sha)| (asset, *sha)).collect(),
-            lease: state.audio_cpp_yue2_install.clone(),
-        });
-    }
-    let (scope, asset, sha256, lease) = match family {
-        Family::HeartMuLa => (
-            HEARTMULA_INSTALL,
-            &audio_cpp_heartmula::ASSET,
-            audio_cpp_heartmula::SHA256,
-            &state.heartmula_install,
-        ),
-        Family::Ace => ("audio-cpp-ace-step", &audio_cpp_ace_step::ASSET, audio_cpp_ace_step::SHA256, &state.audio_cpp_ace_install),
-        Family::StableAudio => (
-            "audio-cpp-stable-audio",
-            &audio_cpp_stable_audio::ASSET,
-            audio_cpp_stable_audio::SHA256,
-            &state.stable_audio_install,
-        ),
-        Family::SoulX(variant) => {
-            let (asset, sha256) = variant.asset();
-            (variant.id(), asset, sha256, &state.soulx_install)
-        }
-        _ => return None,
-    };
-    Some(ManagedModel {
-        family,
-        scope,
-        assets: vec![(asset, sha256)],
-        lease: lease.clone(),
-    })
+fn managed_model(family: Family) -> Option<ManagedModel> {
+    static LEASES: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<&'static str, (&'static str, Arc<tokio::sync::Mutex<()>>)>>> =
+        std::sync::LazyLock::new(Default::default);
+    let assets = set_files(family.id())?;
+    let (scope, lease) = LEASES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .entry(family.id())
+        .or_insert_with(|| (Box::leak(format!("audio-cpp-{}", family.id()).into_boxed_str()), Arc::default()))
+        .clone();
+    Some(ManagedModel { family, scope, assets, lease })
+}
+
+/// The catalogue engine whose sets are the audio.cpp model families (`distribution/components-src/audio-cpp.json`).
+pub(super) const SETS: &str = "audio.cpp";
+
+/// Every file of a family's set with its pinned SHA-256; none when the catalogue has no such set.
+pub(super) fn set_files(family: &str) -> Option<Vec<(&'static downloads::Asset, &'static str)>> {
+    let set = crate::components::sets(SETS).into_iter().find(|set| set.id == family)?;
+    set.roles
+        .values()
+        .map(|id| {
+            let asset = crate::components::asset(id).ok()?;
+            Some((asset, crate::pin_sha::sha256(asset.url)?))
+        })
+        .collect()
+}
+
+/// The file of a family's set at `name` inside the family's folder.
+pub(super) fn set_file(family: &str, name: &str) -> (&'static downloads::Asset, &'static str) {
+    set_files(family)
+        .and_then(|files| files.into_iter().find(|(asset, _)| set_name(asset) == name))
+        .unwrap_or_else(|| panic!("the component catalogue has no {name} in the {family} set"))
+}
+
+/// Where a set's file lies inside the family's folder: its path after `models/<folder>/`.
+pub(super) fn set_name(asset: &downloads::Asset) -> &'static str {
+    asset.relative_path.splitn(3, '/').nth(2).unwrap_or(asset.relative_path)
 }
 
 enum PreparedTask {
@@ -460,7 +462,7 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
         let Some(managed) = model["id"]
             .as_str()
             .and_then(Family::parse)
-            .and_then(|family| managed_model(family, &state))
+            .and_then(|family| managed_model(family))
         else {
             continue;
         };
@@ -471,6 +473,12 @@ pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
             model["ready"] = Value::Bool(false);
         }
         model["download"] = serde_json::json!(acpp_download(&state, managed.scope).await);
+        model["installable"] = Value::Bool(true);
+        if model.get("missing_bytes").is_none() {
+            let downloader = state.acpp.downloader();
+            let missing: u64 = managed.assets.iter().filter(|(asset, _)| !downloader.is_installed(asset)).map(|(asset, _)| asset.bytes).sum();
+            model["missing_bytes"] = Value::from(if model["ready"] == true { 0 } else { missing });
+        }
     }
     Json(serde_json::json!({
         "engine": ENGINE,
@@ -488,7 +496,7 @@ pub(super) async fn cancel_install(
     State(state): State<AppState>,
     Json(request): Json<InstallModel>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let managed = Family::parse(&request.model).and_then(|family| managed_model(family, &state))
+    let managed = Family::parse(&request.model).and_then(|family| managed_model(family))
         .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "This audio.cpp music model has no managed installation.".into()))?;
     Ok(Json(serde_json::json!({"cancelled": cancel_acpp_download(&state, managed.scope).await})))
 }
@@ -498,7 +506,7 @@ pub(super) async fn install(
     Json(request): Json<InstallModel>,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let Some(managed) =
-        Family::parse(&request.model).and_then(|family| managed_model(family, &state))
+        Family::parse(&request.model).and_then(|family| managed_model(family))
     else {
         return Err(api_error(
             StatusCode::BAD_REQUEST,
@@ -646,6 +654,27 @@ mod tests {
     }
 
     #[test]
+    fn every_family_downloads_each_file_it_needs_from_its_set() {
+        let empty = tempfile::tempdir().unwrap();
+        for family in [
+            Family::MiniMax, Family::MiniMaxH3, Family::HeartMuLa, Family::StableAudio, Family::MiDasheng, Family::Magenta,
+            Family::MuLaCover, Family::Vevo2, Family::ControlFoley, Family::Moss, Family::Yue, Family::Ace,
+            Family::SoulX(audio_cpp_soulx::Variant::Synthesis), Family::SoulX(audio_cpp_soulx::Variant::Conversion),
+        ] {
+            let managed = managed_model(family).unwrap_or_else(|| panic!("{} has no set in the catalogue", family.id()));
+            let names: Vec<&str> = managed.assets.iter().map(|(asset, _)| set_name(asset)).collect();
+            for needed in family.missing(empty.path()) {
+                assert!(names.iter().any(|name| name.ends_with(needed)), "{}: {needed} is not in its set {names:?}", family.id());
+            }
+            let directory = family.directory(empty.path());
+            for (asset, _) in &managed.assets {
+                let landing = empty.path().join("audiocpp").join(asset.relative_path);
+                assert!(landing.starts_with(&directory), "{}: {} lands outside {}", family.id(), landing.display(), directory.display());
+            }
+        }
+    }
+
+    #[test]
     fn repairing_heartmula_preserves_download_resume_files() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("heartmula-q8_0.gguf");
@@ -654,12 +683,8 @@ mod tests {
         std::fs::write(&target, b"broken GGUF").unwrap();
         std::fs::write(&partial, b"partial bytes").unwrap();
         std::fs::write(&manifest, b"resume manifest").unwrap();
-        repair_managed_file(
-            &target,
-            &audio_cpp_heartmula::ASSET,
-            audio_cpp_heartmula::SHA256,
-        )
-        .unwrap();
+        let (asset, sha256) = set_file(audio_cpp_heartmula::FAMILY, "heartmula-q8_0.gguf");
+        repair_managed_file(&target, asset, sha256).unwrap();
         assert!(!target.exists());
         assert_eq!(std::fs::read(partial).unwrap(), b"partial bytes");
         assert_eq!(std::fs::read(manifest).unwrap(), b"resume manifest");
@@ -812,7 +837,7 @@ async fn submit_with_source(
             format!("Unknown audio.cpp music model {model}."),
         );
     };
-    if managed_model(family, &state).is_some_and(|managed| managed.lease.try_lock().is_err()) {
+    if managed_model(family).is_some_and(|managed| managed.lease.try_lock().is_err()) {
         return reject(
             StatusCode::CONFLICT,
             format!("{} installation is in progress.", family.name()),

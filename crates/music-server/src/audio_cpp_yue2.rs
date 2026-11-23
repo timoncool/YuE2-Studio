@@ -9,76 +9,9 @@ pub(super) const PROFILE: &str = "yue2-3b-q8_0-nar-v9";
 const DIRECTORY: &str = "Yue2-3B-GGUF";
 const NAR: &str = "nar_lora_joint_v9.safetensors";
 
-macro_rules! asset {
-    ($file:literal, $url:expr, $bytes:literal, $sha:literal) => {
-        (
-            downloads::Asset {
-                id: $file,
-                label: $file,
-                kind: downloads::AssetKind::Model,
-                url: $url,
-                relative_path: concat!("models/Yue2-3B-GGUF/", $file),
-                bytes: $bytes,
-                unzip_into: None,
-                marker: $file,
-                pick: &[],
-                vram_gb: None,
-                note: "YuE2 Q8_0 for audio.cpp",
-            },
-            $sha,
-        )
-    };
-}
-
-macro_rules! packed {
-    ($file:literal, $bytes:literal, $sha:literal) => {
-        asset!($file, concat!("https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/", $file), $bytes, $sha)
-    };
-}
-
-pub(super) const ASSETS: [(downloads::Asset, &str); 7] = [
-    packed!(
-        "yue2-3b-q8_0.gguf",
-        4264195616,
-        "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591"
-    ),
-    packed!(
-        "yue2-vae-f16.gguf",
-        265218656,
-        "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d"
-    ),
-    packed!(
-        "sidecars/yue2-model-config.json",
-        959,
-        "ad3477bbef890bf98ae196c1e4b44779494a6231c4ab66f32708eabadf265329"
-    ),
-    packed!(
-        "sidecars/yue2-generation-config.json",
-        466,
-        "203830cebde6e3644eb291925362990d198e66c3b6006cd11f1aaa21904bcc61"
-    ),
-    packed!(
-        "sidecars/yue2-qwen.tiktoken",
-        2561218,
-        "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186"
-    ),
-    packed!(
-        "sidecars/yue2-vae-config.json",
-        1378,
-        "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970"
-    ),
-    asset!(
-        "nar_lora_joint_v9.safetensors",
-        "https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/resolve/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5/nar_lora_joint_v9.safetensors",
-        140560592,
-        "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e"
-    ),
-];
-
-pub(super) fn sha256(url: &str) -> Option<&'static str> {
-    ASSETS
-        .iter()
-        .find_map(|(item, sha)| (item.url == url).then_some(*sha))
+/// The packed model, its sidecars and the V9 NAR companion: the component catalogue's YuE2 set.
+fn files() -> Vec<(&'static downloads::Asset, &'static str)> {
+    crate::audio_cpp_music::set_files(FAMILY).expect("the component catalogue has the YuE2 set")
 }
 
 pub(super) fn model_dir(root: &FsPath) -> PathBuf {
@@ -86,13 +19,10 @@ pub(super) fn model_dir(root: &FsPath) -> PathBuf {
 }
 
 pub(super) fn missing_files(directory: &FsPath) -> Vec<&'static str> {
-    ASSETS
-        .iter()
-        .filter(|(asset, sha)| {
-            let path = directory.join(asset.marker);
-            !matches_pin(&path, asset.bytes, sha)
-        })
-        .map(|(asset, _)| asset.marker)
+    files()
+        .into_iter()
+        .filter(|(asset, sha)| !matches_pin(&directory.join(crate::audio_cpp_music::set_name(asset)), asset.bytes, sha))
+        .map(|(asset, _)| crate::audio_cpp_music::set_name(asset))
         .collect()
 }
 
@@ -126,9 +56,10 @@ pub(super) fn catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
         || vec!["Studio data folder"],
         |root| missing_files(&model_dir(root)),
     );
-    let missing_bytes = ASSETS
+    let files = files();
+    let missing_bytes = files
         .iter()
-        .filter(|(asset, _)| missing.contains(&asset.marker) || root.is_none())
+        .filter(|(asset, _)| missing.contains(&crate::audio_cpp_music::set_name(asset)) || root.is_none())
         .map(|(asset, _)| asset.bytes)
         .sum::<u64>();
     if !runtime_ready {
@@ -136,7 +67,7 @@ pub(super) fn catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
     }
     serde_json::json!({"id":FAMILY,"name":"YuE2","profile_id":PROFILE,"quantization":"Q8_0",
         "status":"experimental","ready":missing.is_empty(),"missing":missing,"missing_bytes":missing_bytes,
-        "bytes":ASSETS.iter().map(|(asset, _)| asset.bytes).sum::<u64>(),"installable":true,
+        "bytes":files.iter().map(|(asset, _)| asset.bytes).sum::<u64>(),"installable":true,
         "license_url":"https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/tree/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5"})
 }
 

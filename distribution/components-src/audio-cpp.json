@@ -1,0 +1,599 @@
+{
+  "files": {
+    "acpp/minimax_music3/language_model_q8_0.gguf": {
+      "label": "MiniMax Music3: language_model_q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/language_model_q8_0.gguf",
+      "bytes": 9889350208,
+      "sha256": "cf8a9b01bb0ea2e930f1df023e524d1ec2de595553775bcd3f9c5e5187419e72",
+      "path": "models/minimax_music3/language_model_q8_0.gguf"
+    },
+    "acpp/minimax_music3/rvq_depth_decoder_q8_0.gguf": {
+      "label": "MiniMax Music3: rvq_depth_decoder_q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/rvq_depth_decoder_q8_0.gguf",
+      "bytes": 714028960,
+      "sha256": "d5b7495fb1a7845abfeab13df829510de442fd4ea0fd55467fe9895fe8ec5db6",
+      "path": "models/minimax_music3/rvq_depth_decoder_q8_0.gguf"
+    },
+    "acpp/minimax_music3/transformer_q8_0.gguf": {
+      "label": "MiniMax Music3: transformer_q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/transformer_q8_0.gguf",
+      "bytes": 2606842688,
+      "sha256": "40ed8a14884e9ac1b40625edd0dc14138c3d3d62803e2b5903f008dec60e61ac",
+      "path": "models/minimax_music3/transformer_q8_0.gguf"
+    },
+    "acpp/minimax_music3/condition_encoder.gguf": {
+      "label": "MiniMax Music3: condition_encoder.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/condition_encoder.gguf",
+      "bytes": 100678368,
+      "sha256": "ae4be8b6154645b0717d1928f5c195359bdee8fd025099c49954ed302257cd20",
+      "path": "models/minimax_music3/condition_encoder.gguf"
+    },
+    "acpp/minimax_music3/vocoder.gguf": {
+      "label": "MiniMax Music3: vocoder.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/vocoder.gguf",
+      "bytes": 216705376,
+      "sha256": "5d40e6d52349d50d2aeaaaf6ba934afbf490e4cbc1ba5bb715c3133ea45cdca4",
+      "path": "models/minimax_music3/vocoder.gguf"
+    },
+    "acpp/minimax_music3/config.json": {
+      "label": "MiniMax Music3: config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/config.json",
+      "bytes": 107,
+      "sha256": "1ffcff67d916d5519d1ef9a36853232ee6bcb7e14a936623c4e85559f5dce106",
+      "path": "models/minimax_music3/config.json"
+    },
+    "acpp/minimax_music3/config/language_model.json": {
+      "label": "MiniMax Music3: config/language_model.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/config/language_model.json",
+      "bytes": 1596,
+      "sha256": "34ded58fcd5e8181557f1417e76af9f3e95109a5ce113a4771fd16f8625b53c0",
+      "path": "models/minimax_music3/config/language_model.json"
+    },
+    "acpp/minimax_music3/config/rvq_depth_decoder.json": {
+      "label": "MiniMax Music3: config/rvq_depth_decoder.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/config/rvq_depth_decoder.json",
+      "bytes": 274,
+      "sha256": "b38c7f72d4b2fa8667442071f9e4a63ca5a7b5d0859e5e64ee7f79c4bc64520c",
+      "path": "models/minimax_music3/config/rvq_depth_decoder.json"
+    },
+    "acpp/minimax_music3/config/condition_encoder.json": {
+      "label": "MiniMax Music3: config/condition_encoder.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/config/condition_encoder.json",
+      "bytes": 292,
+      "sha256": "1cdea3f36506719128ae4a29cdfff74b1134e607eb4a504ce6d810568fac8263",
+      "path": "models/minimax_music3/config/condition_encoder.json"
+    },
+    "acpp/minimax_music3/config/transformer.json": {
+      "label": "MiniMax Music3: config/transformer.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/config/transformer.json",
+      "bytes": 294,
+      "sha256": "f60856be934127a8b8223510aff2e38a9efd8bbdbc230c3d3339b96e2cb12f00",
+      "path": "models/minimax_music3/config/transformer.json"
+    },
+    "acpp/minimax_music3/config/vocoder.json": {
+      "label": "MiniMax Music3: config/vocoder.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/config/vocoder.json",
+      "bytes": 251,
+      "sha256": "4161afd07ba7d5b949e29c8a7a005592259fba73e9110b6ece9dfd38d3489eac",
+      "path": "models/minimax_music3/config/vocoder.json"
+    },
+    "acpp/minimax_music3/tokenizer/tokenizer.json": {
+      "label": "MiniMax Music3: tokenizer/tokenizer.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/tokenizer/tokenizer.json",
+      "bytes": 11423801,
+      "sha256": "b1537fa9e59a537276ecbc2e12d0438edff635a1f4a4948e679774b5feb3e610",
+      "path": "models/minimax_music3/tokenizer/tokenizer.json"
+    },
+    "acpp/minimax_music3/tokenizer/tokenizer_config.json": {
+      "label": "MiniMax Music3: tokenizer/tokenizer_config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/MiniMax-Music3-GGUF/resolve/46fe77f8bb395ccdbe797d784225f7b84866e7ce/tokenizer/tokenizer_config.json",
+      "bytes": 377,
+      "sha256": "1689852cc9c45010de040c8302a8acdc0d2c4c6c740dd7e9dd0a8c704e16eada",
+      "path": "models/minimax_music3/tokenizer/tokenizer_config.json"
+    },
+    "acpp/minimax_h3/dit.gguf": {
+      "label": "MiniMax-H3: dit.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/dit.gguf",
+      "bytes": 15502530720,
+      "sha256": "f122a03b9e04a837889504a6612e7d4acbfa85ac648405726b8e49e5fbdadd0c",
+      "path": "models/MiniMax-H3-Q4-GGUF/dit.gguf"
+    },
+    "acpp/minimax_h3/text_encoder_q4_k.gguf": {
+      "label": "MiniMax-H3: text_encoder_q4_k.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/text_encoder_q4_k.gguf",
+      "bytes": 15270376000,
+      "sha256": "82985a5b59d83ab20cd5ba66195a1af380d9b66c76211e3bda9292a95830e55b",
+      "path": "models/MiniMax-H3-Q4-GGUF/text_encoder_q4_k.gguf"
+    },
+    "acpp/minimax_h3/audio_vae_folded_f16.gguf": {
+      "label": "MiniMax-H3: audio_vae_folded_f16.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/audio_vae_folded_f16.gguf",
+      "bytes": 284562816,
+      "sha256": "8b7ddc1acb542d5168bf0944890f27f57e32b46e1c7f5918b0ca35a7e85bca05",
+      "path": "models/MiniMax-H3-Q4-GGUF/audio_vae_folded_f16.gguf"
+    },
+    "acpp/minimax_h3/video_vae.gguf": {
+      "label": "MiniMax-H3: video_vae.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/video_vae.gguf",
+      "bytes": 1374245472,
+      "sha256": "5e98a348d9d9357af7b32625a4bc43e7df85aab4236b1ba14635f8d724c27e24",
+      "path": "models/MiniMax-H3-Q4-GGUF/video_vae.gguf"
+    },
+    "acpp/minimax_h3/configuration.json": {
+      "label": "MiniMax-H3: configuration.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/configuration.json",
+      "bytes": 34,
+      "sha256": "5a10ab279cf9fe25d65a1813f0785c08e33d9db550053ae5f8456cdfa44b87c6",
+      "path": "models/MiniMax-H3-Q4-GGUF/configuration.json"
+    },
+    "acpp/minimax_h3/FL2VA/processor/chat_template.json": {
+      "label": "MiniMax-H3: FL2VA/processor/chat_template.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/chat_template.json",
+      "bytes": 5499,
+      "sha256": "5c72a170d2a4a1a3bc5adad2e689ae28138a9700e5b8c96c0266331e86c0acce",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/chat_template.json"
+    },
+    "acpp/minimax_h3/FL2VA/processor/merges.txt": {
+      "label": "MiniMax-H3: FL2VA/processor/merges.txt",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/merges.txt",
+      "bytes": 1671839,
+      "sha256": "599bab54075088774b1733fde865d5bd747cbcc7a547c5bc12610e874e26f5e3",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/merges.txt"
+    },
+    "acpp/minimax_h3/FL2VA/processor/preprocessor_config.json": {
+      "label": "MiniMax-H3: FL2VA/processor/preprocessor_config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/preprocessor_config.json",
+      "bytes": 390,
+      "sha256": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/preprocessor_config.json"
+    },
+    "acpp/minimax_h3/FL2VA/processor/tokenizer.json": {
+      "label": "MiniMax-H3: FL2VA/processor/tokenizer.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/tokenizer.json",
+      "bytes": 7032403,
+      "sha256": "a5d85b6dcc535e6b93115a9ef287e6132fdbf30270da6218194ba742261173c7",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/tokenizer.json"
+    },
+    "acpp/minimax_h3/FL2VA/processor/tokenizer_config.json": {
+      "label": "MiniMax-H3: FL2VA/processor/tokenizer_config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/tokenizer_config.json",
+      "bytes": 11003,
+      "sha256": "a07e942ac874baa13758de8d1fbdb186683cc03416b5589e1b6671c6b3057c68",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/tokenizer_config.json"
+    },
+    "acpp/minimax_h3/FL2VA/processor/video_preprocessor_config.json": {
+      "label": "MiniMax-H3: FL2VA/processor/video_preprocessor_config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/video_preprocessor_config.json",
+      "bytes": 385,
+      "sha256": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/video_preprocessor_config.json"
+    },
+    "acpp/minimax_h3/FL2VA/processor/vocab.json": {
+      "label": "MiniMax-H3: FL2VA/processor/vocab.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MiniMax-H3-Q4-GGUF/FL2VA/processor/vocab.json",
+      "bytes": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+      "path": "models/MiniMax-H3-Q4-GGUF/FL2VA/processor/vocab.json"
+    },
+    "acpp/heartmula/heartmula-q8_0.gguf": {
+      "label": "HeartMuLa: heartmula-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/HeartMuLa-GGUF/heartmula-q8_0.gguf",
+      "bytes": 7659762592,
+      "sha256": "5c3e42171ec012ba7420e3841e2a36e68e36177863b5e76793393afecd10cfbd",
+      "path": "models/HeartMuLa-GGUF/heartmula-q8_0.gguf"
+    },
+    "acpp/controlfoley/controlfoley-large-44k-q8_0.gguf": {
+      "label": "ControlFoley: controlfoley-large-44k-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/ControlFoley-GGUF/controlfoley-large-44k-q8_0.gguf",
+      "bytes": 12556682144,
+      "sha256": "45fdcf4f50a338f87c12943a45d05c35985e436e65653f87fb5d39d6b0ff0c72",
+      "path": "models/controlfoley/controlfoley-large-44k-q8_0.gguf"
+    },
+    "acpp/moss_soundeffect/moss-soundeffect-v2-q8_0.gguf": {
+      "label": "MOSS-SoundEffect v2: moss-soundeffect-v2-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/MOSS-SoundEffect-v2-GGUF/moss-soundeffect-v2-q8_0.gguf",
+      "bytes": 4001175520,
+      "sha256": "99feab80176e5fdd178aa005fa5e4079f8f6a8c45e576b8c4b48f26981ce63a1",
+      "path": "models/moss_soundeffect/moss-soundeffect-v2-q8_0.gguf"
+    },
+    "acpp/stable_audio/stable-audio-3-small-music-q8_0.gguf": {
+      "label": "Stable Audio 3: stable-audio-3-small-music-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/Stable-Audio-3-Small-Music-GGUF/stable-audio-3-small-music-q8_0.gguf",
+      "bytes": 1683576608,
+      "sha256": "a6d9176e11b857409b28cf5a69f4fefd8f3e61907b3b10d867f1f4c0a7eb9418",
+      "path": "models/Stable-Audio-3-Small-Music-GGUF/stable-audio-3-small-music-q8_0.gguf"
+    },
+    "acpp/midashenglm_gen/midashenglm-gen-q8_0.gguf": {
+      "label": "MiDashengLM-Gen: midashenglm-gen-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/MiDashengLM-Gen-GGUF/midashenglm-gen-q8_0.gguf",
+      "bytes": 3381370752,
+      "sha256": "1b0ec63a3e1c1711ee7ed26b6ea7ee2b1f013b61d751420c8c88d1d377e34677",
+      "path": "models/midashenglm_gen/midashenglm-gen-q8_0.gguf"
+    },
+    "acpp/magenta_realtime_2/magenta-rt2-small-f16.gguf": {
+      "label": "Magenta RealTime 2: magenta-rt2-small-f16.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Magenta-RealTime-2-GGUF/resolve/16ebc99233e394fdb673ca1de94f1c81b560b5a0/magenta-rt2-small-f16.gguf",
+      "bytes": 1529647616,
+      "sha256": "8120598d1922f2fce13015947008776c4ba0d50f1871ccd0775246a378a68bda",
+      "path": "models/magenta_realtime_2/magenta-rt2-small-f16.gguf"
+    },
+    "acpp/mulacover/mulacover-q8_0.gguf": {
+      "label": "MuLaCover: mulacover-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/MuLaCover-GGUF/mulacover-q8_0.gguf",
+      "bytes": 8220378496,
+      "sha256": "5daca50ce959c63dcfef3be1e3a7cd855eee753a91cab1a3475da1af781e4518",
+      "path": "models/MuLaCover-GGUF/mulacover-q8_0.gguf"
+    },
+    "acpp/vevo2/vevo2-q8_0.gguf": {
+      "label": "Vevo2: vevo2-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/Vevo2-GGUF/vevo2-q8_0.gguf",
+      "bytes": 3242129792,
+      "sha256": "881434e73b98e2d3ac94951f26488b5dc5d60f365d9980324a70055dfbffd1ef",
+      "path": "models/vevo2/vevo2-q8_0.gguf"
+    },
+    "acpp/soulx_singer/soulx-singer-q8_0.gguf": {
+      "label": "SoulX-Singer SVS: soulx-singer-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/SoulX-Singer-GGUF/resolve/ded36295f789661e590e4bf6ad49a25470cf830d/SoulX-Singer-GGUF/soulx-singer-q8_0.gguf",
+      "bytes": 1173681632,
+      "sha256": "c146c09427f88202db37a71869cdd498e6c0e92fa2cd08065bd5c2f735eb82fd",
+      "path": "models/soulx_singer/soulx-singer-q8_0.gguf"
+    },
+    "acpp/soulx_singer_svc/soulx-singer-svc-q8_0.gguf": {
+      "label": "SoulX-Singer SVC: soulx-singer-svc-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/SoulX-Singer-GGUF/resolve/ded36295f789661e590e4bf6ad49a25470cf830d/SoulX-Singer-SVC-GGUF/soulx-singer-svc-q8_0.gguf",
+      "bytes": 1593903776,
+      "sha256": "1ed47055d338ddaadd7951fd8e19057fb9c367725c91e21b1b3761515db39bbb",
+      "path": "models/soulx_singer/soulx-singer-svc-q8_0.gguf"
+    },
+    "acpp/yue2/yue2-3b-q8_0.gguf": {
+      "label": "YuE2: yue2-3b-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-3b-q8_0.gguf",
+      "bytes": 4264195616,
+      "sha256": "52be345b5155bf9ef0b2411e7df8d1d2b8e13b6d977a2f70c35612ec69b1f591",
+      "path": "models/Yue2-3B-GGUF/yue2-3b-q8_0.gguf"
+    },
+    "acpp/yue2/yue2-vae-f16.gguf": {
+      "label": "YuE2: yue2-vae-f16.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/yue2-vae-f16.gguf",
+      "bytes": 265218656,
+      "sha256": "d4f4a05d8f291ae820cd1e43609da3fa91b56465810091a2b08c3350b751719d",
+      "path": "models/Yue2-3B-GGUF/yue2-vae-f16.gguf"
+    },
+    "acpp/yue2/sidecars/yue2-model-config.json": {
+      "label": "YuE2: sidecars/yue2-model-config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-model-config.json",
+      "bytes": 959,
+      "sha256": "ad3477bbef890bf98ae196c1e4b44779494a6231c4ab66f32708eabadf265329",
+      "path": "models/Yue2-3B-GGUF/sidecars/yue2-model-config.json"
+    },
+    "acpp/yue2/sidecars/yue2-generation-config.json": {
+      "label": "YuE2: sidecars/yue2-generation-config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-generation-config.json",
+      "bytes": 466,
+      "sha256": "203830cebde6e3644eb291925362990d198e66c3b6006cd11f1aaa21904bcc61",
+      "path": "models/Yue2-3B-GGUF/sidecars/yue2-generation-config.json"
+    },
+    "acpp/yue2/sidecars/yue2-qwen.tiktoken": {
+      "label": "YuE2: sidecars/yue2-qwen.tiktoken",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-qwen.tiktoken",
+      "bytes": 2561218,
+      "sha256": "b2b1b8dfb5cc5f024bafc373121c6aba3f66f9a5a0269e243470a1de16a33186",
+      "path": "models/Yue2-3B-GGUF/sidecars/yue2-qwen.tiktoken"
+    },
+    "acpp/yue2/sidecars/yue2-vae-config.json": {
+      "label": "YuE2: sidecars/yue2-vae-config.json",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/Yue2-3B-GGUF/resolve/cca74d8980c00f30ab8d52248a367c01ad633ec2/sidecars/yue2-vae-config.json",
+      "bytes": 1378,
+      "sha256": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970",
+      "path": "models/Yue2-3B-GGUF/sidecars/yue2-vae-config.json"
+    },
+    "acpp/yue2/nar_lora_joint_v9.safetensors": {
+      "label": "YuE2: nar_lora_joint_v9.safetensors",
+      "kind": "model",
+      "url": "https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/resolve/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5/nar_lora_joint_v9.safetensors",
+      "bytes": 140560592,
+      "sha256": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e",
+      "path": "models/Yue2-3B-GGUF/nar_lora_joint_v9.safetensors"
+    },
+    "acpp/ace_step/turbo/ace-step-1.5-turbo-q8_0.gguf": {
+      "label": "ACE-Step 1.5: turbo/ace-step-1.5-turbo-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/ACE-Step1.5-GGUF/turbo/ace-step-1.5-turbo-q8_0.gguf",
+      "bytes": 6185468096,
+      "sha256": "1f0015f81c10a1182531e6207c7aeaa060b8cad3470a2f88daa3cb74ed636e63",
+      "path": "models/ACE-Step1.5-GGUF/turbo/ace-step-1.5-turbo-q8_0.gguf"
+    },
+    "acpp/seed_vc/seed-vc-mlx-q8_0.gguf": {
+      "label": "Seed-VC: seed-vc-mlx-q8_0.gguf",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/SeedVC-MLX-GGUF/seed-vc-mlx-q8_0.gguf",
+      "bytes": 3120809440,
+      "sha256": "17aaccb16e230a5b105187b7bccf3a67ec9899047cddac255c335c73091a88c8",
+      "path": "models/seed_vc/seed-vc-mlx-q8_0.gguf"
+    }
+  },
+  "sets": {
+    "audio.cpp": [
+      {
+        "id": "minimax_music3",
+        "label": {
+          "en": "MiniMax Music3",
+          "ru": "MiniMax Music3",
+          "zh": "MiniMax Music3",
+          "ja": "MiniMax Music3",
+          "ko": "MiniMax Music3",
+          "pt": "MiniMax Music3"
+        },
+        "roles": {
+          "language_model_q8_0.gguf": "acpp/minimax_music3/language_model_q8_0.gguf",
+          "rvq_depth_decoder_q8_0.gguf": "acpp/minimax_music3/rvq_depth_decoder_q8_0.gguf",
+          "transformer_q8_0.gguf": "acpp/minimax_music3/transformer_q8_0.gguf",
+          "condition_encoder.gguf": "acpp/minimax_music3/condition_encoder.gguf",
+          "vocoder.gguf": "acpp/minimax_music3/vocoder.gguf",
+          "config.json": "acpp/minimax_music3/config.json",
+          "config/language_model.json": "acpp/minimax_music3/config/language_model.json",
+          "config/rvq_depth_decoder.json": "acpp/minimax_music3/config/rvq_depth_decoder.json",
+          "config/condition_encoder.json": "acpp/minimax_music3/config/condition_encoder.json",
+          "config/transformer.json": "acpp/minimax_music3/config/transformer.json",
+          "config/vocoder.json": "acpp/minimax_music3/config/vocoder.json",
+          "tokenizer/tokenizer.json": "acpp/minimax_music3/tokenizer/tokenizer.json",
+          "tokenizer/tokenizer_config.json": "acpp/minimax_music3/tokenizer/tokenizer_config.json"
+        }
+      },
+      {
+        "id": "minimax_h3",
+        "label": {
+          "en": "MiniMax-H3",
+          "ru": "MiniMax-H3",
+          "zh": "MiniMax-H3",
+          "ja": "MiniMax-H3",
+          "ko": "MiniMax-H3",
+          "pt": "MiniMax-H3"
+        },
+        "roles": {
+          "dit.gguf": "acpp/minimax_h3/dit.gguf",
+          "text_encoder_q4_k.gguf": "acpp/minimax_h3/text_encoder_q4_k.gguf",
+          "audio_vae_folded_f16.gguf": "acpp/minimax_h3/audio_vae_folded_f16.gguf",
+          "video_vae.gguf": "acpp/minimax_h3/video_vae.gguf",
+          "configuration.json": "acpp/minimax_h3/configuration.json",
+          "FL2VA/processor/chat_template.json": "acpp/minimax_h3/FL2VA/processor/chat_template.json",
+          "FL2VA/processor/merges.txt": "acpp/minimax_h3/FL2VA/processor/merges.txt",
+          "FL2VA/processor/preprocessor_config.json": "acpp/minimax_h3/FL2VA/processor/preprocessor_config.json",
+          "FL2VA/processor/tokenizer.json": "acpp/minimax_h3/FL2VA/processor/tokenizer.json",
+          "FL2VA/processor/tokenizer_config.json": "acpp/minimax_h3/FL2VA/processor/tokenizer_config.json",
+          "FL2VA/processor/video_preprocessor_config.json": "acpp/minimax_h3/FL2VA/processor/video_preprocessor_config.json",
+          "FL2VA/processor/vocab.json": "acpp/minimax_h3/FL2VA/processor/vocab.json"
+        }
+      },
+      {
+        "id": "heartmula",
+        "label": {
+          "en": "HeartMuLa",
+          "ru": "HeartMuLa",
+          "zh": "HeartMuLa",
+          "ja": "HeartMuLa",
+          "ko": "HeartMuLa",
+          "pt": "HeartMuLa"
+        },
+        "roles": {
+          "heartmula-q8_0.gguf": "acpp/heartmula/heartmula-q8_0.gguf"
+        }
+      },
+      {
+        "id": "controlfoley",
+        "label": {
+          "en": "ControlFoley",
+          "ru": "ControlFoley",
+          "zh": "ControlFoley",
+          "ja": "ControlFoley",
+          "ko": "ControlFoley",
+          "pt": "ControlFoley"
+        },
+        "roles": {
+          "controlfoley-large-44k-q8_0.gguf": "acpp/controlfoley/controlfoley-large-44k-q8_0.gguf"
+        }
+      },
+      {
+        "id": "moss_soundeffect",
+        "label": {
+          "en": "MOSS-SoundEffect v2",
+          "ru": "MOSS-SoundEffect v2",
+          "zh": "MOSS-SoundEffect v2",
+          "ja": "MOSS-SoundEffect v2",
+          "ko": "MOSS-SoundEffect v2",
+          "pt": "MOSS-SoundEffect v2"
+        },
+        "roles": {
+          "moss-soundeffect-v2-q8_0.gguf": "acpp/moss_soundeffect/moss-soundeffect-v2-q8_0.gguf"
+        }
+      },
+      {
+        "id": "stable_audio",
+        "label": {
+          "en": "Stable Audio 3",
+          "ru": "Stable Audio 3",
+          "zh": "Stable Audio 3",
+          "ja": "Stable Audio 3",
+          "ko": "Stable Audio 3",
+          "pt": "Stable Audio 3"
+        },
+        "roles": {
+          "stable-audio-3-small-music-q8_0.gguf": "acpp/stable_audio/stable-audio-3-small-music-q8_0.gguf"
+        }
+      },
+      {
+        "id": "midashenglm_gen",
+        "label": {
+          "en": "MiDashengLM-Gen",
+          "ru": "MiDashengLM-Gen",
+          "zh": "MiDashengLM-Gen",
+          "ja": "MiDashengLM-Gen",
+          "ko": "MiDashengLM-Gen",
+          "pt": "MiDashengLM-Gen"
+        },
+        "roles": {
+          "midashenglm-gen-q8_0.gguf": "acpp/midashenglm_gen/midashenglm-gen-q8_0.gguf"
+        }
+      },
+      {
+        "id": "magenta_realtime_2",
+        "label": {
+          "en": "Magenta RealTime 2",
+          "ru": "Magenta RealTime 2",
+          "zh": "Magenta RealTime 2",
+          "ja": "Magenta RealTime 2",
+          "ko": "Magenta RealTime 2",
+          "pt": "Magenta RealTime 2"
+        },
+        "roles": {
+          "magenta-rt2-small-f16.gguf": "acpp/magenta_realtime_2/magenta-rt2-small-f16.gguf"
+        }
+      },
+      {
+        "id": "mulacover",
+        "label": {
+          "en": "MuLaCover",
+          "ru": "MuLaCover",
+          "zh": "MuLaCover",
+          "ja": "MuLaCover",
+          "ko": "MuLaCover",
+          "pt": "MuLaCover"
+        },
+        "roles": {
+          "mulacover-q8_0.gguf": "acpp/mulacover/mulacover-q8_0.gguf"
+        }
+      },
+      {
+        "id": "vevo2",
+        "label": {
+          "en": "Vevo2",
+          "ru": "Vevo2",
+          "zh": "Vevo2",
+          "ja": "Vevo2",
+          "ko": "Vevo2",
+          "pt": "Vevo2"
+        },
+        "roles": {
+          "vevo2-q8_0.gguf": "acpp/vevo2/vevo2-q8_0.gguf"
+        }
+      },
+      {
+        "id": "soulx_singer",
+        "label": {
+          "en": "SoulX-Singer SVS",
+          "ru": "SoulX-Singer SVS",
+          "zh": "SoulX-Singer SVS",
+          "ja": "SoulX-Singer SVS",
+          "ko": "SoulX-Singer SVS",
+          "pt": "SoulX-Singer SVS"
+        },
+        "roles": {
+          "soulx-singer-q8_0.gguf": "acpp/soulx_singer/soulx-singer-q8_0.gguf"
+        }
+      },
+      {
+        "id": "soulx_singer_svc",
+        "label": {
+          "en": "SoulX-Singer SVC",
+          "ru": "SoulX-Singer SVC",
+          "zh": "SoulX-Singer SVC",
+          "ja": "SoulX-Singer SVC",
+          "ko": "SoulX-Singer SVC",
+          "pt": "SoulX-Singer SVC"
+        },
+        "roles": {
+          "soulx-singer-svc-q8_0.gguf": "acpp/soulx_singer_svc/soulx-singer-svc-q8_0.gguf"
+        }
+      },
+      {
+        "id": "yue2",
+        "label": {
+          "en": "YuE2",
+          "ru": "YuE2",
+          "zh": "YuE2",
+          "ja": "YuE2",
+          "ko": "YuE2",
+          "pt": "YuE2"
+        },
+        "roles": {
+          "yue2-3b-q8_0.gguf": "acpp/yue2/yue2-3b-q8_0.gguf",
+          "yue2-vae-f16.gguf": "acpp/yue2/yue2-vae-f16.gguf",
+          "sidecars/yue2-model-config.json": "acpp/yue2/sidecars/yue2-model-config.json",
+          "sidecars/yue2-generation-config.json": "acpp/yue2/sidecars/yue2-generation-config.json",
+          "sidecars/yue2-qwen.tiktoken": "acpp/yue2/sidecars/yue2-qwen.tiktoken",
+          "sidecars/yue2-vae-config.json": "acpp/yue2/sidecars/yue2-vae-config.json",
+          "nar_lora_joint_v9.safetensors": "acpp/yue2/nar_lora_joint_v9.safetensors"
+        }
+      },
+      {
+        "id": "ace_step",
+        "label": {
+          "en": "ACE-Step 1.5",
+          "ru": "ACE-Step 1.5",
+          "zh": "ACE-Step 1.5",
+          "ja": "ACE-Step 1.5",
+          "ko": "ACE-Step 1.5",
+          "pt": "ACE-Step 1.5"
+        },
+        "roles": {
+          "turbo/ace-step-1.5-turbo-q8_0.gguf": "acpp/ace_step/turbo/ace-step-1.5-turbo-q8_0.gguf"
+        }
+      },
+      {
+        "id": "seed_vc",
+        "label": {
+          "en": "Seed-VC",
+          "ru": "Seed-VC",
+          "zh": "Seed-VC",
+          "ja": "Seed-VC",
+          "ko": "Seed-VC",
+          "pt": "Seed-VC"
+        },
+        "roles": {
+          "seed-vc-mlx-q8_0.gguf": "acpp/seed_vc/seed-vc-mlx-q8_0.gguf"
+        }
+      }
+    ]
+  }
+}

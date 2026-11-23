@@ -8,8 +8,6 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 const PINNED: &[(&str, &str)] = &[
-    (crate::audio_cpp_soulx::SVS_URL, crate::audio_cpp_soulx::SVS_SHA),
-    (crate::audio_cpp_soulx::SVC_URL, crate::audio_cpp_soulx::SVC_SHA),
     (crate::acpp::SOXR_URL, "1c2177da4871f1713b666f576f83be649980b66d783723d9572a0ffffe67fe26"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip", "69d0ad8dc3a1be66f01a748a8206d0ceaafa56939474663fbe790dc3e91d2009"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "623f43027d40d44ceadf0043f002bd25cf353e8f13ce90b9a87057019f560661"),
@@ -57,12 +55,6 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     if let Some(sha) = crate::components::sha256(url) {
         return Some(sha);
     }
-    if url == crate::audio_cpp_ace_step::ASSET.url {
-        return Some(crate::audio_cpp_ace_step::SHA256);
-    }
-    if let Some(sha) = crate::audio_cpp_yue2::sha256(url) {
-        return Some(sha);
-    }
     if let Some(sha) = crate::training::base_asset_sha(url)
         .or_else(|| crate::engine_hip::archive_sha(url))
         .or_else(|| crate::native_music_runtime::sha256(url))
@@ -70,12 +62,6 @@ pub fn sha256(url: &str) -> Option<&'static str> {
         return Some(sha);
     }
     if let Some(sha) = crate::hotstep_cover_assets::sha256(url).or_else(|| crate::hotstep_sa3_assets::sha256(url)).or_else(|| crate::hotstep_sa3_train_assets::sha256(url)).or_else(|| crate::hotstep_heartmula_assets::sha256(url)).or_else(|| crate::hotstep_generation::sha256(url)) { return Some(sha); }
-    if url == crate::audio_cpp_heartmula::ASSET.url {
-        return Some(crate::audio_cpp_heartmula::SHA256);
-    }
-    if url == crate::audio_cpp_stable_audio::ASSET.url {
-        return Some(crate::audio_cpp_stable_audio::SHA256);
-    }
     if let Some((_, sha256)) = PINNED.iter().find(|(pinned, _)| *pinned == url) {
         return Some(sha256);
     }

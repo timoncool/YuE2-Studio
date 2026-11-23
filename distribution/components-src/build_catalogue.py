@@ -21,6 +21,8 @@ PLATFORMS = ("windows", "linux", "macos")
 ROLES = {
     "acestep-cpp": {"dit", "lm", "text_encoder", "vae"},
     "minimaxmusic-cpp": {"lm", "depth", "cond", "dit", "vae"},
+    # the audio.cpp model families: a set is a family, its roles are the files by name inside its folder
+    "audio.cpp": set(),
 }
 MOVING = re.compile(r"/(resolve|raw|blob)/(main|master)/")
 

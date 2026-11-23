@@ -42,10 +42,11 @@ impl Variant {
         }
     }
 
+    /// The weights in the component catalogue's set of this variant, with their SHA-256.
     pub(super) fn asset(self) -> (&'static downloads::Asset, &'static str) {
         match self {
-            Self::Synthesis => (&SVS, SVS_SHA),
-            Self::Conversion => (&SVC, SVC_SHA),
+            Self::Synthesis => crate::audio_cpp_music::set_file(SYNTHESIS, "soulx-singer-q8_0.gguf"),
+            Self::Conversion => crate::audio_cpp_music::set_file(CONVERSION, "soulx-singer-svc-q8_0.gguf"),
         }
     }
 
@@ -111,36 +112,6 @@ impl Variant {
     }
 }
 
-pub(super) const SVS_URL: &str = "https://huggingface.co/audio-cpp/SoulX-Singer-GGUF/resolve/ded36295f789661e590e4bf6ad49a25470cf830d/SoulX-Singer-GGUF/soulx-singer-q8_0.gguf";
-pub(super) const SVS_SHA: &str = "c146c09427f88202db37a71869cdd498e6c0e92fa2cd08065bd5c2f735eb82fd";
-const SVS: downloads::Asset = downloads::Asset {
-    id: SYNTHESIS,
-    label: "SoulX-Singer SVS Q8_0",
-    kind: downloads::AssetKind::Model,
-    url: SVS_URL,
-    relative_path: "models/soulx_singer/soulx-singer-q8_0.gguf",
-    bytes: 1_173_681_632,
-    unzip_into: None,
-    marker: "",
-    pick: &[],
-    vram_gb: None,
-    note: "Singing synthesis from aligned notes or pitch.",
-};
-pub(super) const SVC_URL: &str = "https://huggingface.co/audio-cpp/SoulX-Singer-GGUF/resolve/ded36295f789661e590e4bf6ad49a25470cf830d/SoulX-Singer-SVC-GGUF/soulx-singer-svc-q8_0.gguf";
-pub(super) const SVC_SHA: &str = "1ed47055d338ddaadd7951fd8e19057fb9c367725c91e21b1b3761515db39bbb";
-const SVC: downloads::Asset = downloads::Asset {
-    id: CONVERSION,
-    label: "SoulX-Singer SVC Q8_0",
-    kind: downloads::AssetKind::Model,
-    url: SVC_URL,
-    relative_path: "models/soulx_singer/soulx-singer-svc-q8_0.gguf",
-    bytes: 1_593_903_776,
-    unzip_into: None,
-    marker: "",
-    pick: &[],
-    vram_gb: None,
-    note: "Singing voice conversion with reference audio.",
-};
 
 pub(super) fn model_dir(root: &Path) -> PathBuf {
     root.join("audiocpp/models").join(FAMILY)
@@ -299,7 +270,7 @@ mod tests {
                 .unwrap()
                 .contains(&json!("libsoxr runtime"))
         );
-        assert_eq!(row["bytes"], SVC.bytes);
+        assert_eq!(row["bytes"], Variant::Conversion.asset().0.bytes);
     }
 
     #[test]

@@ -10,20 +10,11 @@ pub(super) const FAMILY: &str = "stable_audio";
 pub(super) const PROFILE: &str = "stable_audio_3_small_music_q8_0";
 const DIRECTORY: &str = "Stable-Audio-3-Small-Music-GGUF";
 const FILE: &str = "stable-audio-3-small-music-q8_0.gguf";
-pub(super) const SHA256: &str = "a6d9176e11b857409b28cf5a69f4fefd8f3e61907b3b10d867f1f4c0a7eb9418";
-pub(super) const ASSET: downloads::Asset = downloads::Asset {
-    id: PROFILE,
-    label: "Stable Audio 3 Small Music Q8_0",
-    kind: downloads::AssetKind::Model,
-    url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/Stable-Audio-3-Small-Music-GGUF/stable-audio-3-small-music-q8_0.gguf",
-    relative_path: "models/Stable-Audio-3-Small-Music-GGUF/stable-audio-3-small-music-q8_0.gguf",
-    bytes: 1_683_576_608,
-    unzip_into: None,
-    marker: FILE,
-    pick: &[],
-    vram_gb: None,
-    note: "Stable Audio 3 Small Music under the Stability AI Community License.",
-};
+
+/// The weights in the component catalogue's Stable Audio set.
+fn weights() -> &'static downloads::Asset {
+    crate::audio_cpp_music::set_file(FAMILY, FILE).0
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub(super) struct Options {
@@ -40,7 +31,7 @@ pub(super) fn model_dir(root: &FsPath) -> PathBuf {
 pub(super) fn missing_files(directory: &FsPath) -> Vec<&'static str> {
     let mut magic = [0; 4];
     if std::fs::File::open(directory.join(FILE)).is_ok_and(|mut file| {
-        file.metadata().is_ok_and(|m| m.len() == ASSET.bytes)
+        file.metadata().is_ok_and(|m| m.len() == weights().bytes)
             && file.read_exact(&mut magic).is_ok()
             && &magic == b"GGUF"
     }) {
@@ -61,7 +52,7 @@ pub(super) fn catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
     serde_json::json!({
         "id": FAMILY, "name": "Stable Audio 3", "profile_id": PROFILE, "quantization": "Q8_0",
         "status": "supported", "ready": missing.is_empty(), "missing": missing,
-        "requires": ["style"], "output_formats": ["flac", "mp3", "wav32"], "bytes": ASSET.bytes,
+        "requires": ["style"], "output_formats": ["flac", "mp3", "wav32"], "bytes": weights().bytes,
         "installable": true, "license_url": "https://huggingface.co/stabilityai/stable-audio-3-small-music"
     })
 }
@@ -177,9 +168,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let downloads = downloads::Downloader::new(root.path().join("audiocpp"));
         assert_eq!(
-            downloads.path_of(&ASSET),
+            downloads.path_of(weights()),
             entry(model_dir(root.path())).path
         );
-        assert_eq!(crate::pin_sha::sha256(ASSET.url), Some(SHA256));
     }
 }

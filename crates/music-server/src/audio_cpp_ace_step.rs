@@ -8,20 +8,11 @@ pub(super) const FAMILY: &str = "ace_step";
 pub(super) const PROFILE: &str = "ace-step-1.5-turbo-q8_0";
 const DIRECTORY: &str = "ACE-Step1.5-GGUF/turbo";
 const FILE: &str = "ace-step-1.5-turbo-q8_0.gguf";
-pub(super) const SHA256: &str = "1f0015f81c10a1182531e6207c7aeaa060b8cad3470a2f88daa3cb74ed636e63";
-pub(super) const ASSET: downloads::Asset = downloads::Asset {
-    id: PROFILE,
-    label: "ACE-Step 1.5 Turbo Q8_0",
-    kind: downloads::AssetKind::Model,
-    url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/33120a4cfdf0d56786db934a03a093d4675de938/ACE-Step1.5-GGUF/turbo/ace-step-1.5-turbo-q8_0.gguf",
-    relative_path: "models/ACE-Step1.5-GGUF/turbo/ace-step-1.5-turbo-q8_0.gguf",
-    bytes: 6_185_468_096,
-    unzip_into: None,
-    marker: FILE,
-    pick: &[],
-    vram_gb: None,
-    note: "Packed ACE-Step Turbo weights for audio.cpp",
-};
+
+/// The packed weights in the component catalogue's ACE-Step set, with their SHA-256.
+fn weights() -> (&'static downloads::Asset, &'static str) {
+    crate::audio_cpp_music::set_file(FAMILY, "turbo/ace-step-1.5-turbo-q8_0.gguf")
+}
 
 pub(super) fn model_dir(root: &FsPath) -> PathBuf {
     root.join("audiocpp/models").join(DIRECTORY)
@@ -30,8 +21,9 @@ pub(super) fn model_dir(root: &FsPath) -> PathBuf {
 pub(super) fn missing_files(directory: &FsPath) -> Vec<&'static str> {
     // The packed GGUF carries DiT, the embedding encoder and VAE together.
     let path = directory.join(FILE);
-    if fs::metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == ASSET.bytes)
-        && crate::pin_sha::holds(&path, SHA256)
+    let (asset, sha256) = weights();
+    if fs::metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == asset.bytes)
+        && crate::pin_sha::holds(&path, sha256)
     {
         vec![]
     } else {
@@ -44,13 +36,14 @@ pub(super) fn catalog(root: Option<&FsPath>, runtime_ready: bool) -> Value {
         || vec!["Studio data folder"],
         |root| missing_files(&model_dir(root)),
     );
-    let missing_bytes = if missing.is_empty() { 0 } else { ASSET.bytes };
+    let bytes = weights().0.bytes;
+    let missing_bytes = if missing.is_empty() { 0 } else { bytes };
     if !runtime_ready {
         missing.push("audio.cpp runtime");
     }
     serde_json::json!({"id":FAMILY,"name":"ACE-Step 1.5","profile_id":PROFILE,"quantization":"Q8_0",
         "status":"experimental","ready":missing.is_empty(),"missing":missing,"missing_bytes":missing_bytes,
-        "bytes":ASSET.bytes,"installable":true,
+        "bytes":bytes,"installable":true,
         "license_url":"https://huggingface.co/ACE-Step/Ace-Step1.5"})
 }
 
