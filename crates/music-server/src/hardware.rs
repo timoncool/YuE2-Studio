@@ -207,22 +207,23 @@ pub fn hardware() -> Hardware {
 /// Whether songs are computed on the processor: no card, or built-in graphics below the smallest local set. An
 /// NVIDIA card nvidia-smi lists is where the engine computes on CUDA at any size; a Mac computes on Metal.
 fn computes_on_processor(nvidia: bool, total_vram_gb: f64) -> bool {
-    let smallest = VRAM_TIERS.iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
+    let smallest = vram_tiers().iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
     !cfg!(target_os = "macos") && !nvidia && total_vram_gb < smallest
 }
 
 /// What the smallest set needs, when the card that computes the songs has less of it: an NVIDIA card computes on
 /// CUDA at any size, so one below the smallest tier is where songs run out of memory.
 fn short_of_smallest_set(nvidia: bool, total_vram_gb: f64) -> Option<f64> {
-    let smallest = VRAM_TIERS.iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
+    let smallest = vram_tiers().iter().map(|(_, tier)| *tier).fold(f64::INFINITY, f64::min);
     (!cfg!(target_os = "macos") && !computes_on_processor(nvidia, total_vram_gb) && total_vram_gb > 0.0 && total_vram_gb < smallest).then_some(smallest)
 }
 
-/// VRAM tiers follow the strict-eviction peak of each set: the larger backbone
-/// half plus the KV cache and the compute buffers. The cache is sized to the
-/// song, about 1.5 GB for 130 s under guidance, so the tiers keep headroom for
-/// the longest songs.
-const VRAM_TIERS: [(&str, f64); 4] = [("native", 12.0), ("quality-q8", 8.0), ("balanced", 7.0), ("light", 5.5)];
+/// The video memory each local set needs, largest first, from the component catalogue's YuE2 sets: the strict-eviction
+/// peak of the set (the larger backbone half, a KV cache sized for the longest songs, the compute buffers) and the
+/// part of the card the system keeps for itself - an 8 GB card holds Balanced, not Q8_0.
+fn vram_tiers() -> &'static [(&'static str, f64)] {
+    crate::model_manager::vram_tiers()
+}
 
 /// The unquantised set stays in the list for whoever picks it; the studio never recommends full weights,
 /// Q8_0 is near lossless at half the memory.
@@ -240,7 +241,7 @@ const WORK_RAM_GB: f64 = 2.0;
 /// computer's memory, or on the processor they live in RAM with the buffers.
 pub fn ram_needed_gb(profile: &str, weights_bytes: u64, total_vram_gb: f64) -> f64 {
     // Apple Silicon's video memory is the system's own, so weights "on the card" still take the RAM
-    let on_card = !cfg!(target_os = "macos") && VRAM_TIERS.iter().any(|(id, tier)| *id == profile && total_vram_gb >= *tier);
+    let on_card = !cfg!(target_os = "macos") && vram_tiers().iter().any(|(id, tier)| *id == profile && total_vram_gb >= *tier);
     if on_card {
         SYSTEM_RAM_GB + LOADING_RAM_GB
     } else {
@@ -258,7 +259,7 @@ fn profile_for_machine(total_vram_gb: f64, total_ram_gb: f64, apple_silicon: boo
     if apple_silicon && total_ram_gb <= 16.0 {
         return Some(FALLBACK_PROFILE).filter(|id| fits(id));
     }
-    VRAM_TIERS
+    vram_tiers()
         .iter()
         .filter(|(id, _)| *id != FULL_WEIGHTS_PROFILE)
         .find(|(id, tier)| total_vram_gb >= *tier && fits(id))
@@ -620,7 +621,9 @@ mod tests {
     fn with_enough_memory_the_card_picks_the_set() {
         assert_eq!(profile_for_machine(24.0, 64.0, false, weights), Some("quality-q8"));
         assert_eq!(profile_for_machine(11.9, 32.0, false, weights), Some("quality-q8"));
-        assert_eq!(profile_for_machine(8.0, 16.0, false, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(10.0, 16.0, false, weights), Some("quality-q8"));
+        // Q8_0 on an 8 GB card ran out of memory while loading for 108 of 118 such failures of 5.0
+        assert_eq!(profile_for_machine(8.0, 16.0, false, weights), Some("balanced"));
         assert_eq!(profile_for_machine(7.6, 16.0, false, weights), Some("balanced"));
         assert_eq!(profile_for_machine(6.0, 16.0, false, weights), Some("light"));
     }
@@ -638,7 +641,7 @@ mod tests {
     #[test]
     fn a_discrete_gpu_with_16_gib_of_system_ram_can_still_recommend_quality() {
         let weights = crate::model_manager::profile_weights_bytes;
-        assert_eq!(profile_for_machine(8.0, 16.0, false, weights), Some("quality-q8"));
+        assert_eq!(profile_for_machine(12.0, 16.0, false, weights), Some("quality-q8"));
     }
 
     #[test]

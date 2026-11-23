@@ -1,6 +1,6 @@
 {
  "product": "yue2-studio",
- "sequence": 11,
+ "sequence": 12,
  "published": "2026-11-23",
  "files": {
   "gemma-4-e4b-q4_0": {
@@ -2413,6 +2413,7 @@
   "yue2-cpp": [
    {
     "id": "light",
+    "vram_gb": 5.5,
     "label": {
      "en": "Light - Q5_K_M backbone (6 GB cards)",
      "ru": "Light - Q5_K_M backbone (6 GB cards)",
@@ -2431,6 +2432,7 @@
    },
    {
     "id": "balanced",
+    "vram_gb": 7.0,
     "label": {
      "en": "Balanced - Q6_K backbone",
      "ru": "Balanced - Q6_K backbone",
@@ -2449,6 +2451,7 @@
    },
    {
     "id": "quality-q8",
+    "vram_gb": 9.0,
     "label": {
      "en": "Quality - Q8_0 backbone, near lossless",
      "ru": "Quality - Q8_0 backbone, near lossless",
@@ -2467,6 +2470,7 @@
    },
    {
     "id": "native",
+    "vram_gb": 12.0,
     "label": {
      "en": "Full native - BF16 backbone, original weights",
      "ru": "Full native - BF16 backbone, original weights",

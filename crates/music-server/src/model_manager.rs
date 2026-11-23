@@ -901,8 +901,10 @@ type ProfileSet = (&'static str, &'static str, Vec<&'static str>);
 
 /// YuE2's files and sets as the component catalogue in use lists them, made once per catalogue: the files under
 /// `yue2/`, by the ids settings have always stored, and the sets of this engine.
-fn published() -> &'static (Vec<Component>, Vec<ProfileSet>) {
-    static MADE: std::sync::Mutex<Option<(u64, &'static (Vec<Component>, Vec<ProfileSet>))>> = std::sync::Mutex::new(None);
+type Published = (Vec<Component>, Vec<ProfileSet>, Vec<(&'static str, f64)>);
+
+fn published() -> &'static Published {
+    static MADE: std::sync::Mutex<Option<(u64, &'static Published)>> = std::sync::Mutex::new(None);
     let sequence = crate::components::sequence();
     let mut made = MADE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some((seen, published)) = *made {
@@ -922,20 +924,30 @@ fn published() -> &'static (Vec<Component>, Vec<ProfileSet>) {
             url: leak(&file.url),
         })
         .collect();
-    let sets: Vec<ProfileSet> = crate::components::sets(ENGINE_ID)
-        .into_iter()
+    let catalogue_sets = crate::components::sets(ENGINE_ID);
+    let sets: Vec<ProfileSet> = catalogue_sets
+        .iter()
         .map(|set| {
             let ids = ROLES.iter().filter_map(|role| set.roles.get(*role)).map(|id| leak(id.trim_start_matches("yue2/"))).collect();
             (leak(&set.id), leak(&set.label["en"]), ids)
         })
         .collect();
-    let published: &'static (Vec<Component>, Vec<ProfileSet>) = Box::leak(Box::new((components, sets)));
+    let mut tiers: Vec<(&'static str, f64)> = catalogue_sets.iter().filter(|set| set.vram_gb > 0.0).map(|set| (leak(&set.id), set.vram_gb)).collect();
+    tiers.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let published: &'static Published = Box::leak(Box::new((components, sets, tiers)));
     *made = Some((sequence, published));
     published
 }
 
 fn profile_sets() -> &'static [ProfileSet] {
     &published().1
+}
+
+
+/// The video memory each set needs on a card, largest first: the catalogue's measured peak of the set with room
+/// for the system's own use of the card.
+pub(crate) fn vram_tiers() -> &'static [(&'static str, f64)] {
+    &published().2
 }
 
 pub(crate) fn profiles() -> Vec<Profile> {

@@ -266,7 +266,13 @@ impl fmt::Display for SongError {
                 let chosen = note.as_deref().map(|note| format!(" (At start {note}.)")).unwrap_or_default();
                 write!(f, "The engine could not listen on port {port}, so the song was lost: another program took the port after the studio chose it.{chosen} Restart the studio: it chooses a free port at start.")
             }
-            SongError::LoadVram => f.write_str("The graphics card ran out of memory while the engine was loading the models. Choose a smaller quantisation in the model manager, or close whatever else is using the card - the writing assistant holds several gigabytes of its own."),
+            SongError::LoadVram => {
+                let fitting = crate::model_manager::profiles().into_iter()
+                    .find(|profile| profile.id == crate::hardware::recommended_local_profile())
+                    .map(|profile| format!(" The set made for this card is {}.", profile.label))
+                    .unwrap_or_default();
+                write!(f, "The graphics card ran out of memory while the engine was loading the models. Choose a smaller set in the model manager, or close whatever else is using the card - the writing assistant holds several gigabytes of its own.{fitting}")
+            }
             SongError::LoadRam => f.write_str("The computer ran out of memory (RAM) while the engine was loading the models. Close other programs that take memory, or choose a smaller quantisation in the model manager."),
             SongError::EngineFatal(line) | SongError::ContextShort { line, .. } | SongError::ScoreUnsingable { line, .. } => f.write_str(line),
             SongError::NotAudio(line) => write!(f, "The graphics card computed something that is not sound on this song ({line}), so the engine stopped it instead of writing silence. Make the song again: a new run usually comes out right."),
