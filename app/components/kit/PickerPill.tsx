@@ -77,7 +77,14 @@ export function PickerPill({ label, value, status, children, className = '', ico
     (first ?? pane).focus();
   }, [open, placed, kind]);
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (kind === 'dialog') return;
+    if (kind === 'dialog') {
+      if (event.key !== 'Tab') return;
+      const controls = [...(menu.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+      const edge = event.shiftKey ? controls[0] : controls.at(-1);
+      // leaving the panel by Tab returns to its trigger, not to the end of the page the panel is portalled into
+      if (!controls.length || document.activeElement === edge || document.activeElement === menu.current) { event.preventDefault(); close(); }
+      return;
+    }
     const items = [...(menu.current?.querySelectorAll<HTMLElement>(ITEM) ?? [])];
     if (!items.length) return;
     const at = items.indexOf(document.activeElement as HTMLElement);
@@ -126,8 +133,10 @@ export function PickerPill({ label, value, status, children, className = '', ico
 }
 
 /** One choice in a pill's list: its name, a line on what it is, a side note (size, "needs a download") and a mark. */
-export function PickerOption({ selected, onPick, name, hint, side, mark, disabled, value }: {
+export function PickerOption({ selected, onPick, name, hint, side, mark, disabled, value, action = false }: {
   selected: boolean;
+  /** A row that does something (open a page, add) rather than choose a value. */
+  action?: boolean;
   onPick: () => void;
   name: React.ReactNode;
   hint?: React.ReactNode;
@@ -138,7 +147,7 @@ export function PickerOption({ selected, onPick, name, hint, side, mark, disable
   value?: string;
 }) {
   return (
-    <button type="button" role="menuitemradio" aria-checked={selected} disabled={disabled} onClick={onPick} data-value={value} tabIndex={-1}
+    <button type="button" role={action ? 'menuitem' : 'menuitemradio'} aria-checked={action ? undefined : selected} disabled={disabled} onClick={onPick} data-value={value} tabIndex={-1}
       className={`flex w-full min-w-0 items-start gap-2 rounded-lg px-2 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-pink-500 disabled:opacity-40 max-md:min-h-11 ${selected ? 'bg-pink-500/10' : 'hover:bg-zinc-100 focus:bg-zinc-100 dark:hover:bg-white/5 dark:focus:bg-white/5'}`}>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-xs font-semibold ${selected ? 'text-pink-600 dark:text-pink-300' : 'text-zinc-900 dark:text-white'}`}>{name}</span>

@@ -1746,7 +1746,7 @@ function AppContent() {
         </button>
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-white">{pageTitle}</span>
         {showingCreate && <button type="button" onClick={() => setMobileShowList(!mobileShowList)}
-          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-zinc-300 px-3 text-xs font-semibold text-zinc-800 dark:border-white/15 dark:text-zinc-100">
+          className="relative inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-zinc-300 px-3 text-xs font-semibold text-zinc-800 before:absolute before:-inset-y-1 before:inset-x-0 before:content-[''] dark:border-white/15 dark:text-zinc-100">
           {mobileShowList ? t('createSong') : t('viewList')}
           <List size={15} aria-hidden />
         </button>}

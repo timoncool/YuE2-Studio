@@ -100,6 +100,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
   const close = () => {
     if (!savingModels) onClose();
   };
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      // a confirmation opened over the settings takes this Escape for itself
+      if (document.querySelectorAll('[aria-modal="true"], [role="alertdialog"]').length > 1) return;
+      close();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  });
   const done = async () => {
     if (savingModels) return;
     setSavingModels(true);

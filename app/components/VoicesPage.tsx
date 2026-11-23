@@ -80,7 +80,7 @@ export function VoicesPage({ initialSongId, onSaved }: { initialSongId?: string;
         <div role="tablist" className="flex rounded-lg bg-zinc-100 p-1 dark:bg-white/5">
           {tabs.map(([value, label]) => (
             <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}
-              className={`min-h-9 flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-all ${tab === value ? 'bg-white text-black shadow-xs dark:bg-zinc-800 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
+              className={`min-h-9 flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-all max-md:min-h-11 ${tab === value ? 'bg-white text-black shadow-xs dark:bg-zinc-800 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
               {label}
             </button>
           ))}
@@ -109,7 +109,7 @@ export function VoicesPage({ initialSongId, onSaved }: { initialSongId?: string;
                 <Wand2 size={14} aria-hidden /><span className="max-sm:sr-only">{text.applyVoice}</span>
               </SecondaryButton>
               <button type="button" disabled={busy} onClick={() => setRemoving(item)} aria-label={`${labels.remove}: ${voiceName(item)}`} title={labels.remove}
-                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50 dark:text-zinc-400">
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 max-md:size-11 hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50 dark:text-zinc-400">
                 <Trash2 size={16} aria-hidden />
               </button>
             </li>)}
@@ -218,6 +218,7 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
           <span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.track}</span>
           {library.isSuccess && songs.length === 0 ? <p className="text-zinc-500">{text.noTracks}</p>
             : <Combobox label={text.track} value={songId} placeholder={text.chooseTrack} onChange={setSongId}
+              inputClassName="min-h-9 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-500 focus:border-pink-500 focus:outline-none dark:border-white/10 dark:bg-black/25 dark:text-white max-md:min-h-11"
               options={songs.map(entry => ({ value: entry.id, label: entry.title || '—', hint: entry.style?.slice(0, 80) }))} />}
         </div>
         <div className="space-y-1 text-xs">
@@ -228,7 +229,7 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
                 hint={`${item.model_name} · ${item.index_name ? text.withIndex : text.withoutIndex}`}
                 onPick={() => { chooseLastRvcVoice(item.id); close(); }} />)}
               <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
-              <PickerOption selected={false} name={`＋ ${text.addVoice}`} hint={text.openCatalog} onPick={() => { close(); onOpenCatalog(); }} />
+              <PickerOption action selected={false} name={`＋ ${text.addVoice}`} hint={text.openCatalog} onPick={() => { close(); onOpenCatalog(); }} />
             </>}
           </PickerPill>
         </div>

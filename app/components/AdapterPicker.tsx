@@ -1,6 +1,6 @@
 import React from 'react';
 import { PickerOption, PickerPill } from './kit/PickerPill';
-import { AlertTriangle, Layers, Plus, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, Layers, Plus, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { type AdapterLibrary, AdapterUse, InstalledAdapter, SCORE_STRENGTH_LIMIT, familyLabel, localized, scoreStrength, startingScales, useAdapterLibrary } from '../services/adapters';
 import { NumberField } from './NumberField';
@@ -52,8 +52,8 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
   const available = installed.filter(adapter => !adapter.error && !value.some(use => use.id === adapter.id));
 
   const actions = nativeLibrary ? null : (
-    <button type="button" onClick={openPage} className={iconClass} title={t('adaptersOpenPage')}>
-      <Layers size={14} />
+    <button type="button" onClick={openPage} className={iconClass} title={t('adaptersOpenPage')} aria-label={t('adaptersOpenPage')}>
+      <ArrowUpRight size={14} aria-hidden />
     </button>
   );
 
@@ -110,7 +110,7 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
                     disabled={use.disabled}
                     aria-label={`${adapter ? localized(adapter.name, language) : use.id} · ${roleOf(slot) ? tt(`adapterRole_${roleOf(slot)}`) : slot}`}
                     onChange={event => setScale(use.id, slot, Number(event.target.value))}
-                    className="mt-1.5 h-1 w-full cursor-pointer accent-pink-500"
+                    className="mt-1.5 h-5 w-full cursor-pointer accent-pink-500"
                   />
                 </div>
               );
@@ -147,7 +147,7 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
                 onPick={() => { close(); add(adapter); }} />)}
               {!nativeLibrary && <>
                 <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
-                <PickerOption selected={false} name={t('adaptersOpenPage')} side="↗" onPick={() => { close(); openPage(); }} />
+                <PickerOption action selected={false} name={t('adaptersOpenPage')} side="↗" onPick={() => { close(); openPage(); }} />
               </>}
             </>}
           </PickerPill>

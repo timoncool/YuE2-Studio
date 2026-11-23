@@ -15,7 +15,7 @@ import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X, Check, Download, Mic, ListMusic, Plus,
+  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X, Check, Download, Mic, ListMusic, Plus, ArrowUpRight,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
@@ -1065,19 +1065,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   ];
   const modelReady = yue ? ready : cloud ? Boolean(configured && selectedMusicModel) : native.ready;
   const modelBusy = Boolean(pair.sending || (pair.matching && pair.busy) || native.loading
-    || (yue && !serviceDown && setup?.ready && !ready && !enginePaused && !setup.engine_error));
+    || (yue && !serviceDown && (!setup || (setup.ready && !ready && !enginePaused && !setup.engine_error))));
   const modelFailed = Boolean(pair.error || (pair.matching && pair.status?.stage === 'error') || native.error || (yue && (serviceDown || setup?.engine_error)));
-  const modelState = modelReady && !modelBusy ? 'ready' : modelFailed ? 'error' : modelBusy ? 'busy' : 'missing';
-  const modelStateText = modelState === 'ready' ? nativeModelSetStrings[language].ready : modelState === 'busy' ? t('engineStartingTitle')
+  const modelState = modelReady && !modelBusy ? 'ready' : modelFailed ? 'error' : yue && enginePaused ? 'paused' : modelBusy ? 'busy' : 'missing';
+  const modelStateText = modelState === 'ready' ? nativeModelSetStrings[language].ready : modelState === 'paused' ? engineControl.paused : modelState === 'busy' ? (setup || !yue ? t('engineStartingTitle') : t('modelLoading'))
     : modelState === 'error' ? (yue ? unavailableTitle : pairText.error) : yue ? unavailableTitle : nativeStrings.unavailable;
   const modelStateMark = modelState === 'ready' ? <Check size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
     : modelState === 'busy' ? <Loader2 size={14} className="shrink-0 animate-spin text-amber-600 dark:text-amber-400" aria-hidden />
     : modelState === 'error' ? <CircleAlert size={14} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
+    : modelState === 'paused' ? <Pause size={14} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
     : cloud ? <CircleAlert size={14} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
     : <Download size={14} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />;
   const nativeQuality = native.profile ? native.profile.labels?.[language] ?? native.profile.labels?.en ?? native.profile.label : undefined;
   const settingsValue = yue ? profileLabel : nativeSets && nativeQuality ? nativeQuality
     : linkedFamily?.pairs.find((entry: LinkedMusicPair) => entry.engine === musicEngine)?.label ?? musicStrings.modelSettings;
+  // a model without quality sets shows its engine in this slot, and says so
+  const settingsShowsEngine = !yue && !(nativeSets && nativeQuality) && Boolean(linkedFamily?.pairs.some((entry: LinkedMusicPair) => entry.engine === musicEngine));
   const modelHints: Record<string, string> = { ...musicStrings.hintModels, local: musicStrings.hintYue, 'acestep-cpp': musicStrings.hintAce, 'minimaxmusic-cpp': musicStrings.hintMiniMax, openrouter: musicStrings.hintCloud };
   const modelHasSettings = Boolean(linkedFamily && linkedFamily.pairs.length > 1) || yue || (nativeSets && native.profiles.length > 0);
   // the model card stays in the form only while it asks for something: a download, a choice the settings cannot make
@@ -2245,8 +2248,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 })}
               </>}
             </PickerPill>
-            {modelHasSettings && <PickerPill kind="dialog" className="min-w-0 max-w-[45%] shrink" label={musicStrings.modelSettings} showLabel={false} align="right"
-              value={settingsValue}>
+            {modelHasSettings && <PickerPill kind="dialog" className="min-w-0 max-w-[45%] shrink" label={settingsShowsEngine ? musicStrings.engine : musicStrings.modelSettings}
+              showLabel={settingsShowsEngine} align="right" value={settingsValue}>
               {() => <div className="space-y-3 p-1">{modelSettings}</div>}
             </PickerPill>}
           </div>}
@@ -3386,7 +3389,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           )}
           </>}
           {!instrumental && <Card title={rvcText.title} icon={<Mic size={13} />} fold="rvc-after" foldedByDefault={!rvcTake}
-            actions={<button type="button" onClick={openVoices} className={ICON} title={voicesText.allVoices} aria-label={voicesText.allVoices}><Mic size={14} /></button>}>
+            actions={<button type="button" onClick={openVoices} className={ICON} title={voicesText.allVoices} aria-label={voicesText.allVoices}><ArrowUpRight size={14} aria-hidden /></button>}>
             <div className="space-y-3">
               <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">{rvcText.afterHint}</p>
               {rvcVoicesError && <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{rvcVoicesError}</p>}
@@ -3404,7 +3407,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     <NumberField value={rvcShift} min={-24} max={24} step={1} label={voicesText.pitch} onChange={value => setRvcShift(Math.round(value))} />
                   </div>
                   <input type="range" min={-24} max={24} step={1} value={rvcShift} aria-label={voicesText.pitch}
-                    onChange={event => setRvcShift(Number(event.target.value))} className="mt-1.5 h-1 w-full cursor-pointer accent-pink-500" />
+                    onChange={event => setRvcShift(Number(event.target.value))} className="mt-1.5 h-5 w-full cursor-pointer accent-pink-500" />
                 </div>
                 {chosenRvcVoice.index_name && <div className="mt-2">
                   <div className="flex items-baseline justify-between gap-2">
@@ -3412,7 +3415,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     <NumberField value={rvcBlend} min={0} max={1} step={0.05} label={voicesText.blend} onChange={setRvcBlend} />
                   </div>
                   <input type="range" min={0} max={1} step={0.05} value={rvcBlend} aria-label={voicesText.blend}
-                    onChange={event => setRvcBlend(Number(event.target.value))} className="mt-1.5 h-1 w-full cursor-pointer accent-pink-500" />
+                    onChange={event => setRvcBlend(Number(event.target.value))} className="mt-1.5 h-5 w-full cursor-pointer accent-pink-500" />
                 </div>}
               </div>
               : rvcVoices && rvcVoices.length === 0 ? <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3425,7 +3428,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     hint={`${voice.model_name} · ${voice.index_name ? voicesText.withIndex : voicesText.withoutIndex}`}
                     onPick={() => { close(); chooseLastRvcVoice(voice.id); setRvcAfter(true); }} />)}
                   <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
-                  <PickerOption selected={false} name={voicesText.allVoices} side="↗" onPick={() => { close(); openVoices(); }} />
+                  <PickerOption action selected={false} name={voicesText.allVoices} side="↗" onPick={() => { close(); openVoices(); }} />
                 </>}
               </PickerPill>}
             </div>
@@ -3459,20 +3462,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             {pauseSeconds !== null && !queueBusy ? pauseText.cancel : tt('generateForeverStop')}</button>
         </div>}
         <div className="flex items-stretch gap-1.5">
-          <PickerPill look="split" className="order-2 max-w-[45%] shrink-0" align="right" label={tt('createIntoPlaylist')} showLabel={false}
-            status={<ListMusic size={15} className={`shrink-0 ${chosenPlaylistName ? 'text-pink-500' : ''}`} aria-hidden />}
-            value={chosenPlaylistName ?? tt('createIntoPlaylist')}>
-            {close => <>
-              <NewCollectionOption label={tt('createIntoNewPlaylist')} onPick={() => { close(); setNewPlaylistOpen(true); }} />
-              <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
-              <CollectionOption value="" selected={!chosenPlaylist} name={tt('createIntoNoPlaylist')} meta={t('library')}
-                onPick={() => { choosePlaylist(''); close(); }} />
-              {playlists.map(entry => <CollectionOption key={entry.id} value={entry.id} selected={entry.id === chosenPlaylist} name={entry.name}
-                cover={entry.coverUrl} meta={`${entry.kind === 'album' ? t('album') : t('playlist')} · ${songCount(entry.songIds?.length ?? 0)}`}
-                onPick={() => { choosePlaylist(entry.id); close(); }} />)}
-            </>}
-          </PickerPill>
-        <div className="order-1 flex min-w-0 flex-1 rounded-xl shadow-lg">
+        <div className="flex min-w-0 flex-1 rounded-xl shadow-lg">
         <button
           type="button"
           onClick={submit}
@@ -3488,8 +3478,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         {!cloud && <PickerPill kind="dialog" look="primary" align="right" label={musicStrings.createOptions} icon={<ChevronDown size={18} aria-hidden />}>
           {() => <div className="space-y-3 p-1 text-xs">
             <Switch checked={forever} onChange={enabled => enabled ? setForever(true) : stopForever()} label={tt('generateForever')} hint={tt('generateForeverHint')} />
-            <div className="space-y-1.5">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{pauseText.label}</p>
+            <fieldset disabled={!forever} className="space-y-1.5 disabled:opacity-50">
+              <legend className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{pauseText.label}</legend>
               <CatalogSegments<GenerationPauseMode> label={pauseText.label} value={pauseMode} onChange={setPauseMode}
                 options={[{ value: 'none', label: pauseText.none }, { value: 'fixed', label: pauseText.fixed }, { value: 'random', label: pauseText.random }]} />
               {pauseMode !== 'none' && <div className="flex flex-wrap items-center gap-2">
@@ -3506,10 +3496,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 <span>{pauseText.unit}</span>
                 {!validPause && <span role="alert" className="w-full text-rose-600 dark:text-rose-400">{pauseText.invalid}</span>}
               </div>}
-            </div>
+            </fieldset>
           </div>}
         </PickerPill>}
         </div>
+          <PickerPill look="split" className="max-w-[45%] shrink-0" align="right" label={tt('createIntoPlaylist')} showLabel={false}
+            status={<ListMusic size={15} className={`shrink-0 ${chosenPlaylistName ? 'text-pink-500' : ''}`} aria-hidden />}
+            value={chosenPlaylistName ?? tt('createIntoPlaylist')}>
+            {close => <>
+              <NewCollectionOption label={tt('createIntoNewPlaylist')} onPick={() => { close(); setNewPlaylistOpen(true); }} />
+              <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
+              <CollectionOption value="" selected={!chosenPlaylist} name={tt('createIntoNoPlaylist')} meta={t('library')}
+                onPick={() => { choosePlaylist(''); close(); }} />
+              {playlists.map(entry => <CollectionOption key={entry.id} value={entry.id} selected={entry.id === chosenPlaylist} name={entry.name}
+                cover={entry.coverUrl} meta={`${entry.kind === 'album' ? t('album') : t('playlist')} · ${songCount(entry.songIds?.length ?? 0)}`}
+                onPick={() => { choosePlaylist(entry.id); close(); }} />)}
+            </>}
+          </PickerPill>
         </div>
       </footer>
       {yue && editorOpen && (
