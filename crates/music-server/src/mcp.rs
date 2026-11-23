@@ -1912,6 +1912,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/music/prompt-check".into(), args.clone()),
             },
             Tool {
+                name: "minimax_components_list",
+                description: "MiniMax Music3's files by role (lm, depth, cond, dit, vae) across the catalogue's sets, and whether each is on disk. create_music with minimax.components {role: file} for all five roles renders one song with them in place of the set's own; the engine refuses a partial set.",
+                schema: || object(json!({}), &[]),
+                call: |_| get("/v1/minimax/components".into()),
+            },
+            Tool {
                 name: "ace_dits_list",
                 description: "Every ACE-Step DiT of the component catalogue (turbo, SFT, base, XL, merges, Regrind, each in its quantisations): file, bytes, whether it is on disk and its download. A song renders with one of them when create_music carries ace.synth_model; the base DiTs are the ones the lego, extract and complete tasks need.",
                 schema: || object(json!({}), &[]),

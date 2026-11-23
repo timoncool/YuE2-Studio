@@ -49,6 +49,25 @@ pub(super) const PROFILE_FILE_FIELDS: [&str; 5] = [
     "vae_model",
 ];
 
+/// The files of every catalogue set by role, and whether a model folder of the installation holds each: what a song
+/// can load in place of its set's own.
+pub(crate) async fn components() -> std::result::Result<axum::Json<Value>, (axum::http::StatusCode, axum::Json<crate::ApiError>)> {
+    let root = crate::studio_data_root()
+        .ok_or_else(|| crate::api_error(axum::http::StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable.".into()))?;
+    let installation = Runtime::installation(&root);
+    let mut roles = serde_json::Map::new();
+    for (index, role) in ROLES.into_iter().enumerate() {
+        let mut files: Vec<&'static str> = profiles().iter().map(|profile| profile.files[index]).collect();
+        files.sort_unstable();
+        files.dedup();
+        let rows: Vec<Value> = files.into_iter()
+            .map(|file| json!({ "file": file, "installed": installation.roots.iter().any(|root| root.join(file).is_file()) }))
+            .collect();
+        roles.insert(role.into(), Value::Array(rows));
+    }
+    Ok(axum::Json(json!({ "roles": roles })))
+}
+
 /// The model sets of the component catalogue in use, built once per catalogue.
 pub(crate) fn profiles() -> &'static [Profile] {
     static CACHE: std::sync::Mutex<Option<(u64, &'static [Profile])>> = std::sync::Mutex::new(None);
@@ -189,6 +208,9 @@ pub(crate) struct Sampling {
     pub dit_cfg: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub adapters: Vec<AdapterRef>,
+    /// The file of each of the five roles this song loads in place of its set's, by role; all five or none.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub components: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -208,6 +230,14 @@ impl Sampling {
         }
         if self.lm_top_k.is_some_and(|value| value < 1) {
             bail!("MiniMax LM Top-K must be a positive integer");
+        }
+        if !self.components.is_empty() {
+            if self.components.len() != ROLES.len() || !ROLES.iter().all(|role| self.components.contains_key(*role)) {
+                bail!("MiniMax components name all five roles ({}) or none: the engine refuses a partial set", ROLES.join(", "));
+            }
+            if self.components.values().any(|file| !file.ends_with(".gguf") || file.contains(['/', '\\', ':'])) {
+                bail!("MiniMax components are GGUF file names of the model folder");
+            }
         }
         for adapter in &self.adapters {
             if adapter.name.is_empty() || adapter.name.starts_with('.') || adapter.name.contains(['/', '\\', ':'])
@@ -260,11 +290,18 @@ fn request_body(profile: &Profile, request: &SongRequest<'_>) -> Result<Value> {
         body["lm_seed"] = json!(seed);
     }
     request.sampling.validate()?;
-    if let Value::Object(parameters) = serde_json::to_value(&request.sampling)? {
+    if let Value::Object(mut parameters) = serde_json::to_value(&request.sampling)? {
+        // the engine takes the components as its own model fields, set below
+        parameters.remove("components");
         body.as_object_mut().expect("MiniMax request object").extend(parameters);
     }
     for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
         body[field] = json!(file);
+    }
+    for (field, role) in PROFILE_FILE_FIELDS.into_iter().zip(ROLES) {
+        if let Some(file) = request.sampling.components.get(role) {
+            body[field] = json!(file);
+        }
     }
     Ok(body)
 }
@@ -581,9 +618,17 @@ mod tests {
         }
         let invalid = SongRequest { sampling: Sampling { lm_top_k: Some(0), ..Default::default() }, ..request.clone() };
         assert!(request_body(profile, &invalid).is_err());
+        let chosen: std::collections::BTreeMap<String, String> = ROLES.iter().map(|role| (role.to_string(), format!("own-{role}.gguf"))).collect();
+        let overridden = request_body(profile, &SongRequest { sampling: Sampling { components: chosen.clone(), ..Default::default() }, ..request.clone() }).unwrap();
+        for (field, role) in PROFILE_FILE_FIELDS.into_iter().zip(ROLES) {
+            assert_eq!(overridden[field], format!("own-{role}.gguf"), "the song loads its own {role}");
+        }
+        assert!(overridden.get("components").is_none(), "the engine gets its model fields, not the form's map");
+        let partial: std::collections::BTreeMap<String, String> = chosen.into_iter().take(4).collect();
+        assert!(request_body(profile, &SongRequest { sampling: Sampling { components: partial, ..Default::default() }, ..request.clone() }).is_err(), "the engine refuses a partial set");
         let request = SongRequest {
             sampling: Sampling { lm_cfg: Some(1.3), lm_top_k: Some(41), dit_cfg: Some(2.2),
-                adapters: vec![AdapterRef { name: "test-dit".into(), lm_scale: 0.0, dit_scale: 0.65 }] },
+                adapters: vec![AdapterRef { name: "test-dit".into(), lm_scale: 0.0, dit_scale: 0.65 }], ..Default::default() },
             ..request
         };
         let id = client.submit(profile.id, &request).await.unwrap();

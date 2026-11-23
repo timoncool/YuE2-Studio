@@ -52,6 +52,7 @@ import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDasheng
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
 import { AceDitSwitcher } from './AceDitSwitcher';
+import { MiniMaxComponents, completeComponents } from './MiniMaxComponents';
 import { scriptLanguage } from '../services/lyricsLanguage';
 import { joinCaption, splitCaption, usePromptCheck } from '../services/minimaxCaption';
 import { minimaxCaptionStrings } from '../i18n/minimaxCaption';
@@ -532,6 +533,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   useEffect(() => keepAceStudio(aceStudio), [aceStudio]);
   const miniMaxEngine = nativeEngine === 'minimaxmusic-cpp';
   const mmText = minimaxCaptionStrings[language];
+  const [mmComponents, setMmComponents] = useState<Record<string, string>>({});
+  const mmChosenComponents = miniMaxEngine ? completeComponents(mmComponents) : undefined;
+  const mmComponentsPartial = miniMaxEngine && Object.keys(mmComponents).length > 0 && !mmChosenComponents;
   // MiniMax Music3 Studio's three caption panes, joined into the one style the engine takes
   const [mmPanes, setMmPanes] = useState(() => splitCaption(''));
   const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
@@ -1895,7 +1899,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const submit = () => {
     if (pair.blocked) return;
     if (nativeEngine) {
-      if (packedAceInvalid.length || (aceEngine && !aceOptions) || !nativeAdaptersReady) return;
+      if (packedAceInvalid.length || (aceEngine && !aceOptions) || mmComponentsPartial || !nativeAdaptersReady) return;
       if (!native.ready || !native.profile || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))) return;
       if (miDasheng && !miDashengPromptReady(scene)) return;
       if (soulx && (!soulxInputs.reference_song_id || (soulxConversion
@@ -1949,7 +1953,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...(vevo2 ? { vevo2: vevoReferences } : {}),
         ...(soulx ? { soulx: soulxConversion ? { reference_song_id: soulxInputs.reference_song_id, source_song_id: soulxInputs.source_song_id } : { reference_song_id: soulxInputs.reference_song_id, reference_metadata: soulxInputs.reference_metadata, target_metadata: soulxInputs.target_metadata, control: soulxInputs.control } } : {}),
         ...settings,
-        ...(miniMaxAdapterOptions.length ? { minimax: { ...settings.minimax, adapters: miniMaxAdapterOptions } } : {}),
+        ...(miniMaxAdapterOptions.length || mmChosenComponents ? { minimax: { ...settings.minimax, ...(miniMaxAdapterOptions.length ? { adapters: miniMaxAdapterOptions } : {}), ...(mmChosenComponents ? { components: mmChosenComponents } : {}) } } : {}),
         ...(aceEngine && aceOptions ? {
           ace: { ...aceStudioFields(aceStudio, ditKind(aceDit || native.profile?.roles?.dit), aceTask.task),
             ...(!aceStudio.vocal_language && scriptLanguage(lyrics) ? { vocal_language: scriptLanguage(lyrics) } : {}), ...settings.ace, ...aceOptions, ...(aceAdapterOptions.length ? { adapters: aceAdapterOptions } : {}) },
@@ -2372,6 +2376,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 ], model: null }}
                 frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="native-lora">{body}</Card>}
               />}
+              {miniMaxEngine && native.profile?.ready && <Card title={mmText.componentOverride} fold="minimax-components">
+                <MiniMaxComponents value={mmComponents} onChange={setMmComponents} setFiles={native.profile.roles} />
+              </Card>}
               {mulaCover && <MuLaCoverFields value={mulaCoverDraft.original}
                 onChange={(original, abc) => setMulaCoverDraft(previous => previous.original === original ? previous : { original, abc })}
                 onInstall={native.refresh}
@@ -3399,7 +3406,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           type="button"
           onClick={submit}
           disabled={pair.blocked || (cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
-            ? packedAceInvalid.length > 0 || !native.ready || (aceEngine && !aceOptions) || !nativeAdaptersReady || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
+            ? packedAceInvalid.length > 0 || !native.ready || (aceEngine && !aceOptions) || mmComponentsPartial || !nativeAdaptersReady || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
           className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >

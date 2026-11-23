@@ -1982,6 +1982,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))
         .route("/v1/music/prompt-check", post(native_music_jobs::check_prompt))
+        .route("/v1/minimax/components", get(native_minimax::components))
         .route("/v1/score/mark", post(score::api::mark))
         .route("/v1/training/prepare/train-after", post(prepare::set_train_after))
         .route("/v1/training/listen/install", post(install_listen_pack))
