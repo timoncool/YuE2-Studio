@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { DjMode } from './DjMode';
+import { I18nProvider } from '../../context/I18nContext';
 
 const recorder = vi.hoisted(() => ({ stop: vi.fn() }));
 vi.mock('../../services/externalLinks', () => ({ isDesktop: () => true }));
@@ -52,7 +53,7 @@ it('holds the original recording through cancellation and a failed write, then s
     await act(async () => element?.click());
   };
   try {
-    await act(async () => root.render(<DjMode library={[]} playlists={[]} initialSong={null} onClose={onClose} />));
+    await act(async () => root.render(<I18nProvider><DjMode library={[]} playlists={[]} initialSong={null} onClose={onClose} /></I18nProvider>));
     await click('Record mix');
     await click('Back to Studio');
     await click('Save and exit');
@@ -106,7 +107,7 @@ it.each([
   };
   const requestExit = () => action === 'Escape' ? escape() : click(action);
   try {
-    await act(async () => root.render(<DjMode library={[]} playlists={[]} initialSong={null} onClose={onClose} />));
+    await act(async () => root.render(<I18nProvider><DjMode library={[]} playlists={[]} initialSong={null} onClose={onClose} /></I18nProvider>));
     await click('Record mix');
     await click('Stop & save recording');
     await requestExit();

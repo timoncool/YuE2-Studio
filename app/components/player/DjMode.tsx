@@ -12,6 +12,10 @@ import { semitonesFromPlaybackRate } from '../../services/playbackTempo';
 import { DjStemControls } from './DjStemControls';
 import { DjPitchFader } from './DjPitchFader';
 import { readDjNativeStems, readDjSeparationStatus, startDjSeparation, installDjSeparationEngine, djEngineReady, type DjSeparationEngine, type DjSeparationStatus } from '../../services/djSeparation';
+import { useI18n } from '../../context/I18nContext';
+import { djStrings } from '../../i18n/dj';
+
+const useDj = () => djStrings[useI18n().language];
 
 type DeckIndex = 0 | 1;
 type BrowserSource = 'all' | 'unassigned' | 'liked' | 'stems' | `collection:${string}`;
@@ -29,6 +33,7 @@ const button = 'rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-xs
 const slider = 'h-1.5 w-full cursor-pointer accent-sky-400';
 
 const MixerMeter: React.FC<{ deck: DjDeck; color: string }> = ({ deck, color }) => {
+  const s = useDj();
   const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     const element = canvas.current;
@@ -56,7 +61,7 @@ const MixerMeter: React.FC<{ deck: DjDeck; color: string }> = ({ deck, color }) 
     draw();
     return () => window.cancelAnimationFrame(frame);
   }, [deck, color]);
-  return <canvas ref={canvas} width={500} height={58} className="h-14 w-full rounded-lg bg-black/70" aria-label="Live deck audio spectrum" />;
+  return <canvas ref={canvas} width={500} height={58} className="h-14 w-full rounded-lg bg-black/70" aria-label={s.spectrum} />;
 };
 
 
@@ -65,6 +70,7 @@ const MixerMeter: React.FC<{ deck: DjDeck; color: string }> = ({ deck, color }) 
  * rate instead of waiting for HTMLMediaElement timeupdate events.
  */
 const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ deck, side, color }) => {
+  const s = useDj();
   const previous = useRef<number | null>(null);
   const record = useRef<HTMLDivElement | null>(null);
   const rotation = useRef(0);
@@ -90,11 +96,11 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
   return (
     <div className="flex flex-col items-center gap-1.5">
       <div className="relative h-[344px] w-[360px] shrink-0 rounded-xl border border-zinc-600/70 bg-[linear-gradient(145deg,#34363b,#141519_52%,#2b2d33)] p-3 shadow-[inset_0_2px_2px_#ffffff18,0_9px_25px_#000a]">
-        <span className="absolute left-4 top-2 text-[11px] font-bold tracking-[0.22em] text-zinc-400">YuE2 • TURNTABLE {side}</span>
+        <span className="absolute left-4 top-2 text-[11px] font-bold tracking-[0.22em] text-zinc-400">{s.turntable(side)}</span>
         <span className="absolute bottom-3 left-3 h-2 w-2 rounded-full border border-zinc-600 bg-zinc-900 shadow-[0_0_2px_#fff5]" />
         <span className="absolute right-3 top-3 h-2 w-2 rounded-full border border-zinc-600 bg-zinc-900 shadow-[0_0_2px_#fff5]" />
         <div
-          role="slider" tabIndex={0} aria-label={`Scratch deck ${side}`}
+          role="slider" tabIndex={0} aria-label={s.scratchDeck(side)}
           aria-valuemin={0} aria-valuemax={Math.max(1, deck.state.duration)}
           aria-valuenow={Math.min(deck.state.duration || 1, deck.state.time)}
           onKeyDown={event => {
@@ -152,24 +158,27 @@ const JogWheel: React.FC<{ deck: DjDeck; side: 'A' | 'B'; color: string }> = ({ 
           <path d="M20 135 L10 154" stroke="#eef2f7" strokeWidth="8" strokeLinecap="round"/>
           <path d="M10 153 L7 164" stroke="#171a1f" strokeWidth="6" strokeLinecap="round"/>
         </svg>
-        <div className="absolute bottom-3 right-3 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[9px] font-bold" style={{color}}>{deck.state.scratching ? 'SCRATCH' : deck.state.playing ? 'ON AIR' : 'STOP'}</div>
+        <div className="absolute bottom-3 right-3 rounded border border-white/10 bg-black/70 px-1.5 py-0.5 text-[9px] font-bold" style={{color}}>{deck.state.scratching ? s.statusScratch : deck.state.playing ? s.statusOnAir : s.statusStop}</div>
       </div>
-      <span className="text-center text-[10px] text-zinc-400">{deck.state.scratching ? (deck.state.scratchReady ? 'Scratching • forward / reverse' : 'Preparing scratch audio…') : 'Grab vinyl to scratch • left/right to nudge'}</span>
+      <span className="text-center text-[10px] text-zinc-400">{deck.state.scratching ? (deck.state.scratchReady ? s.scratching : s.preparingScratch) : s.grabVinyl}</span>
     </div>
   );
 };
 
-const EqSlider: React.FC<{ label: string; value: number; onChange: (value: number) => void }> = ({ label, value, onChange }) => (
-  <div className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase text-zinc-400">
-    <div className="flex items-center justify-between gap-2"><span>{label}</span>
-      <div className="flex items-center gap-2"><span className="tabular-nums text-zinc-200">{value > 0 ? '+' : ''}{value} dB</span>
-        <button type="button" onClick={() => onChange(0)} className="rounded border border-white/10 px-1 text-zinc-400 hover:bg-white/10 hover:text-white" title={`Reset ${label} EQ`} aria-label={`Reset ${label} EQ`}>↺</button>
+const EqSlider: React.FC<{ label: string; value: number; onChange: (value: number) => void }> = ({ label, value, onChange }) => {
+  const s = useDj();
+  return (
+    <div className="flex min-w-0 flex-col gap-1 text-[10px] font-semibold uppercase text-zinc-400">
+      <div className="flex items-center justify-between gap-2"><span>{label}</span>
+        <div className="flex items-center gap-2"><span className="tabular-nums text-zinc-200">{value > 0 ? '+' : ''}{value} dB</span>
+          <button type="button" onClick={() => onChange(0)} className="rounded border border-white/10 px-1 text-zinc-400 hover:bg-white/10 hover:text-white" title={s.resetEq(label)} aria-label={s.resetEq(label)}>↺</button>
+        </div>
       </div>
+      <input className={slider} type="range" min="-18" max="12" step="1" value={value} onChange={event => onChange(Number(event.target.value))}
+        onDoubleClick={() => onChange(0)} aria-label={s.eq(label)} />
     </div>
-    <input className={slider} type="range" min="-18" max="12" step="1" value={value} onChange={event => onChange(Number(event.target.value))}
-      onDoubleClick={() => onChange(0)} aria-label={`${label} EQ`} />
-  </div>
-);
+  );
+};;
 
 const DjDeckPanel: React.FC<{
   mixer: DjMixer; index: DeckIndex; library: Song[]; onSelect: (song: Song) => void;
@@ -180,6 +189,7 @@ const DjDeckPanel: React.FC<{
   onInstall: (engine: DjSeparationEngine) => void;
   onSeparate: (index: DeckIndex, engine: DjSeparationEngine) => void;
 }> = ({ mixer, index, library, onSelect, onLoad, onTap, separation, installingEngine, actionBusy, onInstall, onSeparate }) => {
+  const s = useDj();
   const deck = mixer.decks[index];
   const state: DjDeckSnapshot = deck.state;
   const side = index === 0 ? 'A' : 'B';
@@ -202,18 +212,18 @@ const DjDeckPanel: React.FC<{
       onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropHover(false); }}
       onDrop={drag}
       className={`min-w-[345px] flex-1 rounded-xl border p-3 transition-all ${dropHover ? 'border-fuchsia-500 bg-fuchsia-500/10' : 'border-white/10 bg-zinc-900/80'}`}
-      aria-label={`DJ deck ${side}`}
+      aria-label={s.deck(side)}
     >
       <div className="mb-3 flex items-center gap-3">
         <span className="rounded px-2 py-1 text-sm font-black text-white" style={{ background: color }}>{side}</span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold text-white">{state.song?.title ?? `Drag a song onto deck ${side}`}</div>
-          <div className="truncate text-[11px] text-zinc-400">{state.song ? state.song.style : 'Drop from your library below, or use LOAD A / B'}</div>
+          <div className="truncate text-sm font-bold text-white">{state.song?.title ?? s.dragSong(side)}</div>
+          <div className="truncate text-[11px] text-zinc-400">{state.song ? state.song.style : s.dropHint}</div>
         </div>
         <span className="font-mono text-xs tabular-nums text-zinc-300">{TIME(state.time)} / {TIME(state.duration)}</span>
       </div>
       <MixerMeter deck={deck} color={color} />
-      <div onClick={jumpToPercent} role="slider" tabIndex={0} aria-label={`Seek deck ${side}`}
+      <div onClick={jumpToPercent} role="slider" tabIndex={0} aria-label={s.seekDeck(side)}
         aria-valuemin={0} aria-valuemax={Math.max(1, state.duration)} aria-valuenow={Math.min(state.time, state.duration || 1)}
         onKeyDown={event => {
           if (event.key === 'ArrowRight') deck.seek(state.time + 5);
@@ -224,70 +234,70 @@ const DjDeckPanel: React.FC<{
       </div>
       <div className="mt-3 flex flex-wrap justify-center gap-2">
         <button type="button" disabled={!state.song} onClick={() => deck.toggle()} className={`${button} flex items-center gap-1.5 bg-white/10 px-4`}>
-          {state.playing ? <Pause size={16} /> : <Play size={16} />} {state.playing ? 'PAUSE' : 'PLAY'}
+          {state.playing ? <Pause size={16} /> : <Play size={16} />} {state.playing ? s.pause : s.play}
         </button>
-        <button type="button" disabled={!state.song} onClick={() => deck.cue()} className={button}><SkipBack size={14} className="inline" /> CUE</button>
-        <button type="button" disabled={!state.song} onClick={() => deck.setCue()} className={button}>SET CUE</button>
-        <button type="button" disabled={!state.song} onClick={() => { if (!mixer.sync(index)) onTap(index); }} className={button} title="Match tempo to the opposite deck; if BPM is unknown, tap this track's beat first">SYNC</button>
-        <button type="button" disabled={!state.song} onClick={() => deck.seek(0)} className={button} title="Back to start"><RotateCcw size={14} /></button>
+        <button type="button" disabled={!state.song} onClick={() => deck.cue()} className={button}><SkipBack size={14} className="inline" /> {s.cue}</button>
+        <button type="button" disabled={!state.song} onClick={() => deck.setCue()} className={button}>{s.setCue}</button>
+        <button type="button" disabled={!state.song} onClick={() => { if (!mixer.sync(index)) onTap(index); }} className={button} title={s.syncHint}>{s.sync}</button>
+        <button type="button" disabled={!state.song} onClick={() => deck.seek(0)} className={button} title={s.backToStart} aria-label={s.backToStart}><RotateCcw size={14} /></button>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-center gap-3 rounded-xl border border-white/5 bg-black/20 p-2">
         <JogWheel deck={deck} side={side} color={color} />
         <DjPitchFader deck={deck} side={side} color={color} />
         <div className="flex min-w-[118px] max-w-[160px] flex-1 flex-col justify-center gap-4">
           <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-black/25 p-2">
-            <span className="text-[10px] font-bold tracking-wider text-zinc-400">BEAT CONTROL</span>
-            <span className="font-mono text-xs tabular-nums text-zinc-200">Original: {state.bpm?.toFixed(1) ?? '—'} BPM</span>
-            <button className={button} type="button" onClick={() => onTap(index)}>TAP BPM</button>
-            <span className="text-[10px] leading-4 text-zinc-500">{semitonesFromPlaybackRate(state.rate).toFixed(1)} semitones · pitch follows speed</span>
+            <span className="text-[10px] font-bold tracking-wider text-zinc-400">{s.beatControl}</span>
+            <span className="font-mono text-xs tabular-nums text-zinc-200">{s.originalBpm(state.bpm?.toFixed(1) ?? '—')}</span>
+            <button className={button} type="button" onClick={() => onTap(index)}>{s.tapBpm}</button>
+            <span className="text-[10px] leading-4 text-zinc-500">{s.semitones(semitonesFromPlaybackRate(state.rate).toFixed(1))}</span>
           </div>
           <div className="rounded-md border border-white/10 bg-black/25 p-2">
             <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold text-zinc-400">
-              <span>DECK GAIN</span>
-              <button type="button" className="text-sky-300 hover:text-white" onClick={() => mixer.gain(index, 1)}>RESET</button>
+              <span>{s.deckGain}</span>
+              <button type="button" className="text-sky-300 hover:text-white" onClick={() => mixer.gain(index, 1)}>{s.reset}</button>
             </div>
             <input className={slider} type="range" min="0" max="1.5" step="0.01" value={state.level}
-              onChange={event => mixer.gain(index, Number(event.target.value))} aria-label={`Deck ${side} gain`} />
+              onChange={event => mixer.gain(index, Number(event.target.value))} aria-label={s.gainOf(side)} />
           </div>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-3 rounded-lg bg-black/30 p-3">
-        <EqSlider label="Low" value={state.eq[0]} onChange={value => deck.equalizer(0, value)} />
-        <EqSlider label="Mid" value={state.eq[1]} onChange={value => deck.equalizer(1, value)} />
-        <EqSlider label="High" value={state.eq[2]} onChange={value => deck.equalizer(2, value)} />
-        <label className="col-span-2 text-[10px] text-zinc-400"><span className="flex justify-between">Filter · {Math.round(state.filter * 100)} <button type="button" className="text-sky-300 hover:text-white" onClick={() => deck.filter(0)}>RESET</button></span>
+        <EqSlider label={s.low} value={state.eq[0]} onChange={value => deck.equalizer(0, value)} />
+        <EqSlider label={s.mid} value={state.eq[1]} onChange={value => deck.equalizer(1, value)} />
+        <EqSlider label={s.high} value={state.eq[2]} onChange={value => deck.equalizer(2, value)} />
+        <label className="col-span-2 text-[10px] text-zinc-400"><span className="flex justify-between">{s.filter} · {Math.round(state.filter * 100)} <button type="button" className="text-sky-300 hover:text-white" onClick={() => deck.filter(0)}>{s.reset}</button></span>
           <input className={slider} type="range" min="-1" max="1" step="0.01" value={state.filter}
-            onChange={event => deck.filter(Number(event.target.value))} onDoubleClick={() => deck.filter(0)} aria-label={`Deck ${side} filter`} />
+            onChange={event => deck.filter(Number(event.target.value))} onDoubleClick={() => deck.filter(0)} aria-label={s.filterOf(side)} />
         </label>
-        <label className="text-[10px] text-zinc-400"><span className="flex justify-between">Echo · {pct(state.echo)} <button type="button" className="text-sky-300 hover:text-white" onClick={() => deck.echo(0)}>RESET</button></span>
+        <label className="text-[10px] text-zinc-400"><span className="flex justify-between">{s.echo} · {pct(state.echo)} <button type="button" className="text-sky-300 hover:text-white" onClick={() => deck.echo(0)}>{s.reset}</button></span>
           <input className={slider} type="range" min="0" max="1" step="0.01" value={state.echo}
-            onChange={event => deck.echo(Number(event.target.value))} onDoubleClick={() => deck.echo(0)} aria-label={`Deck ${side} echo`} />
+            onChange={event => deck.echo(Number(event.target.value))} onDoubleClick={() => deck.echo(0)} aria-label={s.echoOf(side)} />
         </label>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[10px] font-semibold text-zinc-500">HOT CUES</span>
+        <span className="mr-1 text-[10px] font-semibold text-zinc-500">{s.hotCues}</span>
         {state.hotCues.map((time, cue) => (
           <button key={cue} type="button" disabled={!state.song}
             onClick={event => event.shiftKey || time === null ? deck.setHotCue(cue) : deck.hotCue(cue)}
             onContextMenu={event => { event.preventDefault(); deck.setHotCue(cue); }}
-            title="Click to jump · Shift-click or right-click to set"
+            title={s.hotCueHint}
             className={`${button} ${time !== null ? 'border-fuchsia-500/40 bg-fuchsia-500/20' : ''}`}>
             {cue + 1}
           </button>
         ))}
-        <span className="ml-auto text-[10px] text-zinc-500">Shift+click to set</span>
+        <span className="ml-auto text-[10px] text-zinc-500">{s.shiftToSet}</span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold text-zinc-500">LOOP</span>
-        <button className={button} type="button" disabled={!state.song} onClick={() => deck.setLoopIn()}>IN {TIME(state.loopIn)}</button>
-        <button className={button} type="button" disabled={!state.song} onClick={() => deck.setLoopOut()}>OUT {TIME(state.loopOut)}</button>
+        <span className="text-[10px] font-semibold text-zinc-500">{s.loop}</span>
+        <button className={button} type="button" disabled={!state.song} onClick={() => deck.setLoopIn()}>{s.loopIn} {TIME(state.loopIn)}</button>
+        <button className={button} type="button" disabled={!state.song} onClick={() => deck.setLoopOut()}>{s.loopOut} {TIME(state.loopOut)}</button>
         <button className={`${button} ${state.looping ? 'border-fuchsia-500 bg-fuchsia-500/20' : ''}`} type="button"
-          disabled={!state.song} onClick={() => deck.toggleLoop()}><Repeat size={13} className="inline" /> {state.looping ? 'ON' : 'OFF'}</button>
+          disabled={!state.song} onClick={() => deck.toggleLoop()}><Repeat size={13} className="inline" /> {state.looping ? s.on : s.off}</button>
       </div>
       <DjStemControls deck={deck} side={side} separation={separation} installing={installingEngine}
         actionBusy={actionBusy} onInstall={onInstall} onSeparate={engine => onSeparate(index, engine)} />
       {state.error && <p role="alert" className="mt-2 rounded-md bg-rose-500/10 p-2 text-xs text-rose-300">{state.error}</p>}
-      {state.song && <button className="mt-2 text-xs text-zinc-400 underline hover:text-white" type="button" onClick={() => onSelect(state.song!)}>Show track details</button>}
+      {state.song && <button className="mt-2 text-xs text-zinc-400 underline hover:text-white" type="button" onClick={() => onSelect(state.song!)}>{s.trackDetails}</button>}
     </section>
   );
 };
@@ -302,6 +312,7 @@ export const DjMode: React.FC<{
   initialSong: Song | null;
   onClose: () => void;
 }> = ({ library, playlists, initialSong, onClose }) => {
+  const s = useDj();
   const [revision, setRevision] = useState(0);
   const [mixer, setMixer] = useState<DjMixer | null>(null);
   const [source, setSource] = useState<BrowserSource>('all');
@@ -366,7 +377,7 @@ export const DjMode: React.FC<{
           } else if (status.download?.scope === 'separation' && status.download.done && status.download.error) {
             installingRef.current = null;
             setInstallingEngine(null);
-            setError('Stem engine download failed: ' + status.download.error);
+            setError(s.engineDownloadFailed(status.download.error));
           }
         }
         const run = status.run;
@@ -448,7 +459,7 @@ export const DjMode: React.FC<{
   const separate = async (index: DeckIndex, engine: DjSeparationEngine) => {
     if (!mixer || separationBusy || installingRef.current) return;
     if (!djEngineReady(separation, engine)) {
-      setError('The separation engine is not installed yet. Use its Install button in Live Stem Control.');
+      setError(s.engineNotInstalled);
       return;
     }
     const song = mixer.decks[index].state.song;
@@ -458,7 +469,7 @@ export const DjMode: React.FC<{
     try {
       const existing = await readDjNativeStems(song.id);
       if ((existing.length || mixer.decks[index].state.stems.length) &&
-        !window.confirm('Replace existing separated stems? The original recording stays intact.')) return;
+        !window.confirm(s.replaceStems)) return;
       await startDjSeparation(song.id, engine);
       startedHere.current = song.id;
       setSeparation(await readDjSeparationStatus());
@@ -498,7 +509,7 @@ export const DjMode: React.FC<{
         const outcome = await saveFile(`YuE2-DJ-mix-${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`, { blob });
         if (outcome === 'cancelled') return false;
         if (outcome === 'failed') {
-          setError('The DJ mix could not be saved. Select Save recording to try again.');
+          setError(s.mixNotSaved);
           return false;
         }
         pendingMix.current = null;
@@ -548,12 +559,12 @@ export const DjMode: React.FC<{
       <div className="contents" inert={exitPrompt}>
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#17181d] px-4 py-2">
         <div className="flex items-center gap-3"><div className="rounded bg-red-600 px-2 py-1 text-base font-black italic text-white">YuE2 DJ</div>
-          <span className="text-xs text-zinc-400">Two-deck music mixer · Library / Albums / Playlists / Stems</span>
+          <span className="text-xs text-zinc-400">{s.subtitle}</span>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className={`${button} flex items-center gap-2 ${mixer?.recording ? 'border-red-400 bg-red-500/20 text-red-300' : ''}`}
-            onClick={() => void record()} disabled={!mixer}><Circle size={13} fill={mixer?.recording ? 'currentColor' : 'none'} />{mixer?.recording ? 'Stop & save recording' : pendingMix.current ? 'Save recording' : 'Record mix'}</button>
-          <button className={`${button} flex items-center gap-1.5`} type="button" onClick={leave}><X size={16} /> Back to Studio</button>
+            onClick={() => void record()} disabled={!mixer}><Circle size={13} fill={mixer?.recording ? 'currentColor' : 'none'} />{mixer?.recording ? s.stopAndSave : pendingMix.current ? s.saveRecording : s.recordMix}</button>
+          <button className={`${button} flex items-center gap-1.5`} type="button" onClick={leave}><X size={16} /> {s.backToStudio}</button>
         </div>
       </header>
       {error && <p role="alert" className="bg-rose-900/30 px-4 py-1.5 text-xs text-rose-200">{error}</p>}
@@ -565,48 +576,48 @@ export const DjMode: React.FC<{
                 separation={separation} installingEngine={installingEngine} actionBusy={separationBusy} onInstall={install} onSeparate={separate} />
               <div className="flex w-24 shrink-0 flex-col items-center justify-center gap-5 rounded-xl border border-white/10 bg-zinc-900 px-2">
                 <Headphones className="text-zinc-400" size={24} />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">MIX</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">{s.mix}</span>
                 <div className="h-32 w-1 rounded-full bg-linear-to-b from-blue-500 via-fuchsia-500 to-rose-500" aria-hidden />
-                <button type="button" className={button} onClick={() => mixer.setCrossfade(0.5)}>CENTER</button>
+                <button type="button" className={button} onClick={() => mixer.setCrossfade(0.5)}>{s.center}</button>
               </div>
               <DjDeckPanel mixer={mixer} index={1} library={libraryPlayable} onSelect={setSelected} onLoad={load} onTap={tap}
                 separation={separation} installingEngine={installingEngine} actionBusy={separationBusy} onInstall={install} onSeparate={separate} />
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-white/10 bg-[#202126] p-3">
               <span className="font-black text-blue-400">A</span>
-              <button type="button" className={button} onClick={() => mixer.setCrossfade(0)}>CUT A</button>
+              <button type="button" className={button} onClick={() => mixer.setCrossfade(0)}>{s.cutA}</button>
               <input className="h-2 min-w-[170px] max-w-[650px] flex-1 cursor-pointer accent-fuchsia-500" type="range" min="0" max="1" step="0.001"
                 value={mixer.getCrossfade()} onChange={event => mixer.setCrossfade(Number(event.target.value))}
-                aria-label="Equal-power crossfader" onDoubleClick={() => mixer.setCrossfade(0.5)} />
-              <button type="button" className={button} onClick={() => mixer.setCrossfade(1)}>CUT B</button>
+                aria-label={s.crossfader} onDoubleClick={() => mixer.setCrossfade(0.5)} />
+              <button type="button" className={button} onClick={() => mixer.setCrossfade(1)}>{s.cutB}</button>
               <span className="font-black text-rose-400">B</span>
               <span className="text-xs text-zinc-400">{Math.round((1 - mixer.getCrossfade()) * 100)}% / {Math.round(mixer.getCrossfade() * 100)}%</span>
             </div>
             <div className="grid min-h-[300px] grid-cols-1 gap-3 lg:grid-cols-[185px_minmax(360px,1fr)_245px]">
-              <nav className="min-h-0 rounded-xl border border-white/10 bg-[#17181d] p-2" aria-label="DJ library folders">
-                <div className="mb-2 flex items-center gap-2 px-2 text-xs font-bold text-white"><FolderOpen size={14} /> MY LIBRARY</div>
-                {navigateButton('all', 'All songs', libraryPlayable.filter(song => stemOf(song) === null).length)}
-                {navigateButton('unassigned', 'Not in any collection')}
-                {navigateButton('liked', 'Liked songs')}
-                {navigateButton('stems', 'All stems')}
+              <nav className="min-h-0 rounded-xl border border-white/10 bg-[#17181d] p-2" aria-label={s.folders}>
+                <div className="mb-2 flex items-center gap-2 px-2 text-xs font-bold text-white"><FolderOpen size={14} /> {s.myLibrary}</div>
+                {navigateButton('all', s.allSongs, libraryPlayable.filter(song => stemOf(song) === null).length)}
+                {navigateButton('unassigned', s.notInCollection)}
+                {navigateButton('liked', s.liked)}
+                {navigateButton('stems', s.allStems)}
                 <div className="my-2 border-t border-white/10" />
-                <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-500">Playlists</div>
+                <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-500">{s.playlists}</div>
                 {playlists.filter(list => list.kind !== 'album').map(list => navigateButton(`collection:${list.id}`, list.name, list.songIds?.length))}
                 <div className="my-2 border-t border-white/10" />
-                <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-500">Albums</div>
+                <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-500">{s.albums}</div>
                 {playlists.filter(list => list.kind === 'album').map(list => navigateButton(`collection:${list.id}`, list.name, list.songIds?.length))}
               </nav>
-              <section className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#17181d]" aria-label="DJ song browser">
+              <section className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#17181d]" aria-label={s.browser}>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 p-2.5">
                   <label className="flex min-w-[180px] flex-1 items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-zinc-400">
                     <Search size={14} />
                     <input className="w-full bg-transparent text-xs text-white outline-none placeholder:text-zinc-500"
-                      value={search} onChange={event => setSearch(event.target.value)} placeholder="Search title, style, genre…" aria-label="Search DJ library" />
+                      value={search} onChange={event => setSearch(event.target.value)} placeholder={s.search} aria-label={s.searchLabel} />
                   </label>
-                  <span className="text-xs text-zinc-400">{visibleSongs.length} tracks · drag to A or B</span>
+                  <span className="text-xs text-zinc-400">{s.tracks(visibleSongs.length)}</span>
                 </div>
                 <div className="max-h-[390px] overflow-y-auto">
-                  {visibleSongs.length === 0 && <p className="p-6 text-center text-sm text-zinc-400">No tracks found in this collection.</p>}
+                  {visibleSongs.length === 0 && <p className="p-6 text-center text-sm text-zinc-400">{s.noTracks}</p>}
                   {visibleSongs.map(song => {
                     const stems = stemsOf.get(song.id) ?? [];
                     const active = selected?.id === song.id;
@@ -629,7 +640,7 @@ export const DjMode: React.FC<{
                           <span className="hidden w-14 shrink-0 text-right font-mono text-[11px] text-zinc-400 sm:block">{song.bpm ? `${song.bpm} BPM` : ''}</span>
                           <span className="hidden w-12 shrink-0 text-right font-mono text-[11px] text-zinc-400 sm:block">{song.duration}</span>
                           {stems.length > 0 && <button type="button" onClick={event => { event.stopPropagation(); toggleStems(song.id); }}
-                            className={button} title="Show individual stems"><AudioLines size={14} /></button>}
+                            className={button} title={s.showStems} aria-label={s.showStems}><AudioLines size={14} /></button>}
                           <button type="button" className={`${button} shrink-0`} onClick={event => { event.stopPropagation(); load(0, song); }}>A</button>
                           <button type="button" className={`${button} shrink-0`} onClick={event => { event.stopPropagation(); load(1, song); }}>B</button>
                         </div>
@@ -650,50 +661,50 @@ export const DjMode: React.FC<{
                   })}
                 </div>
               </section>
-              <aside className="min-w-0 rounded-xl border border-white/10 bg-[#17181d] p-3" aria-label="DJ sideview">
-                <div className="mb-3 flex items-center gap-2 text-xs font-bold text-white"><ListMusic size={15} /> SIDEVIEW</div>
+              <aside className="min-w-0 rounded-xl border border-white/10 bg-[#17181d] p-3" aria-label={s.sideviewLabel}>
+                <div className="mb-3 flex items-center gap-2 text-xs font-bold text-white"><ListMusic size={15} /> {s.sideview}</div>
                 {selected ? <>
                   <img className="mx-auto aspect-square w-full max-w-[165px] rounded-lg object-cover" src={trackCoverUrl(selected)} alt="" />
                   <div className="mt-3 truncate text-sm font-bold text-white">{selected.title}</div>
                   <div className="mt-1 text-xs text-zinc-400">{selected.creator || 'YuE2 Studio'}</div>
                   <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                    <dt className="text-zinc-500">Duration</dt><dd className="text-right">{selected.duration}</dd>
-                    <dt className="text-zinc-500">BPM</dt><dd className="text-right">{selected.bpm || '—'}</dd>
-                    <dt className="text-zinc-500">Key</dt><dd className="text-right">{selected.keyScale || '—'}</dd>
-                    <dt className="text-zinc-500">Stems</dt><dd className="text-right">{stemsOf.get(selected.id)?.length || (stemOf(selected) ? 1 : 0)}</dd>
+                    <dt className="text-zinc-500">{s.duration}</dt><dd className="text-right">{selected.duration}</dd>
+                    <dt className="text-zinc-500">{s.bpm}</dt><dd className="text-right">{selected.bpm || '—'}</dd>
+                    <dt className="text-zinc-500">{s.key}</dt><dd className="text-right">{selected.keyScale || '—'}</dd>
+                    <dt className="text-zinc-500">{s.stems}</dt><dd className="text-right">{stemsOf.get(selected.id)?.length || (stemOf(selected) ? 1 : 0)}</dd>
                   </dl>
                   <div className="mt-3 max-h-24 overflow-y-auto text-[11px] leading-5 text-zinc-500">{selected.style}</div>
                   <div className="mt-3 flex gap-2">
-                    <button type="button" className={`${button} flex-1`} onClick={() => load(0, selected)}>LOAD A</button>
-                    <button type="button" className={`${button} flex-1`} onClick={() => load(1, selected)}>LOAD B</button>
+                    <button type="button" className={`${button} flex-1`} onClick={() => load(0, selected)}>{s.loadA}</button>
+                    <button type="button" className={`${button} flex-1`} onClick={() => load(1, selected)}>{s.loadB}</button>
                   </div>
-                </> : <p className="text-xs text-zinc-500">Select a song to inspect its artwork, BPM, key and stems.</p>}
+                </> : <p className="text-xs text-zinc-500">{s.selectHint}</p>}
               </aside>
             </div>
             <footer className="flex flex-wrap items-center justify-between gap-2 px-2 py-1 text-[11px] text-zinc-500">
-              <span>Live Web Audio mixing · scratch in either direction · per-stem mute/solo · EQ + echo + filter</span>
-              <span>Alt+1 / Alt+2 play · Shift+click hot cue to set · double-click a track to load A</span>
+              <span>{s.footerFeatures}</span>
+              <span>{s.footerKeys}</span>
             </footer>
           </div>
-        ) : <div className="p-12 text-center text-zinc-400">Preparing the audio mixer…</div>}
+        ) : <div className="p-12 text-center text-zinc-400">{s.preparing}</div>}
       </div>
       </div>
       {exitPrompt && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-black/60 p-4">
-          <section role="alertdialog" aria-modal="true" aria-label="Unsaved DJ recording"
+          <section role="alertdialog" aria-modal="true" aria-label={s.unsaved}
             className="w-full max-w-sm rounded-xl border border-white/15 bg-zinc-900 p-5 shadow-xl">
-            <h2 className="text-base font-semibold text-white">Unsaved DJ recording</h2>
+            <h2 className="text-base font-semibold text-white">{s.unsaved}</h2>
             {error && <p role="alert" className="mt-2 text-sm text-rose-200">{error}</p>}
             <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button type="button" autoFocus className={button} onClick={closeExitPrompt}>Keep mixing</button>
+              <button type="button" autoFocus className={button} onClick={closeExitPrompt}>{s.keepMixing}</button>
               <button type="button" className={`${button} text-rose-300`} onClick={() => {
                 if (finishing.current) return;
                 pendingMix.current = null;
                 onClose();
-              }}>Discard and exit</button>
+              }}>{s.discardExit}</button>
               <button type="button" className={button} onClick={async () => {
                 if (await saveMix()) onClose();
-              }}>Save and exit</button>
+              }}>{s.saveExit}</button>
             </div>
           </section>
         </div>

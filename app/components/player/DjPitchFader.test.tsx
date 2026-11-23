@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DjDeck } from '../../services/djMixer';
 import { DjPitchFader } from './DjPitchFader';
+import { I18nProvider } from '../../context/I18nContext';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement | null = null;
@@ -22,7 +23,7 @@ describe('DJ pitch fader parity with the library player', () => {
       host = document.createElement('div');
       document.body.append(host);
       root = createRoot(host);
-      act(() => root?.render(<DjPitchFader deck={deck} side={side} color="skyblue" />));
+      act(() => root?.render(<I18nProvider><DjPitchFader deck={deck} side={side} color="skyblue" /></I18nProvider>));
 
       const fader = host.querySelector<HTMLInputElement>(`input[aria-label="Vertical pitch fader deck ${side}"]`);
       expect(fader?.min).toBe('0.25');
@@ -35,7 +36,7 @@ describe('DJ pitch fader parity with the library player', () => {
       act(() => maxPreset?.click());
       expect(rate).toHaveBeenCalledWith(2);
 
-      act(() => root?.render(<DjPitchFader deck={{ ...deck, state: { ...deck.state, rate: 2 } } as DjDeck} side={side} color="skyblue" />));
+      act(() => root?.render(<I18nProvider><DjPitchFader deck={{ ...deck, state: { ...deck.state, rate: 2 } } as DjDeck} side={side} color="skyblue" /></I18nProvider>));
       expect(host.textContent).toContain('2.00× · 200%');
       expect(host.textContent).toContain('+12.0 st');
 
