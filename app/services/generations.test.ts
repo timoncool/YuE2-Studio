@@ -245,18 +245,21 @@ it('updates two jobs independently and keeps an in-flight stop out of the YuE2 l
     await act(async () => root.render(createElement(QueryClientProvider, { client },
       createElement(I18nProvider, { children: createElement(Editor) }))));
     await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
-    expect(row(other.id)).toMatchObject({ stage: 'stageWaitingInQueue', stageDetail: 'Waiting for HOT-Step' });
+    expect(row(other.id)).toMatchObject({ stage: 'stageWaitingInQueue' });
+    expect(row(other.id)?.stageDetail).toBeUndefined();
     expect(sources).toHaveLength(1);
     act(() => sources[0].onmessage?.({ data: JSON.stringify({ stage: 'semantic', fraction: .4, detail: '4/10' }) }));
     expect(row(native.id)).toMatchObject({ progress: .4, stageDetail: '4/10' });
-    expect(row(other.id)).toMatchObject({ stage: 'stageWaitingInQueue', progress: undefined });
+    expect(row(other.id)).toMatchObject({ stage: 'stageWaitingInQueue' });
+    expect(row(other.id)?.progress).toBeUndefined();
 
     listed = [{ ...other, status: 'running', message: 'HOT-Step is rendering' }, native];
     await act(async () => { await client.refetchQueries({ queryKey: ['music', 'jobs'] }); await new Promise(resolve => setTimeout(resolve, 10)); });
-    expect(row(other.id)).toMatchObject({ stage: 'stageGeneratingTrack', stageDetail: 'HOT-Step is rendering', progress: undefined });
+    expect(row(other.id)).toMatchObject({ stage: 'stageGeneratingTrack' });
+    expect(row(other.id)?.stageDetail).toBeUndefined();
 
     await act(async () => studio.cancel(other.id));
-    expect(row(other.id)).toMatchObject({ isGenerating: true, stageDetail: 'Stopping HOT-Step' });
+    expect(row(other.id)).toMatchObject({ isGenerating: true, stage: 'stageStopping' });
     stop = { ...stop, status: 'cancelled' };
     await act(async () => studio.cancel(other.id));
     expect(row(other.id)).toMatchObject({ isGenerating: false, stage: 'cancelled', stageDetail: undefined });

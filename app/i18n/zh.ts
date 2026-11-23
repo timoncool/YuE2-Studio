@@ -186,6 +186,8 @@ export const zh = {
     stageGeneratingTrack: '生成音轨…',
     stagePlanningTrack: '正在写歌曲规划…',
     stageRenderingTrack: '正在生成声音…',
+    stageExtractingVocals: '正在提取人声…',
+    stageStopping: '正在停止…',
     stageEncodingTrack: '正在编码音频…',
     stageGeneratingCover: '生成封面…',
     queued: '排队中...',

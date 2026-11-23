@@ -167,6 +167,8 @@ export const pt = {
     stageGeneratingTrack: 'A gerar a faixa…',
     stagePlanningTrack: 'A escrever o plano da música…',
     stageRenderingTrack: 'A gerar o som…',
+    stageExtractingVocals: 'A extrair a voz…',
+    stageStopping: 'A parar…',
     stageEncodingTrack: 'A codificar áudio…',
     stageGeneratingCover: 'A gerar a capa…',
     queued: 'Em fila...',

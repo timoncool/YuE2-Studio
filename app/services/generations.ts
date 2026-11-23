@@ -92,6 +92,7 @@ function withJobStatus(entry: Song, job: YueJob): Song {
   const current = job.engine_id && entry.ditModel !== job.engine_id ? { ...entry, ditModel: job.engine_id } : entry;
   if (followsLocalProgress(current)) return current;
   if (job.status !== 'queued' && job.status !== 'running') return current;
+  if (current.stage === 'stageStopping') return current;
   let stage = job.status === 'queued' ? 'stageWaitingInQueue' : 'stageGeneratingTrack';
   if (job.status === 'running' && job.engine_id === 'audio.cpp') {
     if (job.phase === 'preparing') stage = 'stageStartingTrack';
@@ -100,9 +101,9 @@ function withJobStatus(entry: Song, job: YueJob): Song {
     if (job.phase === 'preparing') stage = 'stagePlanningTrack';
     if (job.phase === 'synthesizing') stage = 'stageRenderingTrack';
   }
-  const detail = job.message?.trim() || undefined;
-  return current.stage === stage && current.stageDetail === detail && current.progress === undefined
-    ? current : { ...current, stage, stageDetail: detail, progress: undefined };
+  if (job.status === 'running' && job.phase === 'extracting_vocals') stage = 'stageExtractingVocals';
+  return current.stage === stage && current.stageDetail === undefined && current.progress === undefined
+    ? current : { ...current, stage, stageDetail: undefined, progress: undefined };
 }
 
 /** The tracks a job makes: its songs times the variations of each. */
@@ -428,7 +429,8 @@ export function useGenerations({ enabled, notify, onFinished }: GenerationOption
     try {
       const job = await stopJob(jobId);
       if (job.status !== 'cancelled') {
-        setCards(prev => prev.map(entry => entry.isGenerating && entry.jobId === jobId ? withJobStatus(entry, job) : entry));
+        setCards(prev => prev.map(entry => entry.isGenerating && entry.jobId === jobId
+          ? { ...entry, stage: 'stageStopping', stageDetail: undefined, progress: undefined } : entry));
         void queryClient.invalidateQueries({ queryKey: activeJobsKey });
         return;
       }

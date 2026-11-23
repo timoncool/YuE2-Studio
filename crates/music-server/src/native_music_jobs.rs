@@ -448,8 +448,8 @@ async fn watch(
                     "running" => {
                         if let Some(active) = state.jobs.write().await.get_mut(&job.id) {
                             active.status = MusicJobStatus::Running;
-                            active.phase = MusicJobPhase::Running;
-                            active.message = "MiniMax is generating music.".into();
+                            active.phase = MusicJobPhase::Synthesizing;
+                            active.message.clear();
                         }
                     }
                     other => anyhow::bail!("MiniMax job {remote} reported {other}"),

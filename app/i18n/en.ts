@@ -187,6 +187,8 @@ export const en = {
     stageGeneratingTrack: 'Generating track…',
     stagePlanningTrack: 'Writing the song plan…',
     stageRenderingTrack: 'Rendering the sound…',
+    stageExtractingVocals: 'Extracting the vocals…',
+    stageStopping: 'Stopping…',
     stageEncodingTrack: 'Encoding audio…',
     stageGeneratingCover: 'Generating cover…',
     queued: 'Queued...',

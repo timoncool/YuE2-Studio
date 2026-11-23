@@ -186,6 +186,8 @@ export const ko = {
     stageGeneratingTrack: '트랙 생성 중…',
     stagePlanningTrack: '곡 구성 작성 중…',
     stageRenderingTrack: '소리 생성 중…',
+    stageExtractingVocals: '보컬 추출 중…',
+    stageStopping: '중지하는 중…',
     stageEncodingTrack: '오디오 인코딩 중…',
     stageGeneratingCover: '커버 생성 중…',
     queued: '대기 중...',

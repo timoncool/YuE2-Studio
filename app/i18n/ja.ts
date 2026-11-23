@@ -186,6 +186,8 @@ export const ja = {
   stageGeneratingTrack: 'トラック生成中…',
   stagePlanningTrack: '曲の構成を作成中…',
   stageRenderingTrack: '音を生成中…',
+  stageExtractingVocals: 'ボーカルを抽出中…',
+  stageStopping: '停止中…',
   stageEncodingTrack: '音声をエンコード中…',
   stageGeneratingCover: 'カバー生成中…',
   queued: 'キュー待ち...',

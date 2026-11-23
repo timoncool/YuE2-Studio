@@ -188,6 +188,8 @@ export const ru = {
     stageGeneratingTrack: 'Генерирую трек…',
     stagePlanningTrack: 'Пишу план песни…',
     stageRenderingTrack: 'Создаю звук…',
+    stageExtractingVocals: 'Выделяю вокал…',
+    stageStopping: 'Останавливаю…',
     stageEncodingTrack: 'Кодирую аудио…',
     stageGeneratingCover: 'Генерирую обложку…',
     queued: 'В очереди...',
