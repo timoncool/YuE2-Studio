@@ -908,12 +908,12 @@ fn check_staged_archive(url: &str, archive: &Path) -> Result<String> {
     Ok(sha256)
 }
 
-/// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276).
-/// Only offer these mirrors for known, hash-pinned release files. Installation still checks the original pin.
+/// ONNX releases may be unreachable from networks that cannot connect to GitHub at all (#276): mirrors are offered
+/// only for pinned files, and every source is checked against the pin.
 #[cfg(test)]
-fn onnx_sources(url: &str) -> Option<&'static [String]> {
-    let digest = crate::pin_sha::sha256(url)?;
-    crate::component_catalogue::bundled().sources(digest)
+fn onnx_sources(url: &str) -> Option<Vec<String>> {
+    crate::pin_sha::sha256(url)?;
+    Some(sources(url))
 }
 
 async fn unless_cancelled<T>(cancel: &std::sync::atomic::AtomicBool, work: impl std::future::Future<Output = Result<T>>) -> Result<T> {
@@ -975,32 +975,22 @@ async fn fetch_absent(
     // How big it is and whether it can be fetched in pieces, asked of the
     // server rather than assumed - both answers come from one ranged byte.
     let url = crate::net::model_url(asset.url);
-    let Some(digest) = crate::pin_sha::sha256(asset.url) else {
+    if crate::pin_sha::sha256(asset.url).is_none() {
         return fetch_from(http, asset, target, progress, cancel, &url, false).await;
-    };
-    let bundled = crate::component_catalogue::bundled().sources(digest);
-    // For pins outside the bundled mirror list, a healthy primary needs no channel request.
-    let primary_failure = if bundled.is_none() {
-        match fetch_verified_source(http, asset, target, progress, cancel.clone(), &url).await {
-            Ok(()) => return Ok(()),
-            Err(error) if !try_another_source(&error) => return Err(error),
-            Err(error) => Some(error),
-        }
-    } else {
-        None
-    };
-    let mut candidates = unless_cancelled(&cancel, async { Ok(mirror_sources(http, digest).await) }).await?;
-    for mirror in crate::components::mirrors(asset.url) {
+    }
+    fetch_mirrors(http, asset, target, progress, cancel, sources(asset.url)).await
+}
+
+/// Where a pinned file is fetched from, in order: its address, then the mirrors the component catalogue lists.
+fn sources(url: &str) -> Vec<String> {
+    let mut sources = vec![crate::net::model_url(url)];
+    for mirror in crate::components::mirrors(url) {
         let mirror = crate::net::model_url(&mirror);
-        if !candidates.contains(&mirror) { candidates.push(mirror); }
+        if !sources.contains(&mirror) {
+            sources.push(mirror);
+        }
     }
-    if let Some(error) = primary_failure {
-        candidates.retain(|candidate| candidate != &url);
-        if candidates.is_empty() { return Err(error); }
-        return fetch_mirrors(http, asset, target, progress, cancel, candidates).await
-            .with_context(|| format!("primary download failed: {error:#}; component mirrors also failed"));
-    }
-    fetch_mirrors(http, asset, target, progress, cancel, candidates).await
+    sources
 }
 pub(crate) async fn mirror_sources(http: &reqwest::Client, digest: &str) -> Vec<String> {
     let refresh = crate::component_catalogue::channel_sources(http, digest);
@@ -2243,7 +2233,7 @@ mod tests {
         assert_eq!(hint.url, asset.url);
         assert!(manual_archive_hint(asset, &target, &anyhow::anyhow!("invalid archive")).is_none());
         if cfg!(target_os = "macos") {
-            assert_eq!(onnx_sources(asset.url).unwrap(), &[asset.url]);
+            assert_eq!(onnx_sources(asset.url).unwrap(), vec![asset.url.to_owned()]);
         } else {
             let mirrors = onnx_sources(asset.url).unwrap();
             assert_eq!(mirrors.len(), 3);
