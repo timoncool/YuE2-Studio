@@ -642,11 +642,13 @@ fn transfer_selected(to: &Library, folder: &Path, exclude: &HashSet<Category>) -
         for (patch, chosen, remaining) in backfills {
             if let Some(mut current) = Library::read_song(tx, &patch.id)? {
                 merge_content(&mut current, &patch, &chosen);
+                // a kind the source still lacks stays pending, so its file is filled in once it is back
+                let filled = chosen.iter().copied().filter(|kind| !absent(&current, *kind)).collect::<Content>();
+                save_pending(tx, &current.id, &remaining.difference(&filled).copied().collect())?;
+                if filled.is_empty() { continue; }
                 tx.execute("UPDATE songs SET audio_path=?,lyrics=?,metadata_json=?,generation_settings_json=?,replay_request_json=?,audio_codes_json=? WHERE id=?",
                     params![current.audio_path,current.lyrics,current.metadata.to_string(),current.generation_settings.to_string(),
                         current.replay_request.map(|v|v.to_string()),current.audio_codes.map(|v|v.to_string()),current.id])?;
-                let pending = remaining.difference(&chosen).copied().collect();
-                save_pending(tx, &current.id, &pending)?;
                 updated += 1;
             }
         }
@@ -872,6 +874,9 @@ mod tests {
         }
         assert!(song.audio_path.is_some());
         new.rename_song(&song.id, "Edited in YuE2")?;
+        let still_lost = transfer_selected(&new, &source, &exclude)?;
+        assert_eq!(still_lost["updated"], 0, "nothing was filled in while b.wav is still lost");
+        assert_eq!(still_lost["errors"][0]["file"], "b.wav");
         fs::write(old.media_dir().join("b.wav"), b"second")?;
         let repaired = transfer_selected(&new, &source, &exclude)?;
         assert_eq!(repaired["added"], 0);

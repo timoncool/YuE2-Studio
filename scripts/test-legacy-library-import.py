@@ -90,13 +90,13 @@ def exercise(executable, root):
             preview = tool("library_migration_preview", path=str(source))
             assert any(file["name"] == "missing.wav" for song in preview["songs"] for file in song["missing"]), preview
             initial = tool("library_migration_import", **args)
-            assert initial["added"] == 1 and initial["already_imported"] == 0, initial
-            assert initial["playlists_added"] == 0, initial
-            assert [(entry["file"], entry["code"]) for entry in initial["errors"]] == [
-                ("missing.wav", "missing"), ("Set list", "playlist_incomplete")
-            ], initial
+            assert initial["added"] == 2 and initial["already_imported"] == 0, initial
+            assert initial["playlists_added"] == 1, initial
+            assert [(entry["file"], entry["code"]) for entry in initial["errors"]] == [("missing.wav", "missing")], initial
             songs = request("/v1/library/songs")
-            healthy, = songs
+            healthy = next(song for song in songs if song["title"] == "Healthy")
+            lost = next(song for song in songs if song["title"] == "Missing song")
+            assert not lost["audio_path"], lost
             assert healthy["title"] == "Healthy" and healthy["lyrics"] == "words to keep", healthy
             with opener.open(f"http://127.0.0.1:{port}/v1/library/media/{healthy['id']}", timeout=10) as audio:
                 assert audio.read() == (source / "media" / "healthy.wav").read_bytes()
@@ -106,11 +106,14 @@ def exercise(executable, root):
             write_wave(source / "media" / "missing.wav")
             before_retry = snapshot(source)
             retry = tool("library_migration_import", **args)
-            assert retry["added"] == retry["already_imported"] == retry["playlists_added"] == 1, retry
+            assert retry["added"] == retry["playlists_added"] == 0 and retry["updated"] == 1, retry
+            assert retry["already_imported"] == 2 and retry["playlists_already_imported"] == 1, retry
             assert retry["errors"] == [], retry
             final = request("/v1/library/songs")
             assert next(song for song in final if song["title"] == "Healthy")["id"] == healthy["id"], final
-            missing_id = next(song["id"] for song in final if song["title"] == "Missing song")
+            repaired = next(song for song in final if song["title"] == "Missing song")
+            assert repaired["id"] == lost["id"] and repaired["audio_path"], repaired
+            missing_id = repaired["id"]
             playlists = request("/v1/library/playlists")
             playlist, = playlists if isinstance(playlists, list) else playlists["playlists"]
             assert playlist["name"] == "Set list" and playlist["song_ids"] == [missing_id, healthy["id"]], playlist
