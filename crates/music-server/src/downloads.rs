@@ -992,21 +992,6 @@ fn sources(url: &str) -> Vec<String> {
     }
     sources
 }
-pub(crate) async fn mirror_sources(http: &reqwest::Client, digest: &str) -> Vec<String> {
-    let refresh = crate::component_catalogue::channel_sources(http, digest);
-    let mut sources = match tokio::time::timeout(std::time::Duration::from_secs(12), refresh).await {
-        Ok(Ok(sources)) => sources.unwrap_or_default(),
-        Ok(Err(error)) => { eprintln!("Component mirror refresh failed: {error}"); Vec::new() }
-        Err(_) => { eprintln!("Component mirror refresh timed out"); Vec::new() }
-    };
-    sources.extend_from_slice(crate::component_catalogue::bundled().sources(digest).unwrap_or_default());
-    let mut candidates = Vec::new();
-    for source in sources {
-        let mapped = crate::net::model_url(&source);
-        if !candidates.contains(&mapped) { candidates.push(mapped); }
-    }
-    candidates
-}
 
 fn picked_archive_partial(destination: &Path, asset: &Asset) -> PathBuf {
     destination.join(format!("{}.part-archive", asset.id))

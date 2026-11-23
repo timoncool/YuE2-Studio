@@ -11,7 +11,7 @@ export const isNativeMusicEngine = (value: unknown): value is NativeMusicEngine 
 export const isProfileMusicEngine = (value: unknown): value is ProfileMusicEngine =>
   value === 'audio.cpp' || isNativeMusicEngine(value);
 export const isMusicEngine = (value: unknown): value is MusicEngine =>
-  value === 'local' || value === 'openrouter' || value === 'signed' || isProfileMusicEngine(value);
+  value === 'local' || value === 'openrouter' || isProfileMusicEngine(value);
 
 interface NativeProfile {
   id: string;

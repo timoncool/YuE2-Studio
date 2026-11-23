@@ -855,20 +855,10 @@ impl Training {
             bail!("This checkpoint needs its original YuE2 training base and optimizer format.");
         }
         let choice = saved.map(|saved| saved.id.as_str()).or(id).unwrap_or(BUILTIN_TRAINER);
-        let (trainer, identity) = if choice == BUILTIN_TRAINER {
-            self.select_builtin_trainer(saved, continuing)?
-        } else {
-            let data_root = self.root.parent().context("Studio data folder")?;
-            let generation = saved.and_then(|saved| saved.generation.as_deref());
-            let worker = crate::engine_catalogue::install::resolve_trainer(data_root, choice, generation).await?;
-            (
-                worker.executable,
-                TrainerIdentity {
-                    id: choice.into(), version: worker.version, generation: Some(worker.generation),
-                    optimizer_format: YUE2_STATE_FORMAT.into(), weights_revision: yue_train::WEIGHTS_REVISION.into(),
-                },
-            )
-        };
+        if choice != BUILTIN_TRAINER {
+            bail!("The trainer {choice} came from YuE2 5.0.0's engine packages, which this version no longer uses: continue the run with the studio's own trainer by starting it again.");
+        }
+        let (trainer, identity) = self.select_builtin_trainer(saved, continuing)?;
         if let Some(saved) = saved && !identity.can_resume(saved) {
             bail!("Install the original trainer generation before continuing this checkpoint.");
         }
@@ -1154,10 +1144,6 @@ impl Training {
             "installed": self.installed(bundle),
             "bytes": bundle.bytes,
         })];
-        if let Some(data_root) = self.root.parent() {
-            choices.extend(crate::engine_catalogue::install::trainer_choices(data_root).await
-                .into_iter().filter(|choice| choice["id"] != BUILTIN_TRAINER));
-        }
         choices
     }
 

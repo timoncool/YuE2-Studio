@@ -650,12 +650,6 @@ mod export {
         std::fs::write(&path, serde_json::to_string_pretty(&json!({ "files": files })).unwrap() + "\n").unwrap();
     }
 
-    /// The other addresses Codex's channel listed for a pinned archive.
-    fn channel_mirrors(asset: &Asset) -> Vec<&'static str> {
-        let sha = crate::pin_sha::sha256(asset.url).unwrap();
-        crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
-            .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
-    }
 
 
 

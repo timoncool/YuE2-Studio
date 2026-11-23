@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Download, Loader2, RotateCw, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
-import { SignedComponentUpdates } from './SignedComponentUpdates';
 import { poll } from '../services/poll';
 import { SELF_READ } from '../services/studioQueries';
 import type { TranslationKey } from '../i18n/translations';
@@ -172,7 +171,6 @@ export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => voi
           )}
         </div>
       )}
-      <SignedComponentUpdates />
     </div>
   );
 };

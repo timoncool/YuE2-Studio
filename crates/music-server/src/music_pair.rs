@@ -340,9 +340,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             );
         }
         MusicSource::Native { engine, model } if engine == ace::ENGINE_ID => {
-            let (install, _) =
-                ace::resolve_installation(root, None, engine_catalogue::install::Probe::Sha256)
-                    .await?;
+            let install = ace::resolve_installation(root);
             let profile = install
                 .profiles()
                 .into_iter()
@@ -360,12 +358,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             return Ok(Preparation::Ace(install.launch(model)?));
         }
         MusicSource::Native { engine, model } if engine == native_minimax::ENGINE_ID => {
-            let (install, _) = native_minimax::Runtime::resolve_installation(
-                root,
-                None,
-                engine_catalogue::install::Probe::Presence,
-            )
-            .await?;
+            let install = native_minimax::Runtime::resolve_installation(root);
             let profile = install
                 .profiles()
                 .into_iter()
@@ -390,23 +383,8 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             let Json(catalogue) = audio_cpp_music::models(State(state.clone())).await;
             return catalogue_result(&catalogue["models"], model);
         }
-        MusicSource::Signed {
-            engine,
-            model,
-            generation,
-            model_generation,
-        } => {
-            if let Err(error) = engine_catalogue::install::require_pair_presence(
-                root,
-                engine,
-                model,
-                generation.as_deref(),
-                model_generation.as_deref(),
-            )
-            .await
-            {
-                return missing(None, error.to_string());
-            }
+        MusicSource::Signed { .. } => {
+            return missing(None, crate::SIGNED_PACKAGES_GONE.into());
         }
         MusicSource::Native { engine, .. } => {
             anyhow::bail!("Unknown native music engine {engine}.")

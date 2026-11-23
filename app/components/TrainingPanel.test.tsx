@@ -144,15 +144,14 @@ it('shows a second page of a long dataset without changing which songs it contai
   }
 });
 
-it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts a signed trainer with training base %s', async base => {
+it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts the trainer with training base %s', async base => {
   const state = {
-    pack: [], pack_ready: false, trainer_weights_ready: true, training_shared_weights_ready: true,
+    pack: [], pack_ready: true, trainer_weights_ready: true, training_shared_weights_ready: true,
     training_bases: base ? [{ id: 'stock', label: 'Stock', bytes: 300, installed: false },
       { id: base, label: 'Ruach', bytes: 400, installed: true }] : undefined,
     card_trains: true, listen: { ready: true }, runs: [],
     recipe_defaults: { preset: 'balanced', seed: 42 }, recipe_fields: [],
-    trainers: [{ id: 'music-train-bundled', label: 'Bundled', version: 'original', installed: false, bytes: 500 },
-      { id: 'signed-trainer', label: 'Signed', version: 'revised', installed_version: 'revised', installed: true, bytes: 700 }],
+    trainers: [{ id: 'music-train-bundled', label: 'Bundled', version: 'original', installed: true, bytes: 500 }],
     datasets: [{ id: 'set', name: 'Test vocals', items: [{
       id: 'track', source: 'track.wav', title: 'Track', seconds: 12, lyrics_state: 'done', style_state: 'done',
     }] }],
@@ -174,11 +173,6 @@ it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts a signed trainer with train
     await act(async () => root.render(<TrainingPanel />));
     await press('Test vocals');
     await press('2 · trainingStepTrain');
-    const trainer = host.querySelector<HTMLSelectElement>('select:has(option[value="signed-trainer"])')!;
-    await act(async () => {
-      trainer.value = 'signed-trainer';
-      trainer.dispatchEvent(new Event('change', { bubbles: true }));
-    });
     if (base) {
       const baseSelect = host.querySelector<HTMLSelectElement>(`select:has(option[value="${base}"])`)!;
       await act(async () => {
@@ -188,15 +182,10 @@ it.each([undefined, 'ruach-rs-tw-2.0x0.75'])('starts a signed trainer with train
       await press('trainingBackSongs');
       await press('2 · trainingStepTrain');
       expect(host.querySelector<HTMLSelectElement>(`select:has(option[value="${base}"])`)?.value).toBe(base);
-      const reopenedTrainer = host.querySelector<HTMLSelectElement>('select:has(option[value="signed-trainer"])')!;
-      await act(async () => {
-        reopenedTrainer.value = 'signed-trainer';
-        reopenedTrainer.dispatchEvent(new Event('change', { bubbles: true }));
-      });
     }
     await press('trainingStart');
     expect(start).toHaveBeenCalledWith({ dataset_id: 'set', name: 'Test vocals', recipe: state.recipe_defaults,
-      trainer_id: 'signed-trainer', ...(base ? { base_id: base } : {}) });
+      ...(base ? { base_id: base } : {}) });
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

@@ -136,7 +136,7 @@ export type YueOutputFormat = 'flac' | 'mp3' | 'wav32';
 
 export type NativeMusicEngine = 'minimaxmusic-cpp' | 'acestep-cpp' | 'hotstep';
 export type ProfileMusicEngine = NativeMusicEngine | 'audio.cpp';
-export type MusicEngine = 'local' | 'openrouter' | 'signed' | ProfileMusicEngine;
+export type MusicEngine = 'local' | 'openrouter' | ProfileMusicEngine;
 
 /**
  * A YuE2 request as `/v1/music/jobs` accepts it. Field names are the engine's

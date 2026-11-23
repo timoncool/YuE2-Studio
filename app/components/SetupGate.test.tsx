@@ -66,7 +66,6 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     </QueryClientProvider>));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.querySelector('h3')?.textContent).toBe('Engines and updates');
-    expect(host.querySelector('section[aria-label="Signed component updates"]')).toBeTruthy();
     expect(host.querySelector('[data-engine="local"]')?.textContent).toContain('Installed · profileReady');
     expect(host.querySelector('[data-engine="local"]')?.textContent).not.toContain('Active');
     expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('Installed · Active · profileNotInstalled');
@@ -286,7 +285,6 @@ describe('saving a model set from Settings', () => {
     const panel = [...host.querySelectorAll('details')]
       .find(detail => detail.querySelector('summary')?.textContent?.includes('updateSettingsEntry'));
     expect(panel?.open).toBe(true);
-    expect(panel?.querySelector('section[aria-label="Signed component updates"]')).toBeTruthy();
   });
 
   it('returns to the requested page after a manual tab change and retains model edits', async () => {

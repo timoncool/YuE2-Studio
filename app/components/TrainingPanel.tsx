@@ -42,7 +42,6 @@ import {
   installCheckpoint,
   listenCheckpoints,
   installRvcBurnVoice,
-  installSignedTrainer,
   installTrainingBase,
   cancelTrainingBase,
   installListenPack,
@@ -774,15 +773,11 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   const [starting, setStarting] = useState(false);
   const { language } = useI18n();
   const [trainingEngine, setTrainingEngine] = useState<'yue2' | 'sa3' | 'heartmula' | 'rvc'>('yue2');
-  const [selectedTrainer, setSelectedTrainer] = useState('');
   const [installingBase, setInstallingBase] = useState(false);
   const base = state.training_bases?.find(option => option.id === baseId);
   const alternateBase = Boolean(base && base.id !== 'stock');
   const baseDownload = state.training_base_download;
-  const [installingTrainer, setInstallingTrainer] = useState(false);
   const trainers = state.trainers ?? [];
-  const signed = trainers.slice(1).find(trainer => trainer.id === selectedTrainer);
-  const signedUpdate = signed && (!signed.installed || signed.installed_version !== signed.version);
   const unsung = dataset.items.filter(item => item.lyrics_state === 'wanted').length;
   const unlaid = dataset.items.filter(item => item.lyrics_state === 'found').length;
   const unstyled = dataset.items.filter(item => item.style_state === 'wanted').length;
@@ -794,8 +789,8 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   const blocker = !dataset.items.length ? t('trainingNeedSongs') : lyricsProblem ? lyricsProblem : preparing ? t('trainingWaitPrepare') : state.active ? t('trainingBusy') : null;
   // only the previous recipe's lyric timing reads separated vocals
   const selectedPackReady = alternateBase
-    ? base?.installed && state.training_shared_weights_ready && (signed ? signed.installed : trainers[0]?.installed)
-    : signed ? state.trainer_weights_ready && signed.installed : state.pack_ready;
+    ? base?.installed && state.training_shared_weights_ready && trainers[0]?.installed
+    : state.pack_ready;
   const packReady = selectedPackReady
     && (state.separator_ready || String(recipe.preset) !== 'tuned' || recipe.lyric_timing !== true);
   const installBase = async (id: string) => {
@@ -809,21 +804,10 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
       setInstallingBase(false);
     }
   };
-  const installTrainer = async (id: string) => {
-    setInstallingTrainer(true);
-    try {
-      await installSignedTrainer(id);
-      onRefresh();
-    } catch (problem) {
-      onError(errorText(problem));
-    } finally {
-      setInstallingTrainer(false);
-    }
-  };
   const start = async () => {
     setStarting(true);
     try {
-      await startRun(dataset.id, dataset.name, recipe, signed?.id, base?.id);
+      await startRun(dataset.id, dataset.name, recipe, undefined, base?.id);
       onStarted();
     } catch (problem) {
       onError(errorText(problem));
@@ -855,21 +839,6 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
           card={CARD} control={CONTROL} primary={PRIMARY} onStarted={onStarted} onError={onError} />
         <button type="button" onClick={onBack} className={OUTLINE}><ChevronLeft size={14} />{t('trainingBackSongs')}</button>
       </> : <>
-      {trainers.length > 1 && <div className={CARD}>
-        <label className="block max-w-sm">
-          <span className={LABEL}>{t('trainingTrainer')}</span>
-          <select className={`${CONTROL} mt-1`} value={signed?.id ?? trainers[0].id} disabled={starting || installingTrainer}
-            onChange={event => setSelectedTrainer(event.target.value)}>
-            {trainers.map(trainer => <option key={trainer.id} value={trainer.id}>
-              {trainer.label} · {(trainer.installed_version ?? trainer.version).slice(0, 12)}
-            </option>)}
-          </select>
-        </label>
-        {signedUpdate && <button type="button" className={`${OUTLINE} mt-2`}
-          disabled={installingTrainer || !state.card_trains} onClick={() => void installTrainer(signed.id)}>
-          <Download size={14} />{t('trainingDownload')} · {downloadSize(signed.bytes)}
-        </button>}
-      </div>}
       {(state.training_bases?.length ?? 0) > 1 && <div className={CARD}>
         <label className="block max-w-sm">
           <span className={LABEL}>{t('trainingBase')}</span>
@@ -895,7 +864,7 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
         </div>}
         {baseDownload?.error && <p className="mt-2 text-sm text-red-600">{baseDownload.error}</p>}
       </div>}
-      {!alternateBase && !packReady && (!signed || !state.trainer_weights_ready) && <PackCard state={state} onError={onError} onChanged={onRefresh} />}
+      {!alternateBase && !packReady && <PackCard state={state} onError={onError} onChanged={onRefresh} />}
       <section className={CARD}>
         <div className="grid gap-3 sm:grid-cols-2">
           <label>
@@ -938,7 +907,7 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
         <button type="button" onClick={onBack} className={OUTLINE}><ChevronLeft size={14} />{t('trainingBackSongs')}</button>
         <div className="flex items-center gap-3">
           {blocker && <span className="text-xs text-zinc-500">{blocker}</span>}
-          <button type="button" onClick={() => void start()} disabled={Boolean(blocker) || !packReady || starting || installingTrainer} className={PRIMARY}>
+          <button type="button" onClick={() => void start()} disabled={Boolean(blocker) || !packReady || starting} className={PRIMARY}>
             {starting ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}{t('trainingStart')}
           </button>
         </div>

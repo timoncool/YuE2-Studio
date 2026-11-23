@@ -631,36 +631,12 @@ impl Runtime {
         Installation::discover(data_root)
     }
 
-    pub(crate) async fn resolve_installation(
-        data_root: &Path,
-        replay: Option<&Value>,
-        probe: crate::engine_catalogue::install::Probe,
-    ) -> Result<(
-        Installation,
-        Option<crate::engine_catalogue::install::NativeIdentity>,
-    )> {
-        let mut install = Self::installation(data_root);
-        let explicit = override_path("YUE_MINIMAX_MM_SERVER_BIN", "MINIMAX_MM_SERVER_BIN")
-            .is_some()
-            || env::var_os("MINIMAX_MM_SERVER_ROOT").is_some();
-        let signed = crate::engine_catalogue::install::resolve_native(
-            data_root, ENGINE_ID, explicit, replay, probe,
-        )
-        .await?;
-        let identity = signed.map(|(executable, identity)| {
-            install.executable = Some(executable);
-            identity
-        });
-        Ok((install, identity))
+    pub(crate) fn resolve_installation(data_root: &Path) -> Installation {
+        Self::installation(data_root)
     }
 
     pub(crate) async fn start(&self, profile_id: &str, data_root: &Path) -> Result<Client> {
-        let (install, _) = Self::resolve_installation(
-            data_root,
-            None,
-            crate::engine_catalogue::install::Probe::Sha256,
-        )
-        .await?;
+        let install = Self::resolve_installation(data_root);
         self.start_selected(profile_id, data_root, install).await
     }
 

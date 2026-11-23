@@ -3,14 +3,8 @@ pub mod studio_log;
 mod adapters;
 mod acpp_install;
 mod community;
-mod component_catalogue;
 mod components;
-mod engine_catalogue;
-mod signed_music_jobs;
-mod signed_music_protocol;
-mod signed_music_ace_example;
 #[doc(hidden)]
-pub use signed_music_ace_example::run_ace_adapter;
 mod diagnostics;
 mod problem;
 mod processing;
@@ -170,7 +164,6 @@ struct AppState {
     ace_cancellations: Arc<RwLock<HashMap<String, native_ace_jobs::CancelSender>>>,
     minimax: Arc<native_minimax::Runtime>,
     minimax_cancellations: Arc<RwLock<HashMap<String, native_music_jobs::CancelSender>>>,
-    signed_music_cancellations: Arc<RwLock<HashMap<String, signed_music_jobs::CancelSender>>>,
     hotstep_cover: Arc<downloads::Downloader>,
     hotstep_sa3_install: Arc<tokio::sync::Mutex<()>>,
     hotstep_minimax_install: Arc<tokio::sync::Mutex<()>>,
@@ -1652,7 +1645,6 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         ace_cancellations: Arc::default(),
         minimax: Arc::default(),
         minimax_cancellations: Arc::default(),
-        signed_music_cancellations: Arc::default(),
         hotstep_cover: Arc::new(downloads::Downloader::new(studio_data_root().unwrap_or_else(|| PathBuf::from(".")).join("hotstep"))),
         hotstep_sa3_install: Arc::default(),
         hotstep_minimax_install: Arc::default(),
@@ -1787,7 +1779,6 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     }
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
-    tokio::spawn(engine_catalogue::install::updates::watch(state.clone()));
     tokio::spawn(crate::components::watch());
     spawn_idle_eviction(state.clone());
     {
@@ -1838,18 +1829,6 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
         .route("/v1/components", get(components::status))
         .route("/v1/components/refresh", post(components::refresh_now))
-        .route("/v1/components/music-engines", get(engine_catalogue::list))
-        .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
-        .route("/v1/components/updates", get(engine_catalogue::install::updates::list))
-        .route("/v1/components/updates/mode", post(engine_catalogue::install::updates::set_mode))
-        .route("/v1/components/packages/{kind}/{id}/progress", get(engine_catalogue::progress::status))
-        .route("/v1/components/packages/installed", get(engine_catalogue::install::inventory::list))
-        .route("/v1/components/packages/{kind}/{id}/rollback", post(engine_catalogue::install::rollback::apply))
-        .route("/v1/components/packages/{kind}/{id}/cancel", post(engine_catalogue::progress::cancel))
-        .route("/v1/components/music-models/{id}/install", post(engine_catalogue::install::install_model))
-        .route("/v1/components/music-engines/{engine}/models/{model}/status", get(engine_catalogue::install::model_status))
-        .route("/v1/components/music-engines/{id}/status", get(engine_catalogue::install::status))
-        .route("/v1/components/music-engines/{id}/install", post(engine_catalogue::install::install_selected))
         .route("/v1/rvc/catalog", get(rvc_catalog::list))
         .route("/v1/rvc/catalog/sample/{id}", get(rvc_catalog::sample))
         .route("/v1/rvc/catalog/refresh", post(rvc_catalog::refresh))
@@ -6183,11 +6162,6 @@ fn preferred_take_counter(engine: &str, metadata: &Value) -> Option<&'static str
             "vocal-fast-rs" => Some("take_preferred_rvc_fast"),
             _ => None,
         },
-        _ if metadata.pointer("/signed_engine/protocol").and_then(Value::as_str) == Some(signed_music_protocol::NAME)
-            && metadata.pointer("/signed_engine/engine").and_then(Value::as_str) == Some(engine) =>
-        {
-            Some("take_preferred_signed_music")
-        }
         _ => None,
     }
 }
@@ -6202,9 +6176,6 @@ fn preferred_take_uses_only_known_effective_backends() {
     assert_eq!(preferred_take_counter("rvc", &Value::Null), None);
     assert_eq!(preferred_take_counter("user-supplied-name", &metadata), None);
     assert_eq!(preferred_take_counter("openrouter", &Value::Null), Some("take_preferred_openrouter"));
-    let signed = serde_json::json!({"signed_engine":{"protocol":"music-http-v1","engine":"fixture-ace-http","model":"private model"}});
-    assert_eq!(preferred_take_counter("fixture-ace-http", &signed), Some("take_preferred_signed_music"));
-    assert_eq!(preferred_take_counter("different-engine", &signed), None);
 }
 
 async fn select_library_playlist_preferred_take(
@@ -7960,7 +7931,6 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         let engine_ready = !paused && state.music_server.health().await;
         fields.insert("engine_paused".into(), Value::Bool(paused));
         fields.insert("music_pair_instance_id".into(), Value::String(music_pair::instance_id().into()));
-        fields.insert("signed_updates_revision".into(), Value::String(engine_catalogue::updates_revision()));
         let matches_selection = if engine_ready && selected_set_ready {
             // Restart holds this mutex while the weights load. Status polling must remain responsive.
             let current = state.engine.try_lock().map(|guard| guard.as_ref().map(|engine| engine.config().models.clone()));
@@ -8045,16 +8015,13 @@ fn is_portable_installation() -> bool {
 
 async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let root = native_profile_root()?;
-    let (installed, signed) =
-        ace::resolve_installation(&root, None, engine_catalogue::install::Probe::Presence)
-            .await
-            .map_err(training_error)?;
+    let installed = ace::resolve_installation(&root);
     native_profile_catalog(move || {
         serde_json::json!({
             "engine": ace::ENGINE_ID,
             "engine_installed": installed.engine_installed(),
             "adapter_runtime_update": installed.adapter_runtime_update(),
-            "selected_executable": native_executable_profile(&root, ace::ENGINE_ID, installed.executable(), signed),
+            "selected_executable": native_executable_profile(&root, ace::ENGINE_ID, installed.executable()),
             "profiles": installed.profiles(),
         })
     }).await
@@ -8062,19 +8029,13 @@ async fn ace_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>
 
 async fn minimax_music_profiles() -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let root = native_profile_root()?;
-    let (installed, signed) = native_minimax::Runtime::resolve_installation(
-        &root,
-        None,
-        engine_catalogue::install::Probe::Presence,
-    )
-    .await
-    .map_err(training_error)?;
+    let installed = native_minimax::Runtime::resolve_installation(&root);
     native_profile_catalog(move || {
         serde_json::json!({
             "engine": native_minimax::ENGINE_ID,
             "engine_installed": installed.engine_installed(),
             "adapter_runtime_update": installed.adapter_runtime_update(&root),
-            "selected_executable": native_executable_profile(&root, native_minimax::ENGINE_ID, installed.executable(), signed),
+            "selected_executable": native_executable_profile(&root, native_minimax::ENGINE_ID, installed.executable()),
             "profiles": installed.profiles(),
         })
     }).await
@@ -8089,17 +8050,7 @@ fn native_profile_root() -> Result<PathBuf, (StatusCode, Json<ApiError>)> {
     })
 }
 
-fn native_executable_profile(
-    root: &std::path::Path,
-    engine: &str,
-    executable: Option<&std::path::Path>,
-    signed: Option<engine_catalogue::install::NativeIdentity>,
-) -> Option<Value> {
-    if let Some(signed) = signed {
-        return Some(
-            serde_json::json!({"source": "signed", "path": executable?, "package": signed}),
-        );
-    }
+fn native_executable_profile(root: &std::path::Path, engine: &str, executable: Option<&std::path::Path>) -> Option<Value> {
     native_music_runtime::selected_executable(root, engine, executable)
 }
 
@@ -11906,17 +11857,18 @@ async fn submit_music_job(state: AppState, request: CreateMusicJobRequest, attem
     result
 }
 
+/// Songs and choices of the engine packages 5.0.0 installed from its signed channel, which this version replaced with
+/// the component catalogue.
+const SIGNED_PACKAGES_GONE: &str = "Engine packages of YuE2 5.0.0 are no longer used. Choose ACE-Step or MiniMax Music3 again in Create; the studio installs its engine.";
+
 async fn dispatch_music_job(state: AppState, mut request: CreateMusicJobRequest, attempt: u32, retry_engine: Option<&str>) -> (StatusCode, Json<MusicJob>) {
     let destination = music_destination(request.music_source.as_ref(), &*state.configuration.read().await);
     if request.backing_song_id.is_some() && !matches!(&destination, MusicDestination::Local(engine) if engine == PRIMARY_MUSIC_ENGINE_ID) {
         return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, PRIMARY_MUSIC_ENGINE_ID.into(), "Singing over a backing track requires native YuE2.")));
     }
     let engine_id = match destination {
-        MusicDestination::Signed { engine, model, generation, model_generation } => {
-            if retry_engine.is_some_and(|original| original != engine || generation.is_none() || model_generation.is_none()) {
-                return (StatusCode::CONFLICT, Json(failed_request_job(request, engine, "The saved job has no matching signed engine generation.")));
-            }
-            return signed_music_jobs::submit(state, request, engine, model, generation, model_generation, attempt).await;
+        MusicDestination::Signed { engine, .. } => {
+            return (StatusCode::BAD_REQUEST, Json(failed_request_job(request, engine, SIGNED_PACKAGES_GONE)));
         }
         MusicDestination::AudioCpp(model) => {
             if let Some(original) = retry_engine && let Err(reason) = check_retry_engine(original, audio_cpp_music::ENGINE) {
@@ -12127,7 +12079,7 @@ async fn submit_replay_job(state: AppState, request: ReplayMusicJobRequest, atte
                 refuse_trashed(&song)?;
             }
             if song.replay_request.as_ref().is_some_and(|value| value.get("signed_engine").is_some()) {
-                return signed_music_jobs::replay(state, song, request, attempt).await;
+                return Err(api_error(StatusCode::BAD_REQUEST, SIGNED_PACKAGES_GONE.into()));
             }
             if let Some(family) = hotstep_generation::family_for_replay(&song) {
                 return hotstep_generation::replay(state, song, request, attempt, family).await;
@@ -13167,9 +13119,6 @@ async fn cancel_music_job(
         .get(&job_id)
         .cloned()
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, "Music job was not found.".into()))?;
-    if signed_music_jobs::is_job(&existing) {
-        return signed_music_jobs::cancel(&state, existing).await;
-    }
     if existing.engine_id == "acestep-cpp" {
         return native_ace_jobs::cancel(&state, existing).await;
     }

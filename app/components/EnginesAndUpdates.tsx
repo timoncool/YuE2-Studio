@@ -5,8 +5,6 @@ import { componentCatalogueStrings, enginePageStrings, runtimeSourceStrings, sho
 import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
 import { SELF_READ, useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
-import { postSignedPackage, type Catalogue } from '../services/signedMusicSelection';
-import { SignedNativeRuntimeInstall } from './SignedNativeRuntimeInstall';
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { AudioCppModelInstall } from './HeartMuLaControls';
 import { UpdatePlanView } from './UpdateScreen';
@@ -22,7 +20,7 @@ type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; 
 type ProfileStatus = {
   engine_installed: boolean;
   adapter_runtime_update?: boolean;
-  selected_executable?: { path: string; source: 'local' | 'managed' | 'signed'; package?: { version: string } } | null;
+  selected_executable?: { path: string; source: 'local' | 'managed' } | null;
   profiles?: ModelStatus[];
   models?: ModelStatus[];
 };
@@ -71,39 +69,35 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
   const catalogue = useQuery({
     queryKey: ['engine-page'],
     queryFn: async ({ signal }) => {
-      const [pair, local, rvc, profiles, ace, minimax, signed, components] = await Promise.all([
+      const [pair, local, rvc, profiles, ace, minimax, components] = await Promise.all([
         read<PairStatus>('/v1/music/pair', signal),
         read<{ executable?: string | null; executable_source?: string; in_effect?: { backend?: string } }>('/engine/options', signal),
         read<RvcStatus>('/v1/rvc/native/runtime', signal),
         Promise.all(native.map(engine => read<ProfileStatus>(engine.path, signal))),
         read<RuntimeStatus>('/v1/music/native/acestep-cpp/runtime', signal),
         read<RuntimeStatus>('/v1/music/native/minimaxmusic-cpp/runtime', signal),
-        read<Catalogue>('/v1/components/music-engines', signal),
         read<ComponentsState>('/v1/components', signal),
       ]);
-      return { pair, local, rvc, profiles, ace, minimax, signed, components };
+      return { pair, local, rvc, profiles, ace, minimax, components };
     },
     staleTime: 0,
-    refetchInterval: query => query.state.data?.signed?.source === 'bundled' ? 2_000 : false,
   });
   const data = catalogue.data;
-  const [refreshingSigned, setRefreshingSigned] = useState(false);
-  const [signedError, setSignedError] = useState('');
-  const requestedBootstrap = useRef(false);
-  async function refreshSigned() {
-    setRefreshingSigned(true);
-    setSignedError('');
+  const [refreshingCatalogue, setRefreshingCatalogue] = useState(false);
+  const [catalogueError, setCatalogueError] = useState('');
+  async function refreshCatalogue() {
+    setRefreshingCatalogue(true);
+    setCatalogueError('');
     try {
       const components = await fetch(apiUrl('/v1/components/refresh'), { method: 'POST', headers: SELF_READ });
       if (!components.ok) {
         const body = await components.json().catch(() => null) as { error?: string } | null;
         throw new Error(body?.error ?? `HTTP ${components.status}`);
       }
-      if (data?.signed?.platform) await postSignedPackage('/v1/components/music-engines/refresh');
     } catch (error) {
-      setSignedError(error instanceof Error ? error.message : String(error));
+      setCatalogueError(error instanceof Error ? error.message : String(error));
     } finally {
-      setRefreshingSigned(false);
+      setRefreshingCatalogue(false);
       void catalogue.refetch();
     }
   }
@@ -120,8 +114,8 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
     <section aria-label={title} className="space-y-5">
       {focus === 'updates' && <UpdatePlanView />}
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" className={action} disabled={catalogue.isFetching || setup.isFetching || cloud.isFetching || refreshingSigned} onClick={() => {
-          if (!refreshingSigned) void refreshSigned();
+        <button type="button" className={action} disabled={catalogue.isFetching || setup.isFetching || cloud.isFetching || refreshingCatalogue} onClick={() => {
+          if (!refreshingCatalogue) void refreshCatalogue();
           void refresh();
         }}>{t('refresh')}</button>
         {hasUnsupported && <label className="flex items-center gap-2 text-sm">
@@ -134,8 +128,8 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
         {data.components.source === 'built-in' && <> · {catalogueText.builtIn}</>}
         {data.components.checked_at && <> · {catalogueText.checked(new Date(data.components.checked_at * 1000).toLocaleString(language))}</>}
       </p>}
-      {data?.components?.refresh_error && !signedError && <p role="status" className="text-sm">{catalogueText.failed(data.components.refresh_error)}</p>}
-      {signedError && <p role="alert" className="text-sm">{signedError}</p>}
+      {data?.components?.refresh_error && !catalogueError && <p role="status" className="text-sm">{catalogueText.failed(data.components.refresh_error)}</p>}
+      {catalogueError && <p role="alert" className="text-sm">{catalogueText.failed(catalogueError)}</p>}
       <ul ref={list} className="grid gap-2" aria-label={title}>
         <li data-engine="local" className={'space-y-1 rounded-lg border p-3' + mark('local')}>
           <h4 className="font-semibold">yue2.cpp</h4>
@@ -155,13 +149,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
           const ready = models?.some(model => model.ready);
           const runtime = engine.id === 'acestep-cpp' ? data?.ace : engine.id === 'minimaxmusic-cpp' ? data?.minimax : null;
           const installedRevision = runtime?.installed_revision ?? (runtime?.installed ? runtime.revision : undefined);
-          const firstParty = (engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && data?.signed?.source === 'signed'
-            ? data.signed.engines?.find(item => item.id === engine.id && item.platform === data.signed?.platform
-              && item.protocol === 'music-native-windows-v2' && item.native_runtime?.api_version === 2)
-            : undefined;
-          const selectedSource = profile?.selected_executable?.source;
-          const signedInstall = profile && firstParty && selectedSource !== 'signed' && selectedSource !== 'local';
-          const unsupported = !firstParty && runtime?.supported === false && profile?.engine_installed === false;
+          const unsupported = runtime?.supported === false && profile?.engine_installed === false;
           if (unsupported && !showUnsupported && focus !== engine.id) return null;
           return <li key={engine.id} data-engine={engine.id} aria-label={engine.name} className={'space-y-1 rounded-lg border p-3' + mark(engine.id)}>
             <h4 className="font-semibold">{engine.name}</h4>
@@ -170,13 +158,10 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
             {unsupported && <p className="text-sm">{t('engineUnavailable')}</p>}
             {profile?.selected_executable?.source === 'local' &&
               <p className="break-all text-xs">{localExecutable} · <code>{profile.selected_executable.path}</code></p>}
-            {profile?.selected_executable?.source === 'signed' &&
-              <p className="break-all text-xs">{managedPackage} · {profile.selected_executable.package?.version} · <code>{profile.selected_executable.path}</code></p>}
             {installedRevision && <p className="text-xs">{managedPackage} · {installed} · <code>{installedRevision.slice(0, 12)}</code></p>}
-            {!firstParty && runtime?.revision && runtime.revision !== installedRevision &&
+            {runtime?.revision && runtime.revision !== installedRevision &&
               <p className="text-xs">{t('download')} · <code>{runtime.revision.slice(0, 12)}</code></p>}
-            {signedInstall && <SignedNativeRuntimeInstall key={firstParty.version} pack={firstParty} onInstalled={refresh} />}
-            {!signedInstall && !firstParty && (engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && profile &&
+            {(engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && profile &&
               runtime?.supported && (!profile.engine_installed || profile.adapter_runtime_update) &&
               <InstallDetails key={focus} label={t('download')} initialOpen={focus === engine.id}>
                 <NativeMusicRuntimeInstall engine={engine.id} update={profile.adapter_runtime_update} onInstalled={refresh} />

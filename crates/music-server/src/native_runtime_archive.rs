@@ -88,7 +88,7 @@ fn relative_path(path: &Path) -> Result<PathBuf> {
             Component::Normal(part) => {
                 let name = part.to_str().context("invalid runtime archive name")?;
                 ensure!(
-                    super::engine_catalogue::portable_name(name),
+                    portable_name(name),
                     "unsafe runtime member {name}"
                 );
                 relative.push(part);
@@ -101,6 +101,21 @@ fn relative_path(path: &Path) -> Result<PathBuf> {
         "empty runtime archive path"
     );
     Ok(relative)
+}
+
+
+/// A name that is safe as a file on every system the studio runs on: no device name, no trailing dot, plain ASCII.
+fn portable_name(value: &str) -> bool {
+    let stem = value.split('.').next().unwrap_or_default().to_ascii_uppercase();
+    let device = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|prefix| {
+            stem.strip_prefix(prefix).is_some_and(|suffix| suffix.len() == 1 && matches!(suffix.as_bytes()[0], b'1'..=b'9'))
+        });
+    !device
+        && value.len() <= 128
+        && !value.ends_with('.')
+        && value.as_bytes().first().is_some_and(u8::is_ascii_alphanumeric)
+        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
 }
 
 fn write_file(path: &Path, source: &mut impl Read, mode: Option<u32>) -> Result<()> {

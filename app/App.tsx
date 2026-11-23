@@ -117,8 +117,6 @@ import { I18nProvider, useI18n } from './context/I18nContext';
 import { List } from 'lucide-react';
 import { PlaylistDetail } from './components/PlaylistDetail';
 import { Toast, ToastType } from './components/Toast';
-import { useSignedUpdateNotice } from './services/signedUpdateNotice';
-import { signedUpdateStrings } from './i18n/signedUpdates';
 import { engineUpdateTarget } from './i18n/enginePage';
 import { FilesPanel } from './components/FilesPanel';
 import { SearchPage } from './components/SearchPage';
@@ -242,7 +240,7 @@ function AppContent() {
   // page for a second on every launch is how a ready studio was made to look
   // like a bill.
   const [nativeModels, setNativeModels] = useState<'unknown' | 'missing' | 'installed' | 'offline'>('unknown');
-  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; engine_paused?: boolean; signed_updates_revision?: string; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
+  const setupQuery = useSetupStatus<{ ready?: boolean; engine_ready?: boolean; engine_paused?: boolean; trash_days?: number; kv_cache_notice?: { need_gib: number | null; free_gib: number | null } | null }>();
   useEffect(() => {
     // A service that does not answer is not an engine that is still coming
     // up: the application has been closed, and saying "starting" at a dead
@@ -472,16 +470,6 @@ function AppContent() {
     noteStudioMessage(message, type);
   };
 
-  useSignedUpdateNotice(setupQuery.isSuccess, setupQuery.data?.signed_updates_revision, !toast.isVisible && !showSettingsModal, () => {
-    const text = signedUpdateStrings[language];
-    showToast(text.notice, 'info', {
-      label: text.openUpdates,
-      onClick: () => {
-        setSettingsSection(engineUpdateTarget);
-        setShowSettingsModal(true);
-      },
-    });
-  });
 
   const [journalOpen, setJournalOpen] = useState(false);
 

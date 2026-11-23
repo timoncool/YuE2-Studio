@@ -20,7 +20,6 @@ jobs:
     outputs:
       pr_run: ${{ steps.coverage.outputs.run }}
       skip_build: ${{ steps.classify.outputs.skip_build }}
-      channel_changed: ${{ steps.classify.outputs.channel_changed }}
       macos_rvc_changed: ${{ steps.classify.outputs.macos_rvc_changed }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -31,21 +30,15 @@ jobs:
         if: github.event_name == 'push' && startsWith(github.ref_name, 'music-round/') && github.ref_name != 'music-round/native-minimax-integration'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash distribution/components/find_pr_ci.sh
+        run: bash scripts/ci/find_pr_ci.sh
       - id: classify
         if: steps.coverage.outputs.run == ''
-        name: Check whether only component mirrors changed
+        name: Check whether only the website changed
         env:
           PUSH_BASE: ${{ github.event.before }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: python3 distribution/components/classify_ci.py
-      - name: Verify independent channel publication
-        if: steps.classify.outputs.publisher_test == 'true'
-        run: |
-          python3 -m venv "$RUNNER_TEMP/channel-qa"
-          "$RUNNER_TEMP/channel-qa/bin/pip" install --quiet 'tuf==7.0.1' 'securesystemslib[crypto]==1.6.0'
-          "$RUNNER_TEMP/channel-qa/bin/python" distribution/components/test_stage_channel.py
+        run: python3 scripts/ci/classify_ci.py
 
   service:
     needs: changes
@@ -80,10 +73,6 @@ jobs:
         run: cargo test --locked -p music-engine --lib yue_train::tests
       - name: Service tests
         run: cargo test -p music-server --locked
-
-      - name: Install ONNX through two signed mirror revisions
-        if: needs.changes.outputs.channel_changed == 'true'
-        run: bash distribution/components/check_installed_channel.sh target/debug/music-server
 
   service-macos-rvc:
     needs: changes

@@ -244,16 +244,7 @@ async fn submit(
             "Studio data folder is unavailable.".into(),
         );
     };
-    let (installation, runtime) = match native_minimax::Runtime::resolve_installation(
-        &root,
-        replay.as_ref().map(|replay| &replay.runtime),
-        engine_catalogue::install::Probe::Sha256,
-    )
-    .await
-    {
-        Ok(resolved) => resolved,
-        Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
-    };
+    let installation = native_minimax::Runtime::resolve_installation(&root);
     let adapters = request
         .minimax
         .as_ref()
@@ -320,9 +311,6 @@ async fn submit(
         "duration_seconds":request.duration_seconds.unwrap_or(60.0), "seed":request.seed, "lm_seed":request.lm_seed,
         "output_format":format, "fade_in":request.fade_in.unwrap_or(0.0).max(0.0),
         "fade_out":request.fade_out.unwrap_or(0.0).max(0.0)});
-    if let Some(runtime) = runtime {
-        settings["native_runtime"] = serde_json::json!(runtime);
-    }
     if let Some(sampling) = &request.minimax {
         if let Value::Object(parameters) = serde_json::json!(sampling) {
             settings

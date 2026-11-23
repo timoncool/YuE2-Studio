@@ -77,19 +77,7 @@ async fn submit_inner(
             "Studio data folder is unavailable.".into(),
         );
     };
-    let saved_runtime = replay
-        .as_ref()
-        .map(|replay| &replay.song.generation_settings["native_runtime"]);
-    let (catalogue, runtime) = match ace::resolve_installation(
-        &root,
-        saved_runtime,
-        engine_catalogue::install::Probe::Sha256,
-    )
-    .await
-    {
-        Ok(resolved) => resolved,
-        Err(error) => return reject(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")),
-    };
+    let catalogue = ace::resolve_installation(&root);
     let resolved = if replay.is_some() {
         catalogue.launch_replay(&profile, &input)
     } else {
@@ -145,7 +133,6 @@ async fn submit_inner(
         duration_seconds: input["duration"].as_f64().unwrap_or_default(),
         generation_settings: json!({
             "music_source": request.music_source,
-            "native_runtime": runtime,
             "ace": input,
             "fade_in": request.fade_in,
             "fade_out": request.fade_out,

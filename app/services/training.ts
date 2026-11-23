@@ -207,8 +207,6 @@ export const installTrainingBase = (baseId: string) =>
   call<{ started: boolean }>(`/v1/training/bases/${encodeURIComponent(baseId)}/install`, { method: 'POST' });
 export const cancelTrainingBase = () =>
   call<{ cancelled: boolean }>('/v1/training/bases/cancel', { method: 'POST' });
-export const installSignedTrainer = (trainerId: string) =>
-  call<unknown>(`/v1/components/music-engines/${encodeURIComponent(trainerId)}/install`, { method: 'POST' });
 export interface RvcBurnStatus {
   ready: boolean; cuda: boolean; missing: string[]; folder: string;
   installable: boolean; missing_bytes: number; install_reason: string | null;
