@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};
 
-use crate::downloads::{Asset, AssetKind};
+use crate::downloads::Asset;
 
 pub fn model() -> &'static Asset {
     crate::components::required("apollo")

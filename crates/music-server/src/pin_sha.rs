@@ -25,7 +25,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz", "c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-osx-arm64-1.31.1.tgz", "2e1344a1926ee50eb25b38153cb6992c3567515aef0e677a1a520a1798896d6f"),
     ("https://github.com/timoncool/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip", "5869e26bb25314375f2d5ef1877e3ea06b1543d6c710e6e4a1ec2f7177ab4b2c"),
-    ("https://github.com/mosynthkey/beat_this_cpp/raw/07ab790a9ec2eda8093d52d249e3ec4f0510ee72/onnx/beat_this.onnx", "c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70/ace-caption-windows-x64.zip", "254af78ec1254ad2d141afb12f5dc20014dcbbb2387eed1b63a975d5ee46a52a"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70/hotstep-tools-cuda-windows-x64.zip", "f423135405e51ed861b51ad1fa8dc108d891914951915eb54e18c03b8271331a"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-75923e70-xcr0/ace-caption-xcr0-windows-x64.zip", "934bb5841e2deaa12db73e6cd29ac3f205e1a3e10e0a19a9809113fc989dbee5"),
@@ -33,20 +32,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-479cbeb8-xcr0/hotstep-tools-479cbeb8-xcr0-cuda-windows-x64.zip", "892e370c877232edf0bb0228eac3ed54eec8c264d49f2457d3534cca5d2ab0ff"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-479cbeb8-xcr0/ace-caption-479cbeb8-xcr0-windows-x64.zip", "6423f74c630f0e240983748ea16d8670e241bcc834f73d9db9399a45d118b33c"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-trainer-75923e70-cuda12/hotstep-trainer-cuda12-backend-windows-x64.zip", "63bb122cb2634146a578be1635f4456a218679a3b500532a30d0c04d0e54383f"),
-    ("https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/config.json", "16bedd02b18770e43740419b0d5777f231047e96e8987f498e8a1123c39c9852"),
-    ("https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/model.safetensors", "ac4eb6ea87dfc26b6ca6b954c6b967ab87ad4c7d08e078b25214f13ed051f397"),
-    ("https://huggingface.co/cocktailpeanut/muscriptor-medium/resolve/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826/config.json", "43e13a70fc9ae0af36b7447c06f3eac2282daeb69d79c1ff840ede7fdaa26a3b"),
-    ("https://huggingface.co/cocktailpeanut/muscriptor-medium/resolve/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826/model.safetensors", "ac80adbdf85d87231735fd948af7013441c0afced316c4e9067fd5d8a7fb97ec"),
-    ("https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/config.json", "3008fc481e4a1cd978e337eb3759260c270892204db5039235ac939e1f42aeb2"),
-    ("https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/model.safetensors", "bbd482c786b895cf7d8f44185073d951adae2ebb8a66f82ca84cd1f84569549c"),
-    ("https://huggingface.co/nerualdreming/MOSS-Music-8B-Instruct-GGUF/resolve/0b4eac01086c26baf93238aa8b142ec07b3ae56d/moss-lm-q4_k_m.gguf", "bc2783b68fee6dac606599c4b8f15bff5e37913b8d10fbfb8c550f5667dee3e8"),
-    ("https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-aud-f16.gguf", "014b971719a9b46586ea78ea3d15f39ac0f1932678e30c72fa63222f8aea5f79"),
-    ("https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-lm-q8_0.gguf", "482e1e82c66f819401708c82b3eaa1dd6635c68a211f03b645b0055d0b7b031b"),
-    ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/checkpoints/yue2_3b_int8_convrot.safetensors", "96fe199377309001ed8cd26a944baeee8cc31a20ba7c36d1d3c0a7e1f4149db6"),
-    ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/mms-fa/mms-fa-f32.gguf", "2a7df904c5f7d18f595da03e9636541686dfe41292d983e4dc7bfeb11b71b7c3"),
-    ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/sheetsage2-f16.gguf", "6a205c7ca90f60b388d925c0e4aea8f4ed8bb4404520bb49dbd095d1b7320bd1"),
-    ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-tok-f16.gguf", "aaea8c9fb75bf83baf3b99bac27a0eba61029e747df703a11e91a53309695687"),
-    ("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-vae-standard-f32.gguf", "c4ffc363b246f404c1d150075da4c41c4a031524036042ce45aeb500d4d5fe71"),
 ];
 
 /// The SHA-256 the pin at `url` names: this table, then the transcribe.cpp builds and models of the shared binding,
@@ -55,8 +40,7 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     if let Some(sha) = crate::components::sha256(url) {
         return Some(sha);
     }
-    if let Some(sha) = crate::training::base_asset_sha(url)
-        .or_else(|| crate::engine_hip::archive_sha(url))
+    if let Some(sha) = crate::engine_hip::archive_sha(url)
         .or_else(|| crate::native_music_runtime::sha256(url))
     {
         return Some(sha);

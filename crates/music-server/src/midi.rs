@@ -13,7 +13,7 @@ use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-use crate::downloads::{Asset, AssetKind, Downloader};
+use crate::downloads::{Asset, Downloader};
 
 /// One size of the model.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -53,20 +53,8 @@ pub(crate) fn weight_assets(size: &'static Size) -> &'static [Asset] {
         SIZES
             .iter()
             .map(|size| {
-                let file = |name: &str, bytes: u64| Asset {
-                    id: leak(format!("muscriptor-{}-{}", size.id, name.split('.').next().unwrap_or(name))),
-                    label: leak(format!("MuScriptor {} ({})", size.id, size.params)),
-                    kind: AssetKind::Model,
-                    url: leak(format!("https://huggingface.co/cocktailpeanut/muscriptor-{}/resolve/{}/{name}", size.id, size.revision)),
-                    relative_path: leak(format!("models/muscriptor-{}/{name}", size.id)),
-                    bytes,
-                    unzip_into: None,
-                    marker: "",
-                    pick: &[],
-                    vram_gb: None,
-                    note: "CC BY-NC 4.0: for non-commercial use.",
-                };
-                (size.id, vec![file("config.json", size.config_bytes), file("model.safetensors", size.bytes)])
+                let file = |part: &str| *crate::components::required(&format!("muscriptor-{}-{part}", size.id));
+                (size.id, vec![file("config"), file("model")])
             })
             .collect()
     })[size.id]

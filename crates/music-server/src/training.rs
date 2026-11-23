@@ -295,37 +295,9 @@ pub(super) const BASE_SCOPE: &str = "training-base";
 const RUACH_TW_BASE: &str = "ruach-rs-tw-2.0x0.75";
 const RUACH_FW_BASE: &str = "ruach-rs-fw-2.4x0.75";
 
-static ALTERNATE_BASES: [(Asset, &str); 2] = [
-    (Asset {
-        id: RUACH_TW_BASE,
-        label: "Ruach RS-TW 2.0×0.75",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/goldhub/YuE2-RS-Finetunes/resolve/8ba3e2ce05ef2d8b712a832a1c7eb016e39931dd/comfyui/yue2_3b_RS-TW-2.0x0.75_int8_convrot.safetensors",
-        relative_path: "models/yue2_3b_RS-TW-2.0x0.75_int8_convrot.safetensors",
-        bytes: 3_960_939_304,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "CC BY-NC-SA 4.0 · INT8 ConvRot",
-    }, "df6fe26462320cae9378520f163b0ce73292252ac9059dc24a530d95ee1782ab"),
-    (Asset {
-        id: RUACH_FW_BASE,
-        label: "Ruach RS-FW 2.4×0.75",
-        kind: AssetKind::Model,
-        url: "https://huggingface.co/goldhub/YuE2-RS-Finetunes/resolve/8ba3e2ce05ef2d8b712a832a1c7eb016e39931dd/comfyui/yue2_3b_RS-FW-2.4x0.75_int8_convrot.safetensors",
-        relative_path: "models/yue2_3b_RS-FW-2.4x0.75_int8_convrot.safetensors",
-        bytes: 3_960_939_152,
-        unzip_into: None,
-        marker: "",
-        pick: &[],
-        vram_gb: None,
-        note: "CC BY-NC-SA 4.0 · INT8 ConvRot",
-    }, "4dc75ef96b09cb14e652ebf8b0e2a4afb143ac5d60bec13ae2003d5ff43016c2"),
-];
-
-pub(super) fn base_asset_sha(url: &str) -> Option<&'static str> {
-    ALTERNATE_BASES.iter().find(|(asset, _)| asset.url == url).map(|(_, sha)| *sha)
+/// The finetunes a run can start from besides the stock base: catalogue entries.
+fn alternate_bases() -> [&'static Asset; 2] {
+    [crate::components::required(RUACH_TW_BASE), crate::components::required(RUACH_FW_BASE)]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -614,19 +586,7 @@ pub(crate) fn pack() -> &'static [Asset] {
             vram_gb: None,
             note: "",
         }];
-        assets.extend(yue_train::TRAINING_FILES.iter().map(|file| Asset {
-            id: file.id,
-            label: file.label,
-            kind: AssetKind::Model,
-            url: leak(yue_train::training_file_url(file)),
-            relative_path: leak(format!("models/{}", file.file)),
-            bytes: file.bytes,
-            unzip_into: None,
-            marker: "",
-            pick: &[],
-            vram_gb: None,
-            note: "",
-        }));
+        assets.extend(yue_train::TRAINING_FILES.iter().map(|file| *crate::components::required(file.id)));
         assets
     })
 }
@@ -672,19 +632,6 @@ pub(crate) fn listen_pack() -> &'static [Asset] {
     PACK.get_or_init(|| {
         let leak = |text: String| -> &'static str { Box::leak(text.into_boxed_str()) };
         let source = trainer_source();
-        let model = |id: &'static str, label: &'static str, url: &'static str, path: &'static str, bytes: u64| Asset {
-            id,
-            label,
-            kind: AssetKind::Model,
-            url,
-            relative_path: path,
-            bytes,
-            unzip_into: None,
-            marker: "",
-            pick: &[],
-            vram_gb: None,
-            note: "",
-        };
         vec![
             Asset {
                 id: "ace-caption",
@@ -699,34 +646,10 @@ pub(crate) fn listen_pack() -> &'static [Asset] {
                 vram_gb: None,
                 note: "",
             },
-            model(
-                "moss-audio",
-                "MOSS-Music audio tower (F16)",
-                "https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-aud-f16.gguf",
-                "models/moss/moss-aud-f16.gguf",
-                1_724_480_640,
-            ),
-            model(
-                "moss-lm",
-                "MOSS-Music 8B (Q8_0)",
-                "https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-lm-q8_0.gguf",
-                "models/moss/moss-lm-q8_0.gguf",
-                8_709_513_792,
-            ),
-            model(
-                "moss-lm-q4",
-                "MOSS-Music 8B (Q4_K_M)",
-                "https://huggingface.co/nerualdreming/MOSS-Music-8B-Instruct-GGUF/resolve/0b4eac01086c26baf93238aa8b142ec07b3ae56d/moss-lm-q4_k_m.gguf",
-                "models/moss/moss-lm-q4_k_m.gguf",
-                5_188_223_648,
-            ),
-            model(
-                "beat-this",
-                "Beat This! (tempo)",
-                "https://github.com/mosynthkey/beat_this_cpp/raw/07ab790a9ec2eda8093d52d249e3ec4f0510ee72/onnx/beat_this.onnx",
-                "models/audio-facts/beat_this.onnx",
-                83_077_778,
-            ),
+            *crate::components::required("moss-audio"),
+            *crate::components::required("moss-lm"),
+            *crate::components::required("moss-lm-q4"),
+            *crate::components::required("beat-this"),
         ]
     })
 }
@@ -979,7 +902,7 @@ impl Training {
             return pack().iter().find(|asset| asset.id == yue_train::TRAINING_FILES[0].id)
                 .context("stock training base");
         }
-        ALTERNATE_BASES.iter().find(|(asset, _)| asset.id == id).map(|(asset, _)| asset)
+        alternate_bases().into_iter().find(|asset| asset.id == id)
             .with_context(|| format!("Unknown YuE2 training base: {id}"))
     }
 
@@ -1003,7 +926,7 @@ impl Training {
     }
 
     pub(super) fn base_choices(&self) -> Vec<serde_json::Value> {
-        let mut choices: Vec<_> = std::iter::once(STOCK_BASE).chain(ALTERNATE_BASES.iter().map(|(asset, _)| asset.id))
+        let mut choices: Vec<_> = std::iter::once(STOCK_BASE).chain(alternate_bases().into_iter().map(|asset| asset.id))
             .filter_map(|id| Self::training_base_asset(id).ok().map(|asset| (id, asset)))
             .map(|(id, asset)| serde_json::json!({
                 "id": id, "label": asset.label, "bytes": asset.bytes,
@@ -1073,7 +996,7 @@ impl Training {
             let expected = if id == STOCK_BASE {
                 Some("96fe199377309001ed8cd26a944baeee8cc31a20ba7c36d1d3c0a7e1f4149db6")
             } else {
-                base_asset_sha(asset.url)
+                crate::pin_sha::sha256(asset.url)
             };
             (self.root.join(asset.relative_path), asset.label, expected)
         };
@@ -2514,10 +2437,10 @@ mod tests {
         let fw = Training::training_base_asset(RUACH_FW_BASE).unwrap();
         assert_ne!(stock.relative_path, tw.relative_path);
         assert_ne!(tw.relative_path, fw.relative_path);
-        assert!(base_asset_sha(tw.url).is_some());
+        assert!(crate::pin_sha::sha256(tw.url).is_some());
         let identity = TrainingBaseIdentity {
             id: RUACH_TW_BASE.into(),
-            checkpoint_sha256: base_asset_sha(tw.url).unwrap().into(),
+            checkpoint_sha256: crate::pin_sha::sha256(tw.url).unwrap().into(),
             companion_sha256: "decoder".into(),
             own_backbone_sha256: None,
         };

@@ -292,6 +292,10 @@ pub(crate) const REQUIRED: &[&str] = &[
     "gemma-4-e4b-q4_0", "gemma-4-12b-q4_0", "gemma-4-12b-q5_k_m", "gemma-4-12b-q6_k", "gemma-4-12b-q8_0",
     "llama-cuda", "llama-cuda-runtime", "llama-cuda12", "llama-cuda12-runtime", "llama-vulkan", "llama-cpu",
     "htdemucs-6s", "roformer", "apollo", "rvc-f16",
+    "yue2-convrot-base", "yue2-vae-encoder", "yue2-semantic-tokenizer", "yue2-sheetsage", "yue2-lyric-aligner",
+    "moss-audio", "moss-lm", "moss-lm-q4", "beat-this", "ruach-rs-tw-2.0x0.75", "ruach-rs-fw-2.4x0.75",
+    "muscriptor-small-config", "muscriptor-small-model", "muscriptor-medium-config", "muscriptor-medium-model",
+    "muscriptor-large-config", "muscriptor-large-model",
 ];
 
 /// A file this build downloads by id: one of `REQUIRED`.
@@ -625,6 +629,7 @@ mod export {
         crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
             .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
     }
+
 
 
 

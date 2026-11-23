@@ -1,6 +1,6 @@
 {
  "product": "yue2-studio",
- "sequence": 8,
+ "sequence": 9,
  "published": "2026-11-23",
  "files": {
   "gemma-4-e4b-q4_0": {
@@ -1474,6 +1474,150 @@
    "sha256": "09bd8f233e7ae82697826513c94d754c3904e58e30ad503b83437defccf99a72",
    "path": "models/rvc/rvc-f16.gguf",
    "note": "Native RVC voice conversion support weights for audio.cpp."
+  },
+  "yue2-convrot-base": {
+   "label": "YuE2 base for training (INT8 ConvRot)",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/checkpoints/yue2_3b_int8_convrot.safetensors",
+   "bytes": 3960938800,
+   "sha256": "96fe199377309001ed8cd26a944baeee8cc31a20ba7c36d1d3c0a7e1f4149db6",
+   "path": "models/yue2_3b_int8_convrot.safetensors"
+  },
+  "yue2-vae-encoder": {
+   "label": "YuE2 VAE with its encoder",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-vae-standard-f32.gguf",
+   "bytes": 530348768,
+   "sha256": "c4ffc363b246f404c1d150075da4c41c4a031524036042ce45aeb500d4d5fe71",
+   "path": "models/yue2-vae-standard-f32.gguf"
+  },
+  "yue2-semantic-tokenizer": {
+   "label": "Semantic tokenizer",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-tok-f16.gguf",
+   "bytes": 1211632224,
+   "sha256": "aaea8c9fb75bf83baf3b99bac27a0eba61029e747df703a11e91a53309695687",
+   "path": "models/yue2-tok-f16.gguf"
+  },
+  "yue2-sheetsage": {
+   "label": "SheetSage2 score transcriber",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/sheetsage2-f16.gguf",
+   "bytes": 1360020736,
+   "sha256": "6a205c7ca90f60b388d925c0e4aea8f4ed8bb4404520bb49dbd095d1b7320bd1",
+   "path": "models/sheetsage2-f16.gguf"
+  },
+  "yue2-lyric-aligner": {
+   "label": "MMS forced aligner (lyric timing)",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/mms-fa/mms-fa-f32.gguf",
+   "bytes": 1261892736,
+   "sha256": "2a7df904c5f7d18f595da03e9636541686dfe41292d983e4dc7bfeb11b71b7c3",
+   "path": "models/mms-fa-f32.gguf"
+  },
+  "moss-audio": {
+   "label": "MOSS-Music audio tower (F16)",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-aud-f16.gguf",
+   "bytes": 1724480640,
+   "sha256": "014b971719a9b46586ea78ea3d15f39ac0f1932678e30c72fa63222f8aea5f79",
+   "path": "models/moss/moss-aud-f16.gguf"
+  },
+  "moss-lm": {
+   "label": "MOSS-Music 8B (Q8_0)",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MOSS-Music-8B-Instruct-GGUF/resolve/9fe86435bd542bf29cbf4984e9e0ab0ea8ca7e00/moss-lm-q8_0.gguf",
+   "bytes": 8709513792,
+   "sha256": "482e1e82c66f819401708c82b3eaa1dd6635c68a211f03b645b0055d0b7b031b",
+   "path": "models/moss/moss-lm-q8_0.gguf"
+  },
+  "moss-lm-q4": {
+   "label": "MOSS-Music 8B (Q4_K_M)",
+   "kind": "model",
+   "url": "https://huggingface.co/nerualdreming/MOSS-Music-8B-Instruct-GGUF/resolve/0b4eac01086c26baf93238aa8b142ec07b3ae56d/moss-lm-q4_k_m.gguf",
+   "bytes": 5188223648,
+   "sha256": "bc2783b68fee6dac606599c4b8f15bff5e37913b8d10fbfb8c550f5667dee3e8",
+   "path": "models/moss/moss-lm-q4_k_m.gguf"
+  },
+  "beat-this": {
+   "label": "Beat This! (tempo)",
+   "kind": "model",
+   "url": "https://github.com/mosynthkey/beat_this_cpp/raw/07ab790a9ec2eda8093d52d249e3ec4f0510ee72/onnx/beat_this.onnx",
+   "bytes": 83077778,
+   "sha256": "c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd",
+   "path": "models/audio-facts/beat_this.onnx"
+  },
+  "ruach-rs-tw-2.0x0.75": {
+   "label": "Ruach RS-TW 2.0×0.75",
+   "kind": "model",
+   "url": "https://huggingface.co/goldhub/YuE2-RS-Finetunes/resolve/8ba3e2ce05ef2d8b712a832a1c7eb016e39931dd/comfyui/yue2_3b_RS-TW-2.0x0.75_int8_convrot.safetensors",
+   "bytes": 3960939304,
+   "sha256": "df6fe26462320cae9378520f163b0ce73292252ac9059dc24a530d95ee1782ab",
+   "path": "models/yue2_3b_RS-TW-2.0x0.75_int8_convrot.safetensors",
+   "note": "CC BY-NC-SA 4.0 · INT8 ConvRot"
+  },
+  "ruach-rs-fw-2.4x0.75": {
+   "label": "Ruach RS-FW 2.4×0.75",
+   "kind": "model",
+   "url": "https://huggingface.co/goldhub/YuE2-RS-Finetunes/resolve/8ba3e2ce05ef2d8b712a832a1c7eb016e39931dd/comfyui/yue2_3b_RS-FW-2.4x0.75_int8_convrot.safetensors",
+   "bytes": 3960939152,
+   "sha256": "4dc75ef96b09cb14e652ebf8b0e2a4afb143ac5d60bec13ae2003d5ff43016c2",
+   "path": "models/yue2_3b_RS-FW-2.4x0.75_int8_convrot.safetensors",
+   "note": "CC BY-NC-SA 4.0 · INT8 ConvRot"
+  },
+  "muscriptor-small-config": {
+   "label": "MuScriptor small (103M)",
+   "kind": "model",
+   "url": "https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/config.json",
+   "bytes": 124,
+   "sha256": "3008fc481e4a1cd978e337eb3759260c270892204db5039235ac939e1f42aeb2",
+   "path": "models/muscriptor-small/config.json",
+   "note": "CC BY-NC 4.0: for non-commercial use."
+  },
+  "muscriptor-small-model": {
+   "label": "MuScriptor small (103M)",
+   "kind": "model",
+   "url": "https://huggingface.co/cocktailpeanut/muscriptor-small/resolve/31a8f75d6a8b5383fd71ad1371dc1620389ab722/model.safetensors",
+   "bytes": 411888600,
+   "sha256": "bbd482c786b895cf7d8f44185073d951adae2ebb8a66f82ca84cd1f84569549c",
+   "path": "models/muscriptor-small/model.safetensors",
+   "note": "CC BY-NC 4.0: for non-commercial use."
+  },
+  "muscriptor-medium-config": {
+   "label": "MuScriptor medium (307M)",
+   "kind": "model",
+   "url": "https://huggingface.co/cocktailpeanut/muscriptor-medium/resolve/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826/config.json",
+   "bytes": 126,
+   "sha256": "43e13a70fc9ae0af36b7447c06f3eac2282daeb69d79c1ff840ede7fdaa26a3b",
+   "path": "models/muscriptor-medium/config.json",
+   "note": "CC BY-NC 4.0: for non-commercial use."
+  },
+  "muscriptor-medium-model": {
+   "label": "MuScriptor medium (307M)",
+   "kind": "model",
+   "url": "https://huggingface.co/cocktailpeanut/muscriptor-medium/resolve/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826/model.safetensors",
+   "bytes": 1228144472,
+   "sha256": "ac80adbdf85d87231735fd948af7013441c0afced316c4e9067fd5d8a7fb97ec",
+   "path": "models/muscriptor-medium/model.safetensors",
+   "note": "CC BY-NC 4.0: for non-commercial use."
+  },
+  "muscriptor-large-config": {
+   "label": "MuScriptor large (1.4B)",
+   "kind": "model",
+   "url": "https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/config.json",
+   "bytes": 125,
+   "sha256": "16bedd02b18770e43740419b0d5777f231047e96e8987f498e8a1123c39c9852",
+   "path": "models/muscriptor-large/config.json",
+   "note": "CC BY-NC 4.0: for non-commercial use."
+  },
+  "muscriptor-large-model": {
+   "label": "MuScriptor large (1.4B)",
+   "kind": "model",
+   "url": "https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/model.safetensors",
+   "bytes": 5465642136,
+   "sha256": "ac4eb6ea87dfc26b6ca6b954c6b967ab87ad4c7d08e078b25214f13ed051f397",
+   "path": "models/muscriptor-large/model.safetensors",
+   "note": "CC BY-NC 4.0: for non-commercial use."
   },
   "yue2/backbone-bf16": {
    "label": "YuE2-3B-BF16.gguf",
