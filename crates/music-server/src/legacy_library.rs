@@ -45,10 +45,83 @@ pub(super) async fn sources(
                 sources.push(json!({"studio": title, "path": n.data_dir, "version": n.version}));
             }
         }
+        for (title, folder) in standard_folders() {
+            if folder.join("library.sqlite").is_file() && folder.canonicalize().is_ok_and(|root| seen.insert(root)) {
+                sources.push(json!({"studio": title, "path": folder, "version": Value::Null}));
+            }
+        }
         Json(json!({"sources": sources}))
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+}
+
+
+/// Where ACE-Step Studio and MiniMax Music3 Studio keep their data when nothing registered them in the shared list
+/// of programs: the profile folder each one falls back to, and on Windows the `data` folder of an installation.
+fn standard_folders() -> Vec<(&'static str, std::path::PathBuf)> {
+    let mut found = Vec::new();
+    for (title, slug) in [("ACE-Step Studio", "ace-step-studio"), ("MiniMax Music3 Studio", "minimax-music3-studio")] {
+        #[cfg(windows)]
+        {
+            let _ = slug;
+            for variable in ["LOCALAPPDATA", "APPDATA"] {
+                if let Some(root) = std::env::var_os(variable) {
+                    found.push((title, std::path::PathBuf::from(root).join(title)));
+                }
+            }
+            if let Some(root) = std::env::var_os("LOCALAPPDATA") {
+                found.push((title, std::path::PathBuf::from(root).join("Programs").join(title).join("data")));
+            }
+            found.extend(install_locations(title).into_iter().map(|folder| (title, folder.join("data"))));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let _ = slug;
+            if let Some(home) = std::env::var_os("HOME") {
+                found.push((title, std::path::PathBuf::from(home).join("Library").join("Application Support").join(title)));
+            }
+        }
+        #[cfg(all(not(windows), not(target_os = "macos")))]
+        {
+            if let Some(root) = std::env::var_os("XDG_DATA_HOME") {
+                found.push((title, std::path::PathBuf::from(root).join(slug)));
+            }
+            if let Some(home) = std::env::var_os("HOME") {
+                found.push((title, std::path::PathBuf::from(home).join(".local").join("share").join(slug)));
+            }
+        }
+    }
+    found
+}
+
+/// The folders an installer recorded for a program under its Uninstall key, the user's and the machine's.
+#[cfg(windows)]
+fn install_locations(program: &str) -> Vec<std::path::PathBuf> {
+    use windows_sys::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
+    let key: Vec<u16> = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{program}").encode_utf16().chain([0]).collect();
+    let value: Vec<u16> = "InstallLocation".encode_utf16().chain([0]).collect();
+    let mut found = Vec::new();
+    for root in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let mut size: u32 = 0;
+        // SAFETY: key and value are NUL-terminated; a null buffer asks for the size in bytes.
+        let asked = unsafe { RegGetValueW(root, key.as_ptr(), value.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), std::ptr::null_mut(), &mut size) };
+        if asked != 0 || size < 4 {
+            continue;
+        }
+        let mut buffer = vec![0u16; size as usize / 2];
+        // SAFETY: the buffer holds exactly `size` bytes.
+        let read = unsafe { RegGetValueW(root, key.as_ptr(), value.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), buffer.as_mut_ptr().cast(), &mut size) };
+        if read != 0 {
+            continue;
+        }
+        let text = String::from_utf16_lossy(&buffer[..(size as usize / 2).saturating_sub(1)]);
+        let text = text.trim().trim_matches('"');
+        if !text.is_empty() {
+            found.push(std::path::PathBuf::from(text));
+        }
+    }
+    found
 }
 
 pub(super) async fn preview(
