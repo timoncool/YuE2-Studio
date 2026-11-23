@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Download, Play } from 'lucide-react';
+import { Check, CheckSquare, Download, Play, Square } from 'lucide-react';
 import { CatalogBadge, CatalogCard, CatalogSearch, CatalogSegments } from './kit/Catalog';
 import { openExternal } from '../services/externalLinks';
-import { SecondaryButton } from './kit/Buttons';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { WorkProgress } from './WorkProgress';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
@@ -49,8 +49,11 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   onChoose: (id: string) => void;
   disabled: boolean;
 }) {
-  const { language } = useI18n();
+  const { language, t } = useI18n();
   const labels = rvcVoiceStrings[language];
+  // voices ticked for one download, as the LoRA catalogue does
+  const [picked, setPicked] = useState<string[]>([]);
+  const [queued, setQueued] = useState(false);
   const [playingSample, setPlayingSample] = useState<string>();
   const [sampleError, setSampleError] = useState(false);
   const [catalog, setCatalog] = useState<CatalogVoice[] | null>(null);
@@ -137,6 +140,18 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
       && (!filters.sample || !!voice.sample_audio_url);
   });
   const visible = matches.slice(0, visibleCount);
+  const isInstalled = (voice: CatalogVoice) => Boolean(voice.installed_id && installedIds.has(voice.installed_id));
+  const voiceBytes = (voice: CatalogVoice) => voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0));
+  const chosen = (catalog ?? []).filter(voice => picked.includes(voice.id) && !isInstalled(voice));
+  const missingHere = visible.filter(voice => !isInstalled(voice));
+  const allChosen = missingHere.length > 0 && missingHere.every(voice => picked.includes(voice.id));
+  const togglePick = (id: string) => setPicked(current => (current.includes(id) ? current.filter(value => value !== id) : [...current, id]));
+  const downloadPicked = async () => {
+    setQueued(true);
+    for (const voice of chosen) await install(voice.id);
+    setPicked([]);
+    setQueued(false);
+  };
   const filterActive = terms.length > 0 || Object.values(filters).some(Boolean);
   const stageLabels = {
     preparing: labels.preparing,
@@ -211,6 +226,7 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
               return (
                 <li key={voice.id} className="flex">
                   <CatalogCard
+                    selected={picked.includes(voice.id)}
                     title={voice.name}
                     meta={<span>{voice.source_repo}</span>}
                     badges={voice.metadata?.vocal_style ? <CatalogBadge>{labels.styles[voice.metadata.vocal_style] ?? voice.metadata.vocal_style}</CatalogBadge> : undefined}
@@ -229,8 +245,12 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                       ? <SecondaryButton disabled={disabled} aria-label={`${labels.selectInstalled} ${voice.name}`} onClick={() => onChoose(installedId)}>
                           <Check size={13} />{labels.selectInstalled}</SecondaryButton>
                       : installing === voice.id ? null
-                      : <SecondaryButton disabled={disabled || refreshing || Boolean(installing)} aria-label={`${labels.install} ${voice.name}`}
-                          onClick={() => void install(voice.id)}><Download size={13} />{sizeFormat.format(size)}</SecondaryButton>}>
+                      : <span className="flex items-center gap-2">
+                          <SecondaryButton role="checkbox" aria-checked={picked.includes(voice.id)} aria-label={voice.name}
+                            disabled={queued} onClick={() => togglePick(voice.id)}>{picked.includes(voice.id) ? <CheckSquare size={13} /> : <Square size={13} />}</SecondaryButton>
+                          <SecondaryButton disabled={disabled || refreshing || Boolean(installing)} aria-label={`${labels.install} ${voice.name}`}
+                            onClick={() => void install(voice.id)}><Download size={13} />{sizeFormat.format(size)}</SecondaryButton>
+                        </span>}>
                     {playingSample === voice.id && sampleError && <p role="alert" className="mt-1">{labels.sampleError}</p>}
                     {installing === voice.id && <WorkProgress label={activeStage ?? labels.installing} percent={percent} />}
                   </CatalogCard>
@@ -240,6 +260,17 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
           </ul>
           {visible.length < matches.length && (
             <SecondaryButton className="mt-2" onClick={() => setVisibleCount(count => count + PAGE_SIZE)}>{labels.showMore}</SecondaryButton>
+          )}
+          {missingHere.length > 0 && (
+            <div className="sticky bottom-0 -mx-1 mt-2 flex flex-wrap items-center gap-2 bg-white/90 px-1 py-3 backdrop-blur-sm dark:bg-suno/90">
+              <SecondaryButton role="checkbox" aria-checked={allChosen} disabled={queued}
+                onClick={() => setPicked(allChosen ? [] : missingHere.map(voice => voice.id))}>
+                {allChosen ? <CheckSquare size={13} /> : <Square size={13} />}{t('adaptersSelectAll')} · {missingHere.length}
+              </SecondaryButton>
+              <PrimaryButton disabled={queued || Boolean(installing) || chosen.length === 0} onClick={() => void downloadPicked()}>
+                <Download size={16} />{t('adaptersDownloadSelected')}{chosen.length > 0 ? ` · ${chosen.length} · ${sizeFormat.format(chosen.reduce((sum, voice) => sum + voiceBytes(voice), 0) / 1_000_000)}` : ''}
+              </PrimaryButton>
+            </div>
           )}
         </>
       )}

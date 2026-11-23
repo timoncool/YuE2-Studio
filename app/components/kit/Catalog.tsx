@@ -1,7 +1,7 @@
 import React from 'react';
 import { ExternalLink, Search } from 'lucide-react';
 
-const CARD = 'rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/3';
+const CARD = 'rounded-2xl border bg-zinc-50 p-4 dark:bg-white/3';
 const OUTLINE =
   'inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-zinc-200';
 const CONTROL =
@@ -41,7 +41,7 @@ export function CatalogCard({ title, meta, badges, description, note, footer, pa
   children?: React.ReactNode;
 }) {
   return (
-    <section className={`${CARD} flex w-full min-w-0 flex-col ${selected ? 'border-pink-400 dark:border-pink-500/60' : ''}`}>
+    <section className={`${CARD} flex w-full min-w-0 flex-col ${selected ? 'border-pink-400 dark:border-pink-500/60' : 'border-zinc-200 dark:border-white/10'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{title}</p>
