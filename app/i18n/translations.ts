@@ -17,6 +17,7 @@ import { exportStrings } from './exportDialog';
 import { stemMixerStrings } from './stemMixer';
 import { modelStorageStrings } from './modelStorage';
 import { aceStrings } from './ace';
+import { acePt } from './acePt';
 
 export type Language = 'en' | 'zh' | 'ja' | 'ko' | 'ru' | 'pt';
 
@@ -41,5 +42,5 @@ export const translations: Record<Language, Partial<Record<TranslationKey, strin
   ko: { ...aceStrings.ko, ...ko, ...yue2.ko, ...adapterStrings.ko, ...processingStrings.ko, ...trainingStrings.ko, ...hubStrings.ko, ...scoreStrings.ko, ...midiEditorStrings.ko, ...noticeStrings.ko, ...shellStrings.ko, ...exportStrings.ko, ...stemMixerStrings.ko, ...modelStorageStrings.ko },
   ru: { ...aceStrings.ru, ...ru, ...yue2.ru, ...adapterStrings.ru, ...processingStrings.ru, ...trainingStrings.ru, ...hubStrings.ru, ...scoreStrings.ru, ...midiEditorStrings.ru, ...noticeStrings.ru, ...shellStrings.ru, ...exportStrings.ru, ...stemMixerStrings.ru, ...modelStorageStrings.ru },
   // one file for the whole language: what it lacks is read in English, never as a bare key
-  pt: { ...enAll, ...pt, ...exportStrings.pt, ...stemMixerStrings.pt, ...modelStorageStrings.pt },
+  pt: { ...enAll, ...acePt, ...pt, ...exportStrings.pt, ...stemMixerStrings.pt, ...modelStorageStrings.pt },
 };
