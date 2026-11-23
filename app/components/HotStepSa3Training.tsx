@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { fetchSa3Training, installSa3Training, startSa3Training, type Dataset, type HotStepTrainingTarget, type Sa3TrainingSettings, type Sa3TrainingStatus } from '../services/training';
 
 export const sa3TrainingText: Record<string, [string, string, string, string, string, string, string]> = {
@@ -63,7 +64,7 @@ export function HotStepSa3Training({ target, dataset, busy, language, labels, ca
   const eligible = dataset.items.length > 0 && dataset.items.every(item => item.style.trim() && (item.instrumental || (target === 'heartmula' && item.lyrics.trim())));
   const current = Object.fromEntries(fields.map(([key, fallback]) => [key, Number(settings[key] || fallback)])) as Sa3TrainingSettings;
   const valid = fields.every(([key, , min, max, step]) => current[key] >= min && current[key] <= max && (step !== 1 || Number.isInteger(current[key])));
-  const size = status?.missing_bytes ? new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(status.missing_bytes / (1024 ** 3)) + ' GiB' : '';
+  const size = status?.missing_bytes ? formatSize(status.missing_bytes, language) : '';
   const progress = status?.download;
   const percent = progress?.total_bytes ? Math.min(100, Math.floor((100 * progress.downloaded_bytes) / progress.total_bytes)) : undefined;
 

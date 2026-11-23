@@ -7,6 +7,10 @@ import { nativeMusicSourceStrings, musicSourceStrings } from '../i18n/musicSourc
 import { AudioCppModelInstall } from './HeartMuLaControls';
 import { AudioWaveform } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
+import { FieldLabel } from './kit/FieldLabel';
+import { toolsPageStrings } from '../i18n/toolsPage';
+import { formatSize } from '../services/fileSize';
 
 const strings = {
   en: { heading: 'Sound effects', description: 'Sound description (English or Chinese)', create: 'Generate sound effect', checking: 'Checking MOSS-SoundEffect…', unavailable: 'MOSS-SoundEffect is unavailable.', saved: 'Sound effects are saved in the library.' },
@@ -28,8 +32,7 @@ type Status = {
   duration_seconds: { min: number; max: number; default: number };
 };
 
-export function SoundEffectsTool({ card, control, busy, onGenerate }: {
-  card: string;
+export function SoundEffectsTool({ control, busy, onGenerate }: {
   control: string;
   busy: boolean;
   onGenerate: (request: YueRequest) => void;
@@ -58,42 +61,49 @@ export function SoundEffectsTool({ card, control, busy, onGenerate }: {
     return () => abort.abort();
   }, [revision]);
 
+  const page = toolsPageStrings[language];
   const limit = status?.duration_seconds;
-  const seconds = duration.trim() ? Number(duration) : limit?.default;
-  const canCreate = Boolean(status?.ready && description.trim() && !busy && limit && seconds != null &&
-    seconds >= limit.min && seconds <= limit.max);
+  useEffect(() => { if (limit && !duration) setDuration(String(limit.default)); }, [limit, duration]);
+  const seconds = Number(duration);
+  const inRange = Boolean(limit && duration.trim() && seconds >= limit.min && seconds <= limit.max);
+  const reason = !description.trim() ? page.describeSound : busy ? page.otherGeneration : null;
+  const canCreate = Boolean(status?.ready && inRange && !reason);
+  const download = status && !status.ready && status.missing_bytes > 0 && status.installable;
 
-  return <section className={card} aria-label={text.heading}>
-    <h2 className="flex items-center gap-2 text-sm font-semibold"><AudioWaveform size={16} className="text-pink-500" aria-hidden />{text.heading}</h2>
-    {error ? <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <p role="alert">{text.unavailable}</p>
+  return <ToolCard icon={<AudioWaveform size={17} />} title={text.heading}
+    state={status && (status.ready ? <ToolState tone="ready">{page.ready}</ToolState>
+      : download ? <ToolState tone="missing">{page.needsDownload(formatSize(status.missing_bytes, language))}</ToolState>
+        : <ToolState tone="blocked">{page.unavailable}</ToolState>)}
+    description={page.sfxDescription}
+    action={error ? <div className="flex flex-wrap items-center gap-2 text-xs">
+        <p role="alert" className="text-rose-600 dark:text-rose-300">{text.unavailable}</p>
         <SecondaryButton onClick={() => { setError(false); refresh(value => value + 1); }}>{common.refresh}</SecondaryButton>
       </div>
-      : !status ? <p role="status" className="mt-2 text-xs">{text.checking}</p>
-      : <div className="mt-2 space-y-2 text-xs">
-        {status.missing_bytes > 0 && status.installable ? <AudioCppModelInstall model={status.id} bytes={status.missing_bytes}
+      : !status ? <p role="status" className="text-xs text-zinc-500 dark:text-zinc-400">{text.checking}</p>
+      : download ? <AudioCppModelInstall model={status.id} bytes={status.missing_bytes} fit
           target={{ catalogue: '/v1/tools/sound-effects/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
-          language={language} onInstalled={() => refresh(value => value + 1)} secondary />
-          : !status.ready && <p role="status">{model.unavailable}</p>}
-        <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{model.modelLicense} ↗</a>
-      </div>}
-    <div className="mt-3 grid gap-2 text-xs">
-      <label className="grid gap-1">
-        <span>{text.description}</span>
-        <textarea rows={3} value={description} className={control} onChange={event => setDescription(event.target.value)} />
-      </label>
-      <label className="grid gap-1">
-        <span>{model.duration}</span>
-        <input type="number" className={control} value={duration} min={limit?.min} max={limit?.max}
-          step={0.1} placeholder={String(limit?.default ?? 10)} onChange={event => setDuration(event.target.value)} />
-      </label>
-    </div>
-    <PrimaryButton disabled={!canCreate} className="mt-3"
-      onClick={() => {
-        if (!status || !canCreate) return;
-        onGenerate({ music_source: { kind: 'audio_cpp', model: status.id }, style: description.trim(),
-          lyrics: '', duration_seconds: seconds, output_format: 'wav32' });
-      }}>{text.create}</PrimaryButton>
-    <p className="mt-2 text-xs text-zinc-500">{text.saved}</p>
-  </section>;
+          language={language} onInstalled={() => refresh(value => value + 1)} />
+      : !status.ready ? <p role="status" className="text-xs">{model.unavailable}</p>
+      : <>
+        <PrimaryButton disabled={!canCreate}
+          onClick={() => {
+            if (!canCreate) return;
+            onGenerate({ music_source: { kind: 'audio_cpp', model: status.id }, style: description.trim(),
+              lyrics: '', duration_seconds: seconds, output_format: 'wav32' });
+          }}>{text.create}</PrimaryButton>
+        <ActionReason>{reason ?? page.inLibrary}</ActionReason>
+      </>}
+    footer={status && <>{page.model}: {status.name} · <a href={status.license_url} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-pink-600 hover:underline">{page.license} ↗</a></>}>
+    <label className="grid text-xs">
+      <FieldLabel>{page.sfxPrompt}</FieldLabel>
+      <span className="mb-1 text-zinc-500 dark:text-zinc-400">{page.sfxPromptHint}</span>
+      <textarea rows={3} value={description} className={control} onChange={event => setDescription(event.target.value)} />
+    </label>
+    <label className="grid text-xs">
+      <FieldLabel>{page.duration}</FieldLabel>
+      {limit && <span className="mb-1 text-zinc-500 dark:text-zinc-400">{page.range(new Intl.NumberFormat(language).format(limit.min), new Intl.NumberFormat(language).format(limit.max))}</span>}
+      <input type="number" className={`${control} max-w-32`} value={duration} min={limit?.min} max={limit?.max}
+        step={0.1} onChange={event => setDuration(event.target.value)} />
+    </label>
+  </ToolCard>;
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { createPortal } from 'react-dom';
 import { Check, FolderDown, FolderOpen, Loader2, Minimize2, Move, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -12,15 +13,9 @@ import { Toast } from './Toast';
  * progress while it is written and a way to it in Explorer once it is.
  */
 
-const size = (bytes?: number | null) => {
-  if (!bytes || bytes <= 0) return '';
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
-};
-
 export const FilesPanel: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const size = (bytes?: number | null) => (bytes && bytes > 0 ? formatSize(bytes, language) : '');
   const [files, setFiles] = useState<SavingFile[]>([]);
   const [error, setError] = useState<string>();
   const [, redraw] = useState(0);

@@ -31,11 +31,11 @@ it('keeps Create disabled until the effect model is ready, then sends the descri
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root.render(<SoundEffectsTool card="" control="" busy={false} onGenerate={generate} />));
+  await act(async () => root.render(<SoundEffectsTool control="" busy={false} onGenerate={generate} />));
   const button = (name: string) => Array.from(host.querySelectorAll('button')).find(el => el.textContent === name)!;
   expect(host.querySelector(`a[href="${source}"]`)).toBeNull();
   expect(Array.from(host.querySelectorAll('button')).some(el => el.textContent?.startsWith('Download MOSS-SoundEffect v2'))).toBe(true);
-  expect(button('Generate sound effect').disabled).toBe(true);
+  expect(button('Generate sound effect'), 'the action waits until the model is here').toBeUndefined();
 
   ready = true;
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_100)); });

@@ -20,7 +20,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const model = { id: 'apollo', label: 'Apollo', bytes: 66_398_592, note: 'CC BY-SA 4.0', installed: true };
+const model = { id: 'apollo', label: 'Apollo', bytes: 66_398_592, note: 'Apollo (JusperLee) weights under CC BY-SA 4.0', installed: true };
 const ready = { model, runtime_installed: true, ready: true, missing_bytes: 0, error: null, download: null, run: null };
 
 function serve(status: unknown, answers: Record<string, { status: number; body: unknown }> = {}) {
@@ -35,7 +35,7 @@ async function open(props: Partial<React.ComponentProps<typeof RestoreTool>> = {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root.render(<RestoreTool songId="s1" songTitle="Song" restoredId={null} chosenIsRestored={false} card="" onDone={() => undefined} {...props} />));
+  await act(async () => root.render(<RestoreTool songId="s1" songTitle="Song" restoredId={null} chosenIsRestored={false} onDone={() => undefined} {...props} />));
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 }
 
@@ -51,7 +51,7 @@ describe('RestoreTool', () => {
     await open();
     expect(button('Download Apollo')?.textContent).toContain('63 MB');
     expect(host.textContent, "the service's English note is not repeated in the window's language").not.toContain(model.note);
-    expect(button('restoreStart')!.disabled).toBe(true);
+    expect(button('restoreStart'), 'the action waits until Apollo is here').toBeUndefined();
     await click(button('Download Apollo'));
     expect(calls.some(call => call.path === '/v1/restore/install')).toBe(true);
   });
@@ -83,8 +83,8 @@ describe('RestoreTool', () => {
     act(() => root.unmount());
     serve({ ...ready, run: { song_id: 's1', title: 'Song', stage: 'done', started_ms: 1, done: true, error: null, used_gpu: true, library_song: 'r1' } });
     await open();
-    expect(host.textContent).toContain('restoredLabel');
-    expect(host.querySelector('button[title="download"]')).not.toBeNull();
+    expect(host.textContent).toContain('Song · restored');
+    expect(button('Save WAV'), 'the result has a labelled save').toBeDefined();
   });
 
   it('says a stopped run stopped, and a failure in words', async () => {

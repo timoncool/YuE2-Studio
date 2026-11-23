@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { FolderCog, Loader2, RotateCcw, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import type { TranslationKey } from '../i18n/translations';
@@ -31,7 +32,6 @@ const OUTLINE =
 const PRIMARY =
   'inline-flex items-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50';
 
-const size = (bytes: number) => (bytes < 1024 ** 3 ? `${Math.round(bytes / 1024 ** 2)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`);
 
 async function answer(response: Response): Promise<Record<string, unknown>> {
   const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -45,7 +45,8 @@ async function answer(response: Response): Promise<Record<string, unknown>> {
  * were, so nothing else in the studio changes.
  */
 export const ModelStorageCard: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const size = (value: number) => formatSize(value, language);
   const [storage, setStorage] = useState<Storage | null>(null);
   const [move, setMove] = useState<Move | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);

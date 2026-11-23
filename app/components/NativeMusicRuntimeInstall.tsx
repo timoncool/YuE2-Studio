@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { useI18n } from '../context/I18nContext';
 import { signedUpdateStrings } from '../i18n/signedUpdates';
 import { apiUrl } from '../services/apiBase';
@@ -65,7 +66,7 @@ export function NativeMusicRuntimeInstall({ engine, update, onInstalled }: {
   const download = status.download;
   const busy = waiting || Boolean(download && !download.done);
   const percent = download?.total_bytes ? Math.floor(100 * download.downloaded_bytes / download.total_bytes) : 0;
-  const size = status.bytes ? new Intl.NumberFormat(language, { style: 'unit', unit: 'gigabyte', maximumFractionDigits: 1 }).format(status.bytes / 2 ** 30) : '';
+  const size = status.bytes ? formatSize(status.bytes, language) : '';
   const action = update ? signedUpdateStrings[language].update : t('download');
   return <div className="space-y-2 text-xs">
     {busy ? <>

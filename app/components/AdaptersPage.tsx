@@ -149,7 +149,7 @@ const CatalogCard: React.FC<{
           ) : (
             <button type="button" role="checkbox" aria-checked={selected} onClick={onToggle} className={`${OUTLINE} ${selected ? 'border-pink-400 text-pink-600 dark:border-pink-500/60 dark:text-pink-300' : ''}`}>
               {selected ? <CheckSquare size={13} /> : <Square size={13} />}
-              {megabytes(entry.bytes)}
+              {megabytes(entry.bytes, language)}
             </button>
           )}
     />
@@ -205,7 +205,7 @@ const InstalledCard: React.FC<{
             </p>
           )}
           <p className="mt-1 text-[11px] text-zinc-500">
-            {adapter.author ? `${adapter.author} · ` : ''}{megabytes(adapter.bytes)}
+            {adapter.author ? `${adapter.author} · ` : ''}{megabytes(adapter.bytes, language)}
             {!editing && adapter.trigger ? ` · ${adapter.trigger}` : ''}
           </p>
         </div>
@@ -286,6 +286,7 @@ const InstalledCard: React.FC<{
  */
 const HubPanel: React.FC<{ current?: DitFamily | null; downloading: boolean; onStarted: () => void }> = ({ current, downloading, onStarted }) => {
   const { t } = useStrings();
+  const { language } = useI18n();
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [repos, setRepos] = useState<HubRepo[] | null>(null);
@@ -418,7 +419,7 @@ const HubPanel: React.FC<{ current?: DitFamily | null; downloading: boolean; onS
                           className={`${OUTLINE} shrink-0 ${picked.includes(file.path) ? 'border-pink-400 text-pink-600 dark:border-pink-500/60 dark:text-pink-300' : ''}`}
                         >
                           {picked.includes(file.path) ? <CheckSquare size={13} /> : <Square size={13} />}
-                          {megabytes(file.bytes)}
+                          {megabytes(file.bytes, language)}
                         </button>
                       )}
                     </div>
@@ -434,7 +435,7 @@ const HubPanel: React.FC<{ current?: DitFamily | null; downloading: boolean; onS
         <div className="sticky bottom-0 -mx-1 bg-white/90 px-1 py-3 backdrop-blur-sm dark:bg-suno/90">
           <PrimaryButton onClick={() => void download()} disabled={starting}>
             {starting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            {t('adaptersDownloadSelected')} · {chosen.length} · {megabytes(chosen.reduce((sum, file) => sum + file.bytes, 0))}
+            {t('adaptersDownloadSelected')} · {chosen.length} · {megabytes(chosen.reduce((sum, file) => sum + file.bytes, 0), language)}
           </PrimaryButton>
         </div>
       )}
@@ -608,7 +609,7 @@ export function AdaptersPage(): React.ReactElement {
 
         {download && !download.done && (
           <div className={CARD}>
-            <WorkProgress label={`${t('adaptersDownloading')} · ${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
+            <WorkProgress label={`${t('adaptersDownloading')} · ${megabytes(download.downloaded_bytes, language)} / ${megabytes(download.total_bytes, language)}`}
               percent={Math.min(100, Math.floor((100 * download.downloaded_bytes) / Math.max(1, download.total_bytes)))} />
             <SecondaryButton onClick={() => void cancelAdapterDownload()} className="mt-3"><X size={13} />{t('adaptersCancel')}</SecondaryButton>
           </div>
@@ -721,7 +722,7 @@ export function AdaptersPage(): React.ReactElement {
                 </button>
                 <PrimaryButton onClick={() => void downloadSelected()} disabled={starting || chosen.length === 0}>
                   {starting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-                  {t('adaptersDownloadSelected')}{chosen.length > 0 ? ` · ${chosen.length} · ${megabytes(chosen.reduce((sum, entry) => sum + entry.bytes, 0))}` : ''}
+                  {t('adaptersDownloadSelected')}{chosen.length > 0 ? ` · ${chosen.length} · ${megabytes(chosen.reduce((sum, entry) => sum + entry.bytes, 0), language)}` : ''}
                 </PrimaryButton>
               </div>
             )}

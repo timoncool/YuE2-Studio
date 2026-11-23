@@ -218,7 +218,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
   return (
     <section className={CARD}>
       <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white"><Download size={16} className="text-pink-500" />{t('trainingSetupTitle')}</p>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingSetupNeeds').replace('{size}', downloadSize(total)).replace('{vram}', String(state.min_vram_gb))}</p>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingSetupNeeds').replace('{size}', downloadSize(total, language)).replace('{vram}', String(state.min_vram_gb))}</p>
       {!state.card_trains && (
         <p role="note" className="mt-2 text-sm text-amber-700 dark:text-amber-300">
           {state.card_needs === 'driver' ? t('trainingNeedsDriver').replace('{driver}', String(state.trainer_driver ?? '')) : t(state.card_needs === 'architecture' ? 'trainingNeedsTuring' : 'trainingNeedsNvidia')}
@@ -228,7 +228,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
         {state.pack.map(file => (
           <li key={file.id} className="flex items-center justify-between gap-3 text-xs text-zinc-700 dark:text-zinc-200">
             <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{trainingAssetLabel(language, file)}</span>
-            <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes)}</span>
+            <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes, language)}</span>
           </li>
         ))}
       </ul>
@@ -236,7 +236,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
         <div className="mt-3">
           <div className="flex items-center justify-between text-xs text-zinc-500">
             <span className="inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin text-pink-500" />{percent.toFixed(1)}%</span>
-            <span className="tabular-nums">{downloadSize(download.downloaded_bytes)} / {downloadSize(download.total_bytes)}</span>
+            <span className="tabular-nums">{downloadSize(download.downloaded_bytes, language)} / {downloadSize(download.total_bytes, language)}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
@@ -246,7 +246,7 @@ const PackCard: React.FC<{ state: TrainingState; onError: (message: string) => v
       ) : (
         missing > 0 && state.card_trains && (
           <button type="button" onClick={() => void installTrainingPack().then(onChanged).catch(problem => onError(errorText(problem)))} className={`${PRIMARY} mt-3`}>
-            <Download size={15} />{t('trainingDownload')} · {downloadSize(missing)}
+            <Download size={15} />{t('trainingDownload')} · {downloadSize(missing, language)}
           </button>
         )
       )}
@@ -271,12 +271,12 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
   return (
     <section className={CARD}>
       <p className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white"><Headphones size={16} className="text-pink-500" />{t('trainingListenTitle')}</p>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingListenIntro').replace('{size}', downloadSize(missing))}</p>
+      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('trainingListenIntro').replace('{size}', downloadSize(missing, language))}</p>
       <ul className="mt-3 space-y-1.5">
         {listen.pack.map(file => (
           <li key={file.id} className="flex items-center justify-between gap-3 text-xs text-zinc-700 dark:text-zinc-200">
             <span className="flex items-center gap-2">{file.installed ? <Check size={13} className="text-emerald-500" /> : <Square size={13} className="text-zinc-400" />}{trainingAssetLabel(language, file)}</span>
-            <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes)}</span>
+            <span className="tabular-nums text-zinc-500">{downloadSize(file.bytes, language)}</span>
           </li>
         ))}
       </ul>
@@ -284,7 +284,7 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
         <div className="mt-3">
           <div className="flex items-center justify-between text-xs text-zinc-500">
             <span className="inline-flex items-center gap-1.5"><Loader2 size={13} className="animate-spin text-pink-500" />{percent.toFixed(1)}%</span>
-            <span className="tabular-nums">{downloadSize(download.downloaded_bytes)} / {downloadSize(download.total_bytes)}</span>
+            <span className="tabular-nums">{downloadSize(download.downloaded_bytes, language)} / {downloadSize(download.total_bytes, language)}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
             <div className="h-full bg-linear-to-r from-orange-500 to-pink-600 transition-[width]" style={{ width: `${percent}%` }} />
@@ -293,7 +293,7 @@ const ListenCard: React.FC<{ state: TrainingState; onError: (message: string) =>
         </div>
       ) : (
         <button type="button" onClick={() => void installListenPack().then(onChanged).catch(problem => onError(errorText(problem)))} className={`${OUTLINE} mt-3`}>
-          <Download size={14} />{t('trainingDownload')} · {downloadSize(missing)}
+          <Download size={14} />{t('trainingDownload')} · {downloadSize(missing, language)}
         </button>
       )}
       {listen.download?.done && listen.download.error && listen.download.error !== 'cancelled' && (
@@ -855,7 +855,7 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
         {alternateBase && base && !selectedPackReady && !(baseDownload && !baseDownload.done) &&
           <button type="button" className={`${OUTLINE} mt-2`}
             disabled={installingBase || !state.card_trains} onClick={() => void installBase(base.id)}>
-            <Download size={14} />{t('trainingDownload')}{!base.installed && ` · ${downloadSize(base.bytes)}`}
+            <Download size={14} />{t('trainingDownload')}{!base.installed && ` · ${downloadSize(base.bytes, language)}`}
           </button>}
         {baseDownload && !baseDownload.done && <div className="mt-2 flex items-center gap-2">
           <progress aria-label={t('trainingBase')} className="w-full" value={baseDownload.downloaded_bytes} max={Math.max(1, baseDownload.total_bytes)} />

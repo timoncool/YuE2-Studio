@@ -34,15 +34,16 @@ it('uploads the original clip and sends the stored name to ControlFoley', async 
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
-  await act(async () => root.render(<ControlFoleyTool card="" control="" busy={false} onGenerate={generate} />));
-  const button = Array.from(host.querySelectorAll('button')).find(element => element.textContent === 'Generate sound')!;
-  expect(button.disabled).toBe(true);
+  await act(async () => root.render(<ControlFoleyTool control="" busy={false} onGenerate={generate} />));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  const generateButton = () => Array.from(host.querySelectorAll('button')).find(element => element.textContent === 'Generate sound')!;
+  expect(generateButton().disabled).toBe(true);
   const input = host.querySelector('input[type=file]')!;
   Object.defineProperty(input, 'files', { value: [source] });
   await act(async () => {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await act(async () => button.click());
+  await act(async () => generateButton().click());
   expect(fetcher).toHaveBeenCalledWith(expect.stringContaining('/v1/videos?name=foley-'), { method: 'POST', body: source });
   expect(generate).toHaveBeenCalledWith({
     music_source: { kind: 'audio_cpp', model: 'controlfoley' }, controlfoley_video: 'stored-clip.mp4',

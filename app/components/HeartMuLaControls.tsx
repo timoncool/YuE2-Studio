@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiUrl } from '../services/apiBase';
+import { formatGigabytes } from '../services/fileSize';
 import { useI18n } from '../context/I18nContext';
 import { nativeMusicSourceStrings } from '../i18n/musicSource';
 import { nativeModelSetStrings } from '../i18n/nativeModelSet';
@@ -94,7 +95,7 @@ type ModelInstallTarget =
   | { model: LegacyManagedModel; target?: never }
   | { model: string; target: { catalogue: string; installPath: string; label: string } };
 
-export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target, secondary, compact }: ModelInstallTarget & {
+export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target, secondary, compact, fit }: ModelInstallTarget & {
   bytes: number;
   licenseUrl?: string;
   language: string;
@@ -103,6 +104,8 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   secondary?: true;
   /** The model's name stands beside the button, so the button says only the size. */
   compact?: true;
+  /** The main action of a tool card: as wide as its words, like the action it stands in for. */
+  fit?: true;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -185,7 +188,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   }
 
   const sets = nativeModelSetStrings[language as keyof typeof nativeModelSetStrings] ?? nativeModelSetStrings.en;
-  const gb = (value: number) => new Intl.NumberFormat(language, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(value / 2 ** 30);
+  const gb = (value: number) => formatGigabytes(value, language);
   return <div className="space-y-1 text-xs">
     {busy ? (
       <WorkProgress label={`${installing}${progress ? ` · ${sets.of(gb(progress.done), gb(progress.total))}` : ''}`} percent={percent ?? null} />
@@ -193,7 +196,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
       secondary
         ? <SecondaryButton onClick={() => void start()} aria-label={bytes > 0 ? sets.download(name, gb(bytes)) : install}>
           <Download size={13} aria-hidden />{bytes > 0 ? (compact ? sets.downloadSize(gb(bytes)) : sets.download(name, gb(bytes))) : install}</SecondaryButton>
-        : <PrimaryButton className="w-full" onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
+        : <PrimaryButton className={fit ? '' : 'w-full'} onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
     )}
     {busy && canCancel && <SecondaryButton className="mt-2" disabled={cancelling}
       onClick={() => void cancel()}>{t('cancelDownload')}</SecondaryButton>}

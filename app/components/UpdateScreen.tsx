@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { ArrowRight, Check, Download, Loader2, RotateCw, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
@@ -33,7 +34,6 @@ const WHY: Record<string, TranslationKey> = {
   'unused': 'updateWhyUnused',
 };
 
-const bytes = (value: number) => (value < 1024 ** 3 ? `${Math.round(value / 1024 ** 2)} MB` : `${(value / 1024 ** 3).toFixed(1)} GB`);
 
 async function answer(response: Response): Promise<UpdateAnswer> {
   const body = await response.json().catch(() => null);
@@ -46,7 +46,8 @@ export const readUpdatePlan = () => fetch('/setup/update', { headers: SELF_READ 
 /** The update screen's plan: three groups, the totals and one button that downloads it all and then removes what is
  * no longer needed. `onDone` follows a finished update; `onLater` is given where the screen can be put off. */
 export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => void; quietWhenEmpty?: boolean }> = ({ onDone, onLater, quietWhenEmpty = false }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const bytes = (value: number) => formatSize(value, language);
   const [state, setState] = useState<UpdateAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -180,7 +181,8 @@ export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => voi
 
 /** The screen at the first start of a release whose plan is not empty, built like the setup screen. */
 export const UpdateScreen: React.FC<{ onLeave: () => void }> = ({ onLeave }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const bytes = (value: number) => formatSize(value, language);
   return (
     <div className="flex h-full w-full justify-center overflow-y-auto bg-white px-5 py-10 dark:bg-suno">
       <div className="w-full max-w-2xl">

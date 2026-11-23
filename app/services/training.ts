@@ -150,6 +150,7 @@ export interface TrainingState {
 }
 
 import type { RuntimeArchive } from '../components/ManualDownloads';
+import { formatSize } from './fileSize';
 import { SELF_READ } from './studioQueries';
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
@@ -243,12 +244,7 @@ export const listenCheckpoints = (id: string) =>
 export const installCheckpoint = (id: string, step: number, name?: string) =>
   call<{ id: string }>(`/v1/training/runs/${id}/checkpoints/${step}/install`, json('POST', { name }));
 
-export function downloadSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`;
-  if (bytes < 1024 ** 3) return `${Math.round(bytes / 1024 ** 2)} MB`;
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-}
+export const downloadSize = formatSize;
 export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
 /** Has the writing assistant write a song's structured caption, for engines that train on one. */

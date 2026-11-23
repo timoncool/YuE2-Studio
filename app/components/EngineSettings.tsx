@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { SELF_READ, useSetupStatus } from '../services/studioQueries';
 import { AlertTriangle, Check, FolderOpen, Loader2, RotateCw, Terminal } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -354,7 +355,7 @@ export const EngineSettings: React.FC = () => {
               </div>
             ) : hip.supported && !hip.installed && (
               <button type="button" className="underline" onClick={() => void controlHip('POST')}>
-                {tt('hipInstall')}{hip.missing_bytes > 0 ? ` · ${Math.ceil(hip.missing_bytes / 2 ** 20)} MiB` : ''}
+                {tt('hipInstall')}{hip.missing_bytes > 0 ? ` · ${formatSize(hip.missing_bytes, language)}` : ''}
               </button>
             )}
           </div>
@@ -378,7 +379,7 @@ export const EngineSettings: React.FC = () => {
           >
             <option value="">{t('gpuChoiceFirst')}</option>
             {cardMissing && <option value={String(chosenCard)}>{t('gpuChoiceMissing').replace('{index}', String(chosenCard))}</option>}
-            {cards.cards.map(card => <option key={card.uuid} value={card.uuid}>{`${card.index}: ${card.name} · ${card.memory_gb.toFixed(0)} GB`}</option>)}
+            {cards.cards.map(card => <option key={card.uuid} value={card.uuid}>{`${card.index}: ${card.name} · ${formatSize(card.memory_gb * 1024 ** 3, language, 0)}`}</option>)}
           </select>
           {cardMissing ? (
             <span className="mt-2 block text-xs leading-5 text-amber-600 dark:text-amber-300">{t('gpuChoiceGone').replace('{index}', String(chosenCard))}</span>

@@ -7,6 +7,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { formatSize } from './fileSize';
 import type { Language } from '../i18n/translations';
 import { queryClient, SELF_READ } from './studioQueries';
 
@@ -259,7 +260,7 @@ export function usesFromSettings(settings: Record<string, unknown>): AdapterUse[
   return uses;
 }
 
-export const megabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
+export const megabytes = formatSize;
 
 /** Installed adapters and slots, kept current while the library changes. */
 export type AdapterLibrary = { installed: InstalledAdapter[]; slots: AdapterSlot[]; model: DitFamily | null };

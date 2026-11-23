@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { YueRequest } from '../types';
 import { useI18n } from '../context/I18nContext';
@@ -8,6 +8,10 @@ import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSourc
 import { AudioCppModelInstall } from './HeartMuLaControls';
 import { Clapperboard, FileVideo } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
+import { FieldLabel } from './kit/FieldLabel';
+import { toolsPageStrings } from '../i18n/toolsPage';
+import { formatSize } from '../services/fileSize';
 
 const strings = {
   en: { description: 'Makes the sound for a video — steps, hits, ambience — from the picture itself and, if you like, a short description.', chooseVideo: 'Choose a video', heading: 'Sound from video', source: 'Original video', prompt: 'Sound description (optional)', limit: 'Seconds from the start of the video', create: 'Generate sound', error: 'Could not import the video.', ffmpeg: 'Install FFmpeg and make it available on the Studio computer’s PATH.' },
@@ -28,8 +32,7 @@ type Model = {
   duration_seconds: { min: number; max: number; default: number };
 };
 
-export function ControlFoleyTool({ card, control, busy, onGenerate }: {
-  card: string;
+export function ControlFoleyTool({ control, busy, onGenerate }: {
   control: string;
   busy: boolean;
   onGenerate: (request: YueRequest) => void;
@@ -49,13 +52,19 @@ export function ControlFoleyTool({ card, control, busy, onGenerate }: {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const status = model.data;
+  const page = toolsPageStrings[language];
   const limits = status?.duration_seconds;
-  const seconds = duration.trim() ? Number(duration) : limits?.default;
-  const canCreate = Boolean(source && status?.ready && !busy && !uploading && limits && seconds != null &&
-    seconds >= limits.min && seconds <= limits.max);
+  useEffect(() => { if (limits && !duration) setDuration(String(limits.default)); }, [limits, duration]);
+  const seconds = Number(duration);
+  const inRange = Boolean(limits && duration.trim() && seconds >= limits.min && seconds <= limits.max);
+  const noFfmpeg = Boolean(status?.missing.includes('FFmpeg'));
+  const reason = noFfmpeg ? text.ffmpeg : !source ? page.chooseVideo : busy ? page.otherGeneration : null;
+  const canCreate = Boolean(status?.ready && inRange && !reason && !uploading);
+  const download = status && !status.ready && status.missing_bytes > 0 && status.installable;
+  const [queued, setQueued] = useState(false);
 
-  async function generate() {
-    if (!source || !canCreate) return;
+  async function generate(): Promise<boolean> {
+    if (!source || !canCreate) return false;
     setUploading(true);
     setError('');
     try {
@@ -73,51 +82,53 @@ export function ControlFoleyTool({ card, control, busy, onGenerate }: {
       if (!imported.name) throw new Error(text.error);
       onGenerate({ music_source: { kind: 'audio_cpp', model: 'controlfoley' }, controlfoley_video: imported.name,
         style: description.trim(), lyrics: '', duration_seconds: seconds, output_format: 'wav32' });
+      return true;
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : text.error);
+      return false;
     } finally {
       setUploading(false);
     }
   }
 
-  return <section className={card} aria-label={text.heading}>
-    <h2 className="flex items-center gap-2 text-sm font-semibold"><Clapperboard size={16} className="text-pink-500" aria-hidden />{text.heading}</h2>
-    <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">{text.description}</p>
-    {model.isError && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-      <p role="alert">{modelText.error}</p>
-      <SecondaryButton onClick={() => void model.refetch()}>{common.refresh}</SecondaryButton>
-    </div>}
-    {model.isPending && <p role="status" className="mt-2 text-xs">{modelText.loading}</p>}
-    {status && <div className="mt-2 space-y-2 text-xs">
-      {status.missing.includes('FFmpeg') && <p role="status">{text.ffmpeg}</p>}
-      {status.missing_bytes > 0 && status.installable && <AudioCppModelInstall model="controlfoley" bytes={status.missing_bytes}
-        target={{ catalogue: '/v1/tools/controlfoley/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
-        language={language} onInstalled={() => void model.refetch()} secondary />}
-      {!status.ready && !(status.missing_bytes > 0 && status.installable) && !status.missing.includes('FFmpeg') &&
-        <p role="status">{modelText.unavailable}</p>}
-      <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{modelText.modelLicense} ↗</a>
-    </div>}
-    <div className="mt-3 grid gap-2 text-xs">
-      <div className="grid gap-1">
-        <span>{text.source}</span>
-        <div className="flex min-w-0 items-center gap-2">
-          <SecondaryButton disabled={uploading} onClick={() => fileInput.current?.click()}><FileVideo size={13} />{text.chooseVideo}</SecondaryButton>
-          {source && <span className="min-w-0 truncate text-zinc-600 dark:text-zinc-300" title={source.name}>{source.name}</span>}
-        </div>
-        <input ref={fileInput} type="file" className="hidden" accept=".mp4,.mov,.webm,.mkv" aria-label={text.source}
-          onChange={event => { setSource(event.target.files?.[0]); event.target.value = ''; }} />
+  return <ToolCard icon={<Clapperboard size={17} />} title={text.heading}
+    state={status && (status.ready && !noFfmpeg ? <ToolState tone="ready">{page.ready}</ToolState>
+      : download ? <ToolState tone="missing">{page.needsDownload(formatSize(status.missing_bytes, language))}</ToolState>
+        : <ToolState tone="blocked">{page.unavailable}</ToolState>)}
+    description={text.description}
+    action={model.isError ? <div className="flex flex-wrap items-center gap-2 text-xs">
+        <p role="alert" className="text-rose-600 dark:text-rose-300">{modelText.error}</p>
+        <SecondaryButton onClick={() => void model.refetch()}>{common.refresh}</SecondaryButton>
       </div>
-      <label className="grid gap-1">
-        <span>{text.prompt}</span>
-        <textarea rows={2} className={control} value={description} onChange={event => setDescription(event.target.value)} />
-      </label>
-      <label className="grid gap-1">
-        <span>{text.limit}</span>
-        <input type="number" className={control} value={duration} min={limits?.min} max={limits?.max}
-          step={0.1} placeholder={String(limits?.default ?? 8)} onChange={event => setDuration(event.target.value)} />
-      </label>
-      <PrimaryButton className="justify-self-start" disabled={!canCreate} onClick={() => void generate()}>{text.create}</PrimaryButton>
-      {error && <p role="alert">{error}</p>}
+      : !status ? <p role="status" className="text-xs text-zinc-500 dark:text-zinc-400">{modelText.loading}</p>
+      : download ? <AudioCppModelInstall model="controlfoley" bytes={status.missing_bytes} fit
+          target={{ catalogue: '/v1/tools/controlfoley/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
+          language={language} onInstalled={() => void model.refetch()} />
+      : !status.ready && !noFfmpeg ? <p role="status" className="text-xs">{modelText.unavailable}</p>
+      : <>
+        <PrimaryButton disabled={!canCreate} onClick={() => void generate().then(ok => setQueued(ok))}>{text.create}</PrimaryButton>
+        <ActionReason>{reason ?? (queued ? page.inLibrary : '')}</ActionReason>
+      </>}
+    error={error && <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">{error}</p>}
+    footer={status && <>{page.model}: {status.name} · <a href={status.license_url} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-pink-600 hover:underline">{page.license} ↗</a></>}>
+    <div className="grid text-xs">
+      <FieldLabel hidden>{text.source}</FieldLabel>
+      <div className="flex min-w-0 items-center gap-2">
+        <SecondaryButton disabled={uploading} aria-label={`${text.source}: ${source?.name ?? text.chooseVideo}`} onClick={() => fileInput.current?.click()}><FileVideo size={13} aria-hidden />{text.chooseVideo}</SecondaryButton>
+        {source && <span className="min-w-0 truncate text-zinc-600 dark:text-zinc-300" title={source.name}>{source.name}</span>}
+      </div>
+      <input ref={fileInput} type="file" className="hidden" accept=".mp4,.mov,.webm,.mkv" aria-label={text.source}
+        onChange={event => { setSource(event.target.files?.[0]); setQueued(false); event.target.value = ''; }} />
     </div>
-  </section>;
+    <label className="grid text-xs">
+      <FieldLabel>{text.prompt}</FieldLabel>
+      <textarea rows={2} className={control} value={description} onChange={event => setDescription(event.target.value)} />
+    </label>
+    <label className="grid text-xs">
+      <FieldLabel>{page.foleySeconds}</FieldLabel>
+      {limits && <span className="mb-1 text-zinc-500 dark:text-zinc-400">{page.range(new Intl.NumberFormat(language).format(limits.min), new Intl.NumberFormat(language).format(limits.max))}</span>}
+      <input type="number" className={`${control} max-w-32`} value={duration} min={limits?.min} max={limits?.max}
+        step={0.1} onChange={event => setDuration(event.target.value)} />
+    </label>
+  </ToolCard>;
 }

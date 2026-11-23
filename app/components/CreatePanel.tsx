@@ -1,4 +1,5 @@
 import samplingPresets from '../data/yue-sampling.json';
+import { formatSize } from '../services/fileSize';
 import { yueSamplingStrings } from '../i18n/yueSampling';
 
 import { chooseLastRvcVoice, readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
@@ -1106,7 +1107,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       setDit={native.profile.roles?.dit} onChange={file => setAceStudio(current => ({ ...current, synth_model: file }))} />}
     {linkedFamily && linkedFamily.pairs.length > 1 && <div className="space-y-1.5">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{musicStrings.engine}</p>
-      <CatalogSegments<string> label={musicStrings.engine} value={musicEngine} options={linkedFamily.pairs.map(entry => ({ value: entry.engine, label: entry.label }))}
+      <CatalogSegments<string> fill label={musicStrings.engine} value={musicEngine} options={linkedFamily.pairs.map(entry => ({ value: entry.engine, label: entry.label }))}
         onChange={value => { const linked = linkedFamily.pairs.find(entry => entry.engine === value); if (linked) chooseLinkedPair(linked); }} />
       {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
     </div>}
@@ -3401,7 +3402,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           </div>
           {setup?.hardware?.recommended && (
             <p className="px-1 text-[10px] text-zinc-400">
-              {setup.hardware.gpuName}{setup.hardware.totalVramGb ? `, ${setup.hardware.totalVramGb.toFixed(1)} GB` : ''} · {t('recommendedForMachine')}{' '}
+              {setup.hardware.gpuName}{setup.hardware.totalVramGb ? `, ${formatSize(setup.hardware.totalVramGb * 1024 ** 3, language)}` : ''} · {t('recommendedForMachine')}{' '}
               {setLabel(t, { id: setup.hardware.recommended, label: PROFILE_LABEL[setup.hardware.recommended] ?? setup.hardware.recommended })}
             </p>
           )}
@@ -3511,7 +3512,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             <Switch checked={forever} onChange={enabled => enabled ? setForever(true) : stopForever()} label={tt('generateForever')} hint={tt('generateForeverHint')} />
             <fieldset disabled={!forever} className="space-y-1.5 disabled:opacity-50">
               <legend className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{pauseText.label}</legend>
-              <CatalogSegments<GenerationPauseMode> label={pauseText.label} value={pauseMode} onChange={setPauseMode}
+              <CatalogSegments<GenerationPauseMode> fill label={pauseText.label} value={pauseMode} onChange={setPauseMode}
                 options={[{ value: 'none', label: pauseText.none }, { value: 'fixed', label: pauseText.fixed }, { value: 'random', label: pauseText.random }]} />
               {pauseMode !== 'none' && <div className="flex flex-wrap items-center gap-2">
                 <input aria-label={pauseMode === 'fixed' ? pauseText.minutes : pauseText.minimum}

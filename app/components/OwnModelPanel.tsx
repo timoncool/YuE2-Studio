@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { ExternalLink, FolderOpen, Loader2, Play, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
@@ -22,7 +23,6 @@ export type OwnModelStatus = {
   download?: { asset_id: string; downloaded_bytes: number; total_bytes: number; done: boolean; error: string | null } | null;
 };
 
-const gigabytes = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 /** A choice of the list: an own file by name, or a community model's quantisation. */
 const COMMUNITY = 'community:';
 
@@ -48,6 +48,7 @@ export function choiceOf(status: OwnModelStatus | null): string {
 /** Settings - Models: a YuE2 fine-tune of the person's own, or of the community, run in place of the set's backbone. */
 export const OwnModelPanel: React.FC = () => {
   const { t, language } = useI18n();
+  const gigabytes = (value: number) => formatSize(value, language);
   const tt = t as unknown as (key: string) => string;
   const [status, setStatus] = useState<OwnModelStatus | null>(null);
   const [busy, setBusy] = useState(false);

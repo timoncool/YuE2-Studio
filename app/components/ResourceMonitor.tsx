@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { useSystemResources } from '../services/studioQueries';
 import { createPortal } from 'react-dom';
 import { Minimize2, Move, PictureInPicture2 } from 'lucide-react';
@@ -37,7 +38,7 @@ interface ResourceSnapshot {
 }
 
 const POSITION_KEY = 'music3.resourceMonitor.position';
-const gb = (megabytes: number) => `${(megabytes / 1024).toFixed(1)} GB`;
+const gb = (megabytes: number, language: string) => formatSize(megabytes * 1024 ** 2, language);
 
 function heat(percent: number): string {
   if (percent >= 90) return '#ef4444';
@@ -80,7 +81,7 @@ function storedPosition(): { x: number; y: number } {
 }
 
 export const ResourceMonitor: React.FC<{ isOpen?: boolean }> = ({ isOpen = true }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const resources = useSystemResources<{ poll_interval_ms?: number; resources: ResourceSnapshot }>();
   const snapshot = resources.data?.resources ?? null;
   const unavailable = resources.isError;
@@ -125,15 +126,15 @@ export const ResourceMonitor: React.FC<{ isOpen?: boolean }> = ({ isOpen = true 
       {gpu && (
         <>
           {typeof gpu.utilization_percent === 'number' && <Bar label="GPU" percent={gpu.utilization_percent} value={`${gpu.utilization_percent}%`} />}
-          <Bar label="VRAM" percent={vramPercent} value={`${gb(gpu.vram_used_mb)} / ${gb(gpu.vram_total_mb)}`} />
+          <Bar label="VRAM" percent={vramPercent} value={`${gb(gpu.vram_used_mb, language)} / ${gb(gpu.vram_total_mb, language)}`} />
           {powerPercent !== null && <Bar label={t('power')} percent={powerPercent} value={`${Math.round(gpu.power_draw_w!)} / ${Math.round(gpu.power_limit_w!)} W`} />}
         </>
       )}
-      <Bar label="RAM" percent={ramPercent} value={`${gb(snapshot.ram_used_mb)} / ${gb(snapshot.ram_total_mb)}`} />
+      <Bar label="RAM" percent={ramPercent} value={`${gb(snapshot.ram_used_mb, language)} / ${gb(snapshot.ram_total_mb, language)}`} />
       <Bar label="CPU" percent={snapshot.cpu_percent} value={`${Math.round(snapshot.cpu_percent)}%`} />
       <div className="flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400">
         <span>{snapshot.engine_process ? t('engineProcess') : t('engineOffline')}</span>
-        <span className="tabular-nums">{snapshot.engine_process ? gb(snapshot.engine_process.memory_mb) : '—'}</span>
+        <span className="tabular-nums">{snapshot.engine_process ? gb(snapshot.engine_process.memory_mb, language) : '—'}</span>
       </div>
     </div>
   );
@@ -170,7 +171,7 @@ export const ResourceMonitor: React.FC<{ isOpen?: boolean }> = ({ isOpen = true 
       <button
         type="button"
         onClick={() => setFloating(true)}
-        title={`${gpu ? `${gpu.name}: ` : ''}VRAM ${gb(gpu?.vram_used_mb ?? 0)} / ${gb(gpu?.vram_total_mb ?? 0)}`}
+        title={`${gpu ? `${gpu.name}: ` : ''}VRAM ${gb(gpu?.vram_used_mb ?? 0, language)} / ${gb(gpu?.vram_total_mb ?? 0, language)}`}
         className="flex w-full justify-center py-2"
       >
         <Dot percent={lead} />

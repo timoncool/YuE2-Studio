@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Pause, Play, Repeat } from 'lucide-react';
+import { Download, Pause, Play, Repeat, SlidersHorizontal } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import { useI18n } from '../context/I18nContext';
 import { keepContextRunning } from '../services/audioGraph';
@@ -30,6 +30,8 @@ interface Props {
   mixUrl: string;
   label: (stem: string) => string;
   onDownload: (stem: string) => void;
+  /** Opens the stem in the audio editor. */
+  onEdit?: (stem: string) => void;
 }
 
 interface Graph {
@@ -42,7 +44,7 @@ interface Graph {
 const SLIDER = 'h-1 w-20 accent-pink-500';
 const SMALL_BUTTON = 'grid h-6 w-6 place-items-center rounded text-[10px] font-bold transition';
 
-export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDownload }) => {
+export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDownload, onEdit }) => {
   const { t } = useI18n();
   const elements = useRef(new Map<string, HTMLAudioElement>());
   const graph = useRef<Graph | null>(null);
@@ -253,6 +255,9 @@ export const StemMixer: React.FC<Props> = ({ stems, urlFor, mixUrl, label, onDow
               onChange={event => update(stem, { pan: Number(event.target.value) })} onDoubleClick={() => update(stem, { pan: 0 })} className={SLIDER} />
             <span className="w-9 shrink-0 text-[10px] tabular-nums text-zinc-500">{panLabel(channel.pan)}</span>
             <span className="flex-1" />
+            {onEdit && <button type="button" onClick={() => onEdit(stem)} className="shrink-0 text-zinc-400 hover:text-pink-500" title={t('audioEditor')} aria-label={`${t('audioEditor')}: ${label(stem)}`}>
+              <SlidersHorizontal size={15} />
+            </button>}
             <button type="button" onClick={() => onDownload(stem)} className="shrink-0 text-zinc-400 hover:text-pink-500" title={t('stemMixSave')} aria-label={`${t('stemMixSave')}: ${label(stem)}`}>
               <Download size={15} />
             </button>

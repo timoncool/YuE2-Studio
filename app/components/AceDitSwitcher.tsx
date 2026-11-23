@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { Check, ChevronDown, Download, Loader2, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { nativeModelSetStrings } from '../i18n/nativeModelSet';
@@ -34,7 +35,6 @@ export const splitDit = (file: string): { variant: string; quant: string } => {
   return { variant: stem, quant: QUANT_OF[match[2]] ?? match[2].toLowerCase() };
 };
 
-const bytes = (value: number) => (value < 1024 ** 3 ? `${Math.round(value / 1024 ** 2)} MB` : `${(value / 1024 ** 3).toFixed(1)} GB`);
 
 export function AceDitSwitcher({ value, setDit, onChange }: {
   /** The DiT picked for the song; empty for the set's own. */
@@ -44,6 +44,7 @@ export function AceDitSwitcher({ value, setDit, onChange }: {
   onChange: (file: string) => void;
 }) {
   const { t, language } = useI18n();
+  const bytes = (value: number) => formatSize(value, language);
   const tt = t as unknown as (key: string) => string;
   const cancelLabel = nativeModelSetStrings[language].cancel;
   const [dits, setDits] = useState<Dit[] | null>(null);

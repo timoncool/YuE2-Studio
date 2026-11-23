@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, Loader2, Play, Sparkles, Square } from 'lucide-react';
+import { Download, FileAudio, Loader2, Play, Sparkles, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { apiUrl } from '../services/apiBase';
 import { saveFile } from '../services/saveFile';
@@ -11,6 +11,9 @@ import { StemPlayer } from './StemPlayer';
 import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { CatalogSegments } from './kit/Catalog';
+import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
+import { toolsPageStrings } from '../i18n/toolsPage';
+import { formatSize } from '../services/fileSize';
 
 /**
  * Restore after compression on the tools page: Apollo on the track chosen there or on a
@@ -38,8 +41,6 @@ export interface RestoreStatus {
   run: RestoreRun | null;
 }
 
-const megabytes = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
-
 export const RestoreTool: React.FC<{
   songId: string;
   songTitle: string;
@@ -47,11 +48,12 @@ export const RestoreTool: React.FC<{
   restoredId: string | null;
   /** The chosen track is itself a restoration. */
   chosenIsRestored: boolean;
-  card: string;
   /** A run ended: the library has a new track. */
   onDone: () => void;
-}> = ({ songId, songTitle, restoredId, chosenIsRestored, card, onDone }) => {
-  const { t } = useI18n();
+}> = ({ songId, songTitle, restoredId, chosenIsRestored, onDone }) => {
+  const { t, language } = useI18n();
+  const page = toolsPageStrings[language];
+  const size = (bytes: number) => formatSize(bytes, language);
   const [status, setStatus] = useState<RestoreStatus | null>(null);
   const [from, setFrom] = useState<'song' | 'file'>('song');
   const [file, setFile] = useState<File | null>(null);
@@ -116,106 +118,77 @@ export const RestoreTool: React.FC<{
   const running = Boolean(run && !run.done);
   const download = status?.download && !status.download.done ? status.download : null;
   const replaces = from === 'song' && Boolean(restoredId);
-  const canStart = Boolean(status?.ready) && !running && !busy && (from === 'song' ? Boolean(songId) && !chosenIsRestored : Boolean(file));
+  const reason = from === 'song' ? (!songId ? page.chooseTrack : chosenIsRestored ? t('restoreOfRestored') : null) : !file ? page.chooseFile : null;
+  const canStart = Boolean(status?.ready) && !running && !busy && !reason;
   const resultUrl = run?.library_song ? apiUrl(`/v1/library/media/${encodeURIComponent(run.library_song)}`) : null;
+  const failure = run?.error || error || status?.error || status?.download?.error;
 
   return (
-    <section className={card}>
-      <div className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
-        <Sparkles size={17} className="text-pink-500" /> {t('restoreTitle')}
-      </div>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">{t('restoreHint')}</p>
-
-      <div className="mt-3 inline-flex">
-        <CatalogSegments<'song' | 'file'> label={t('restoreFrom')} value={from} onChange={setFrom}
-          options={[{ value: 'song', label: t('restoreFromSong') }, { value: 'file', label: t('restoreFromFile') }]} />
-      </div>
-      {from === 'song' ? (
-        <p className="mt-2 truncate text-xs text-zinc-500">{songTitle || t('restoreNoSong')}</p>
-      ) : (
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => picker.current?.click()}
-            className={`w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm dark:border-white/10 dark:bg-black/30 ${file ? 'text-zinc-900 dark:text-white' : 'text-zinc-400'}`}
-          >
-            {file?.name ?? t('chooseAudioFile')}
-          </button>
-          <input
-            ref={picker}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={event => { setFile(event.target.files?.[0] ?? null); event.target.value = ''; }}
-          />
-        </div>
-      )}
-      {from === 'song' && chosenIsRestored && <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('restoreOfRestored')}</p>}
-
-      {status && !status.ready && (
-        <div className="mt-3 rounded-lg border border-zinc-200 p-3 dark:border-white/10">
-          {status.download?.error && <>
-            <p role="alert" className="text-xs text-rose-600">{status.download.error}</p>
-            <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={t('restoreInstall').replace('{size}', megabytes(status.missing_bytes))} />
-          </>}
-          {download ? (
-            <div className="mt-2 flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <WorkProgress label={`${t('download')} · ${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
-                  percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
-              </div>
-              <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}><Square size={11} />{t('cancelDownload')}</SecondaryButton>
-            </div>
-          ) : (
-            <SecondaryButton className="mt-2" onClick={() => void post('/v1/restore/install', {})} disabled={busy}>
-              <Download size={13} /> {t('restoreInstall').replace('{size}', megabytes(status.missing_bytes))}
-            </SecondaryButton>
-          )}
-        </div>
-      )}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <PrimaryButton onClick={() => (replaces ? setConfirmReplace(true) : void start())} disabled={!canStart}>
-          {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-          {replaces ? t('restoreAgain') : t('restoreStart')}
-        </PrimaryButton>
-        {running && (
-          <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}>
-            <Square size={12} /> {t('restoreStop')}
-          </SecondaryButton>
-        )}
-      </div>
-      <ConfirmDialog
-        isOpen={confirmReplace}
-        title={t('restoreReplaceTitle')}
-        message={t('restoreReplaceMessage')}
-        confirmLabel={t('restoreReplaceConfirm')}
-        onConfirm={() => { setConfirmReplace(false); void start(); }}
-        onCancel={() => setConfirmReplace(false)}
-      />
-
-      {running && run && <WorkProgress label={t('restoreRunning').replace('{title}', run.title)} percent={null} elapsedMs={Math.max(0, Date.now() - run.started_ms)} />}
-
-      {!running && run?.stage === 'done' && resultUrl && (
-        <div className="mt-3 flex items-center gap-2">
+    <ToolCard icon={<Sparkles size={17} />} title={t('restoreTitle')}
+      state={status && (status.ready ? <ToolState tone="ready">{page.ready}</ToolState>
+        : download ? <ToolState tone="busy">{page.downloading('Apollo', size(download.downloaded_bytes), size(download.total_bytes))}</ToolState>
+          : <ToolState tone="missing">{page.needsDownload(size(status.missing_bytes))}</ToolState>)}
+      description={t('restoreHint')}
+      action={status && !status.ready ? (download ? (
+        <div className="flex items-end gap-2">
           <div className="min-w-0 flex-1">
-            <StemPlayer src={resultUrl} label={t('restoredLabel').replace('{title}', run.title)} />
+            <WorkProgress label={page.downloading('Apollo', size(download.downloaded_bytes), size(download.total_bytes))}
+              percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
           </div>
-          <button
-            type="button"
-            onClick={() => void saveFile(`${run.title} - restored.wav`, { url: resultUrl })}
-            className="shrink-0 text-zinc-400 hover:text-pink-500"
-            title={t('download')}
-          >
-            <Download size={15} />
-          </button>
+          <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}><Square size={11} />{t('cancelDownload')}</SecondaryButton>
+        </div>
+      ) : (
+        <PrimaryButton onClick={() => void post('/v1/restore/install', {})} disabled={busy}>
+          <Download size={14} />{page.download('Apollo', size(status.missing_bytes))}
+        </PrimaryButton>
+      )) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <PrimaryButton onClick={() => (replaces ? setConfirmReplace(true) : void start())} disabled={!canStart}>
+              {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              {replaces ? t('restoreAgain') : t('restoreStart')}
+            </PrimaryButton>
+            {running && <SecondaryButton onClick={() => void post('/v1/restore/cancel', {})}><Square size={12} /> {t('restoreStop')}</SecondaryButton>}
+          </div>
+          {reason && !running && <ActionReason>{reason}</ActionReason>}
+          {running && run && <WorkProgress label={t('restoreRunning').replace('{title}', run.title)} percent={null} elapsedMs={Math.max(0, Date.now() - run.started_ms)} />}
+          <ConfirmDialog
+            isOpen={confirmReplace}
+            title={t('restoreReplaceTitle')}
+            message={t('restoreReplaceMessage')}
+            confirmLabel={t('restoreReplaceConfirm')}
+            onConfirm={() => { setConfirmReplace(false); void start(); }}
+            onCancel={() => setConfirmReplace(false)}
+          />
+        </>
+      )}
+      result={<>
+        {!running && run?.stage === 'done' && resultUrl && (
+          <div className="grid gap-2">
+            <StemPlayer src={resultUrl} label={`${run.title} · ${page.restored}`} />
+            <SecondaryButton className="justify-self-start" onClick={() => void saveFile(`${run.title} - restored.wav`, { url: resultUrl })}>
+              <Download size={13} />{page.saveWav}
+            </SecondaryButton>
+          </div>
+        )}
+        {!running && run?.stage === 'stopped' && !error && <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('restoreStopped')}</p>}
+      </>}
+      error={failure && <>
+        <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{failure}</p>
+        {status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={page.download('Apollo', size(status.missing_bytes))} />}
+      </>}
+      footer={<>{page.model}: Apollo (JusperLee) · {page.license} CC BY-SA 4.0</>}>
+      <CatalogSegments<'song' | 'file'> fill label={t('restoreFrom')} value={from} onChange={setFrom}
+        options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
+      {from === 'file' && (
+        <div>
+          <SecondaryButton aria-label={`${page.fromFile}: ${file?.name ?? t('chooseAudioFile')}`} onClick={() => picker.current?.click()}>
+            <FileAudio size={13} aria-hidden />{file?.name ?? t('chooseAudioFile')}
+          </SecondaryButton>
+          <input ref={picker} type="file" accept="audio/*" className="hidden"
+            onChange={event => { setFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
         </div>
       )}
-      {!running && run?.stage === 'stopped' && !error && <p className="mt-3 text-xs text-zinc-500">{t('restoreStopped')}</p>}
-      {(run?.error || error || status?.error) && (
-        <p role="alert" className="mt-3 select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{run?.error || error || status?.error}</p>
-      )}
-      <p className="mt-3 text-[11px] leading-4 text-zinc-400">{t('restoreLicense')}</p>
-    </section>
+    </ToolCard>
   );
 };

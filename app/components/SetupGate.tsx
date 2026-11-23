@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { openRouterSettingsChanged, SELF_READ } from '../services/studioQueries';
 import { Check, ChevronDown, Download, FolderDown, FolderOpen, Loader2, Play, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -7,7 +8,6 @@ import { trainingAssetLabel } from '../i18n/trainingAssets';
 import { poll } from '../services/poll';
 import { DevicePicker, type Device } from './DevicePicker';
 import { ManualDownloads, ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
-import { UpdatePlanView } from './UpdateScreen';
 import { ModelPreset } from './ModelPreset';
 import { MirrorOffer } from './MirrorOffer';
 import { AssistantExtras } from './AssistantSettings';
@@ -104,7 +104,6 @@ type OptionalStatus = {
   active_download?: { asset_id: string; downloaded_bytes: number; total_bytes: number; done: boolean; error?: string | null; manual_archive?: RuntimeArchive } | null;
 };
 
-const bytes = (value: number) => (value < 1024 ** 3 ? `${Math.round(value / 1024 ** 2)} MB` : `${(value / 1024 ** 3).toFixed(1)} GB`);
 
 /** A model file "use models I already have" left in the chosen folder, and why. */
 interface AdoptRefusal {
@@ -168,6 +167,7 @@ export const OptionalGroup: React.FC<{
   focusNote?: string;
 }> = ({ libraryRevision = 0, title, purpose, statusUrl, installUrl, removeUrl, engines, settingsUrl, serverField, cancelUrl, embedded, children, focused, focusNote }) => {
   const { t, language } = useI18n();
+  const bytes = (value: number) => formatSize(value, language);
   const box = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<OptionalStatus | null>(null);
   const [open, setOpen] = useState(Boolean(embedded || focused));
@@ -799,6 +799,7 @@ export const SetupGate: React.FC<{
   selectionRef?: React.Ref<SetupSelection>;
 }> = ({ onReady, mode = 'first-run', focus = null, selectionRef }) => {
   const { t, language } = useI18n();
+  const bytes = (value: number) => formatSize(value, language);
   const tt = t as unknown as (key: string) => string;
   const assistantEngines = useMemo<EngineChoice[]>(() => [
     { id: 'managed', label: 'llama.cpp' },
@@ -1032,7 +1033,7 @@ export const SetupGate: React.FC<{
         {mode === 'first-run' && <div className="mt-5 rounded-xl border border-pink-300/50 bg-pink-50 px-4 py-3 text-sm text-zinc-700 dark:border-pink-500/25 dark:bg-pink-500/10 dark:text-zinc-200">
           {recommended && <>
             <span className="font-semibold text-pink-600 dark:text-pink-400">{t('recommendedForMachine')}</span>{' '}
-            {`${status?.hardware?.gpuName ?? ''}${status?.hardware?.totalVramGb ? `, ${status.hardware.totalVramGb.toFixed(1)} GB` : ''}${status?.hardware?.vulkan ? ` (${t('recommendedOnVulkan')})` : ''} — ${profileLabel(t, recommended)} · ${bytes(recommended.total_bytes)}. `}
+            {`${status?.hardware?.gpuName ?? ''}${status?.hardware?.totalVramGb ? `, ${formatSize(status.hardware.totalVramGb * 1024 ** 3, language)}` : ''}${status?.hardware?.vulkan ? ` (${t('recommendedOnVulkan')})` : ''} — ${profileLabel(t, recommended)} · ${bytes(recommended.total_bytes)}. `}
           </>}
           {t('setupResumable')}
           {status?.hardware?.onProcessor && <span className="mt-2 block text-amber-700 dark:text-amber-300">{t('songsOnProcessor')}</span>}

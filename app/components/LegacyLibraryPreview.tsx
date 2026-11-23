@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatSize } from '../services/fileSize';
 import { FolderOpen, Loader2 } from 'lucide-react';
 import { apiUrl } from '../services/apiBase';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
@@ -33,11 +34,7 @@ type Category = typeof categories[number][0];
 interface ImportIssue { title: string; file: string; code: string; error?: string }
 export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[] }) {
   const { t, songCount, language } = useI18n();
-  function formatSize(bytes: number) {
-    const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as const;
-    const i = Math.min(units.length - 1, Math.floor(Math.log10(Math.max(1, bytes)) / 3));
-    return new Intl.NumberFormat(language, { style: 'unit', unit: units[i], maximumFractionDigits: 2 }).format(bytes / 1000 ** i);
-  }
+  const sizeText = (bytes: number) => formatSize(bytes, language);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [sourceName, setSourceName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -132,8 +129,8 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
         {!sources.some(source => source.path === preview.path) &&
           <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400" title={preview.path}>{preview.path}</span>}</p>
       {exclude.length === 0 && preview.space.total_bytes > 0 && <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        {t('legacyLibrarySize').replace('{size}', formatSize(preview.space.total_bytes)).replace('{required}', formatSize(preview.space.required_bytes))}
-        {preview.space.available_bytes !== null && <> · {t('legacyLibraryFree').replace('{size}', formatSize(preview.space.available_bytes))}</>}
+        {t('legacyLibrarySize').replace('{size}', sizeText(preview.space.total_bytes)).replace('{required}', sizeText(preview.space.required_bytes))}
+        {preview.space.available_bytes !== null && <> · {t('legacyLibraryFree').replace('{size}', sizeText(preview.space.available_bytes))}</>}
       </p>}
       {exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes &&
         <p role="alert" className="text-amber-700 dark:text-amber-300">{t('legacyLibraryNoSpace')}</p>}
