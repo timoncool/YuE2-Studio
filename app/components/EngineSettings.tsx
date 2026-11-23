@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { SELF_READ, useSetupStatus } from '../services/studioQueries';
-import { AlertTriangle, Check, Cpu, FolderOpen, Loader2, RotateCw , Terminal } from 'lucide-react';
+import { AlertTriangle, Check, FolderOpen, Loader2, RotateCw, Terminal } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { engineCardText } from '../i18n/engineCards';
 
 /**
  * Launch options for the local engine.
@@ -120,7 +121,8 @@ const Toggle: React.FC<{ label: string; hint: string; checked: boolean; onChange
 );
 
 export const EngineSettings: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const cardText = engineCardText[language];
   const tt = t as unknown as (key: string) => string;
   const { data: setup } = useSetupStatus<{ hardware?: { onProcessor?: boolean; shortOfSmallestSet?: number | null; totalVramGb?: number }; engine_on_processor?: boolean }>();
   const [options, setOptions] = useState<EngineOptions>(DEFAULTS);
@@ -321,10 +323,6 @@ export const EngineSettings: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <h4 className="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
-        <Cpu size={16} className="text-pink-500" /> {t('localEngine')}
-      </h4>
-
       <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('computeBackendLabel')}</span>
         <div className="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 sm:grid-cols-4 dark:bg-black/30" role="radiogroup" aria-label={tt('computeBackendLabel')}>
@@ -392,8 +390,8 @@ export const EngineSettings: React.FC = () => {
         </label>
       )}
 
-      <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
-        <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('engineBinLabel')}</span>
+      <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10" open={Boolean(options.engine_bin)}>
+        <summary className="min-h-6 cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('engineBinLabel')}</summary>
         <input
           type="text"
           value={options.engine_bin ?? ''}
@@ -428,7 +426,7 @@ export const EngineSettings: React.FC = () => {
             {runtime.executable_source === 'environment' ? ` · ${t('engineBinEnvOverride')}` : ''}
           </span>
         )}
-      </div>
+      </details>
 
       <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('keepLoadedLabel')}</span>
@@ -482,6 +480,10 @@ export const EngineSettings: React.FC = () => {
         </div>
       )}
 
+      <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <summary className="min-h-6 cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-100">{cardText.fineTuning}</summary>
+        <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{cardText.fineTuningHint}</p>
+        <div className="mt-3 space-y-3">
       <label className="block rounded-xl border border-zinc-200 p-3 dark:border-white/10">
         <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{tt('flashAttentionLabel')}</span>
         <select
@@ -516,9 +518,8 @@ export const EngineSettings: React.FC = () => {
         {kvCacheNow && <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{kvCacheNowLine(tt, kvCacheNow)}</span>}
       </label>
 
-      <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
-        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('diagnostics')}</summary>
-        <div className="mt-3 space-y-3">
+      <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             {numberField('vae_core', t('vaeCoreLabel'), '512', t('vaeCoreHint'), 64, 4096, 64)}
             {numberField('vae_halo', t('vaeHaloLabel'), '16', t('vaeHaloHint'), 0, 256, 4)}
@@ -530,11 +531,11 @@ export const EngineSettings: React.FC = () => {
             onChange={value => setOptions(current => ({ ...current, clamp_fp16: value }))}
           />
         </div>
-      </details>
+      </div>
 
-      <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
-        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('extraArgsLabel')}</summary>
-        <div className="mt-3 space-y-2">
+      <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+        <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('extraArgsLabel')}</span>
+        <div className="mt-2 space-y-2">
           <textarea
             value={options.extra_args}
             onChange={event => setOptions(current => ({ ...current, extra_args: event.target.value }))}
@@ -544,6 +545,8 @@ export const EngineSettings: React.FC = () => {
             className={`${CONTROL} resize-y font-mono text-xs`}
           />
           <span className="block text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('extraArgsHint')}</span>
+        </div>
+      </div>
         </div>
       </details>
 
@@ -568,6 +571,7 @@ export const EngineSettings: React.FC = () => {
         </button>
       </div>
 
+      <h4 className="pt-2 text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{cardText.diagnostics}</h4>
       <div className="rounded-xl border border-zinc-200 dark:border-white/10">
         <button
           type="button"

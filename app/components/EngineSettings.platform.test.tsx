@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { EngineSettings } from './EngineSettings';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ t: (key: string) => key, language: 'en' }) }));
 vi.mock('../services/studioQueries', () => ({ useSetupStatus: () => ({}), SELF_READ: {} }));
 
 it.each([
