@@ -16,6 +16,7 @@ vi.mock('../services/studioQueries', () => ({
 it('requires an audio-backed voice, restores references and can clear the melody', async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const host = document.createElement('div');
+  document.body.append(host);
   const root = createRoot(host);
   const changed = vi.fn();
 
@@ -27,19 +28,17 @@ it('requires an audio-backed voice, restores references and can clear the melody
 
   try {
     await act(async () => root.render(<Form />));
-    const [voice, melody] = host.querySelectorAll('select');
-    expect(voice.required).toBe(true);
-    expect(voice.value).toBe('voice');
-    expect(melody.required).toBe(false);
-    expect(melody.value).toBe('melody');
-    expect(Array.from(voice.options, option => option.value)).toEqual(['', 'voice', 'melody']);
-
-    await act(async () => {
-      melody.value = '';
-      melody.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const [voice, melody] = host.querySelectorAll<HTMLInputElement>('input[role="combobox"]');
+    expect(voice.value).toBe('Dry voice');
+    expect(melody.value).toBe('Melody');
+    act(() => voice.click());
+    expect([...document.querySelectorAll('[role="option"]')].map(option => option.textContent)).toEqual(['Dry voice', 'Melody']);
+    act(() => voice.click());
+    act(() => melody.click());
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === 'No melody reference')!.click());
     expect(changed).toHaveBeenCalledWith({ voice_song_id: 'voice', melody_song_id: undefined });
   } finally {
     await act(async () => root.unmount());
+    host.remove();
   }
 });

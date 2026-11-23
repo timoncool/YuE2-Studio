@@ -30,6 +30,9 @@ const DEFAULT_FOLDER: &str = "audiocpp/models/vevo2";
 #[serde(deny_unknown_fields)]
 pub(super) struct DirectorySelection {
     directory: Value,
+    /// The window asks for the system folder dialog; an agent names `directory` instead.
+    #[serde(default)]
+    pick: bool,
 }
 
 fn configured_directory(root: &Path) -> Option<PathBuf> {
@@ -72,8 +75,16 @@ pub(super) async fn set_directory(
             "Studio data folder is unavailable.".into(),
         )
     })?;
-    let directory: Option<PathBuf> = serde_json::from_value(selection.directory)
-        .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?;
+    let directory: Option<PathBuf> = if selection.pick {
+        let picked = tokio::task::spawn_blocking(|| rfd::FileDialog::new().set_title("Folder with Vevo2 weights").pick_folder())
+            .await
+            .map_err(|error| crate::api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        let Some(picked) = picked else { return Ok(axum::Json(json!({ "picked": false }))) };
+        Some(picked)
+    } else {
+        serde_json::from_value(selection.directory)
+            .map_err(|error| crate::api_error(StatusCode::BAD_REQUEST, error.to_string()))?
+    };
     let directory = tokio::task::spawn_blocking(move || {
         select_directory(&root, directory.as_deref())?;
         Ok::<_, anyhow::Error>(directory)

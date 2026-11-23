@@ -1,5 +1,6 @@
 import React from 'react';
 import { useI18n } from '../context/I18nContext';
+import { FieldLabel } from './kit/FieldLabel';
 
 const fields = ['caption', 'music', 'speech_text', 'speech_style', 'effects', 'environment'] as const;
 export type MiDashengPrompt = Record<(typeof fields)[number], string>;
@@ -48,8 +49,8 @@ export function MiDashengFields({ value, onChange }: { value: MiDashengPrompt; o
 
   return <div className="grid gap-3">
     {fields.map(key => (
-      <label key={key} className="grid gap-1 text-xs text-zinc-700 dark:text-zinc-300">
-        <span>{text[key]}</span>
+      <label key={key} className="grid text-xs text-zinc-700 dark:text-zinc-300">
+        <FieldLabel>{text[key]}</FieldLabel>
         <textarea rows={2} value={value[key]} onChange={event => onChange({ ...value, [key]: event.target.value })}
           className="w-full resize-y rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/25" />
         {key === 'speech_text' && <span className="text-zinc-500">{text.speechOmitted}</span>}

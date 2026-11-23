@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { FileJson } from 'lucide-react';
+import { CatalogSegments } from './kit/Catalog';
+import { SecondaryButton } from './kit/Buttons';
+import { FieldLabel } from './kit/FieldLabel';
+import { formCardStrings } from '../i18n/formCards';
 import { useI18n } from '../context/I18nContext';
-import { useLibrarySongs } from '../services/studioQueries';
+import { LibrarySongPicker } from './LibrarySongPicker';
 
 export type SoulXInputs = {
   reference_song_id: string;
@@ -33,29 +38,24 @@ type Props = {
 export function SoulXSingerFields({ conversion, value, onChange, controlClassName }: Props) {
   const { language } = useI18n();
   const [referenceLabel, sourceLabel, choose, refJson, targetJson, control, score, melody, format, attached, , explanation] = strings[language];
-  const { data } = useLibrarySongs();
-  const songs = (data ?? []).filter(song => song.audioUrl && !song.isGenerating);
   const [invalid, setInvalid] = useState<Partial<Record<'reference_metadata' | 'target_metadata', boolean>>>({});
 
   function recording(label: string, field: 'reference_song_id' | 'source_song_id') {
-    const selected = value[field] ?? '';
-    return <label className="grid gap-1">
-      <span>{label}</span>
-      <select value={selected} className={controlClassName}
-        onChange={event => { const id = event.target.value; onChange(current => ({ ...current, [field]: id })); }}>
-        <option value="">{choose}</option>
-        {selected && !songs.some(song => song.id === selected) && <option disabled value={selected}>{selected}</option>}
-        {songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-      </select>
-    </label>;
+    return <LibrarySongPicker label={label} value={value[field] ?? ''} placeholder={choose} controlClassName={controlClassName}
+      onChange={id => onChange(current => ({ ...current, [field]: id }))} />;
   }
 
+  const files = useRef<Partial<Record<'reference_metadata' | 'target_metadata', HTMLInputElement | null>>>({});
   function metadata(label: string, field: 'reference_metadata' | 'target_metadata') {
-    return <label className="grid gap-1">
-      <span>{label}</span>
-      <input type="file" accept=".json,application/json" className={controlClassName}
+    return <div className="grid">
+      <FieldLabel hidden>{label}</FieldLabel>
+      <SecondaryButton className="justify-start" aria-label={label} onClick={() => files.current[field]?.click()}>
+        <FileJson size={14} aria-hidden />{value[field] ? attached : formCardStrings[language].chooseJson}
+      </SecondaryButton>
+      <input ref={input => { files.current[field] = input; }} type="file" accept=".json,application/json" className="hidden" aria-label={label}
         onChange={async event => {
           const file = event.target.files?.[0];
+          event.target.value = '';
           if (!file) return;
           try {
             if (file.size > 256 * 1024) throw new Error();
@@ -69,22 +69,20 @@ export function SoulXSingerFields({ conversion, value, onChange, controlClassNam
             onChange(current => ({ ...current, [field]: undefined }));
           }
         }} />
-      {invalid[field] ? <span role="alert" className="text-xs">{format}</span> : value[field] && <span className="text-xs">{attached}</span>}
-    </label>;
+      {invalid[field] && <span role="alert" className="text-xs text-red-600 dark:text-red-400">{format}</span>}
+    </div>;
   }
 
-  return <div className="grid gap-3 sm:grid-cols-2">
+  return <div className="grid gap-3">
     {recording(referenceLabel, 'reference_song_id')}
     {conversion ? recording(sourceLabel, 'source_song_id') : <>
-      <label className="grid gap-1">
-        <span>{control}</span>
-        <select className={controlClassName} value={value.control ?? 'score'}
-          onChange={event => { const mode = event.target.value === 'melody' ? 'melody' : 'score'; onChange(current => ({ ...current, control: mode })); }}>
-          <option value="score">{score}</option>
-          <option value="melody">{melody}</option>
-        </select>
-      </label>
-      <p className="text-xs text-zinc-500 sm:col-span-2">{explanation}</p>
+      <div className="grid content-start">
+        <FieldLabel hidden>{control}</FieldLabel>
+        <CatalogSegments label={control} value={value.control ?? 'score'}
+          options={[{ value: 'score', label: score }, { value: 'melody', label: melody }]}
+          onChange={mode => onChange(current => ({ ...current, control: mode }))} />
+      </div>
+      <p className="text-xs text-zinc-500">{explanation}</p>
       {metadata(refJson, 'reference_metadata')}
       {metadata(targetJson, 'target_metadata')}
     </>}

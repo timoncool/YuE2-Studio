@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { apiUrl } from '../services/apiBase';
 import { useI18n } from '../context/I18nContext';
-import { useLibrarySongs } from '../services/studioQueries';
+import { LibrarySongPicker, useFinishedSongs } from './LibrarySongPicker';
+import { FieldLabel } from './kit/FieldLabel';
+import { SecondaryButton } from './kit/Buttons';
+import { FolderOpen } from 'lucide-react';
 
 export type Vevo2References = { voice_song_id: string; melody_song_id?: string };
 
@@ -15,33 +18,30 @@ export const vevo2SingingStrings = {
 };
 
 const modelStrings = {
-  en: { folder: 'Folder containing your Vevo2 weights', set: 'Use this folder', reset: 'Use the Studio folder', defaultFolder: 'Default relative to the Studio data folder', terms: 'Original model terms', failure: 'Could not save the Vevo2 folder.' },
-  ru: { folder: 'Папка с вашими весами Vevo2', set: 'Использовать эту папку', reset: 'Использовать папку Studio', defaultFolder: 'Путь по умолчанию относительно папки данных Studio', terms: 'Условия автора модели', failure: 'Не удалось сохранить папку Vevo2.' },
-  zh: { folder: '已有 Vevo2 权重所在的文件夹', set: '使用此文件夹', reset: '使用 Studio 文件夹', defaultFolder: '相对于 Studio 数据目录的默认路径', terms: '原始模型使用条款', failure: '无法保存 Vevo2 文件夹。' },
-  ja: { folder: '既存の Vevo2 重みがあるフォルダー', set: 'このフォルダーを使う', reset: 'Studio のフォルダーを使う', defaultFolder: 'Studio データフォルダーからの既定の相対パス', terms: '元のモデルの利用条件', failure: 'Vevo2 フォルダーを保存できませんでした。' },
-  ko: { folder: '기존 Vevo2 가중치가 있는 폴더', set: '이 폴더 사용', reset: 'Studio 폴더 사용', defaultFolder: 'Studio 데이터 폴더 기준 기본 경로', terms: '원본 모델 이용 조건', failure: 'Vevo2 폴더를 저장하지 못했습니다.' },
-  pt: { folder: 'Pasta com seus pesos do Vevo2', set: 'Usar esta pasta', reset: 'Usar a pasta do Studio', defaultFolder: 'Caminho padrão relativo à pasta de dados do Studio', terms: 'Termos do modelo original', failure: 'Não foi possível salvar a pasta do Vevo2.' },
+  en: { folder: 'Weights folder', set: 'Choose folder', reset: 'Use the Studio folder', terms: 'Original model terms', have: 'Already have the weights?', failure: 'Could not save the Vevo2 folder.' },
+  ru: { folder: 'Папка с весами', set: 'Указать папку', reset: 'Вернуть папку Studio', terms: 'Условия автора модели', have: 'Веса уже скачаны?', failure: 'Не удалось сохранить папку Vevo2.' },
+  zh: { folder: '权重文件夹', set: '选择文件夹', reset: '使用 Studio 文件夹', terms: '原始模型使用条款', have: '已有权重？', failure: '无法保存 Vevo2 文件夹。' },
+  ja: { folder: '重みのフォルダー', set: 'フォルダーを選ぶ', reset: 'Studio のフォルダーを使う', terms: '元のモデルの利用条件', have: '重みをお持ちですか？', failure: 'Vevo2 フォルダーを保存できませんでした。' },
+  ko: { folder: '가중치 폴더', set: '폴더 선택', reset: 'Studio 폴더 사용', terms: '원본 모델 이용 조건', have: '가중치가 이미 있나요?', failure: 'Vevo2 폴더를 저장하지 못했습니다.' },
+  pt: { folder: 'Pasta dos pesos', set: 'Escolher pasta', reset: 'Usar a pasta do Studio', terms: 'Termos do modelo original', have: 'Já tem os pesos?', failure: 'Não foi possível salvar a pasta do Vevo2.' },
 };
 
-export function Vevo2ModelDirectory({ directory, defaultDirectory, licenseUrl, controlClassName, onChanged }: {
+export function Vevo2ModelDirectory({ directory, licenseUrl, onChanged }: {
   directory: string;
-  defaultDirectory: string;
   licenseUrl?: string;
-  controlClassName: string;
   onChanged: () => void;
 }) {
   const { language } = useI18n();
   const strings = modelStrings[language];
-  const [draft, setDraft] = useState(directory);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  async function save(next: string | null) {
+  async function save(pick: boolean) {
     setBusy(true);
     setError('');
     try {
       const response = await fetch(apiUrl('/v1/music/audio-cpp/vevo2/model-directory'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ directory: next }),
+        body: JSON.stringify({ directory: null, pick }),
       });
       if (!response.ok) {
         const problem = await response.json().catch(() => null);
@@ -56,23 +56,21 @@ export function Vevo2ModelDirectory({ directory, defaultDirectory, licenseUrl, c
   }
 
   return (
-    <div className="space-y-2 text-xs">
-      <label className="grid gap-1">
-        <span>{strings.folder}</span>
-        <input className={controlClassName} value={draft} disabled={busy}
-          onChange={event => setDraft(event.target.value)} />
-      </label>
-      <p><code>vevo2-q8_0.gguf</code></p>
-      <p>{strings.defaultFolder} <code>{defaultDirectory}</code></p>
-      {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">{strings.terms}</a>}
-      <div className="flex flex-wrap gap-3">
-        <button type="button" className="underline disabled:opacity-50" disabled={busy || !draft.trim() || draft.trim() === directory}
-          onClick={() => void save(draft.trim())}>{strings.set}</button>
-        {directory && <button type="button" className="underline disabled:opacity-50" disabled={busy}
-          onClick={() => void save(null)}>{strings.reset}</button>}
+    <>
+    {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block text-xs underline">{strings.terms}</a>}
+    {directory ? <div className="grid gap-1 text-xs">
+      <FieldLabel>{strings.folder}</FieldLabel>
+      <p className="break-all font-mono text-zinc-700 dark:text-zinc-200">{directory}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <SecondaryButton disabled={busy} onClick={() => void save(true)}><FolderOpen size={14} aria-hidden />{strings.set}</SecondaryButton>
+        <button type="button" className="underline disabled:opacity-50" disabled={busy} onClick={() => void save(false)}>{strings.reset}</button>
       </div>
-      {error && <p role="alert">{error}</p>}
-    </div>
+    </div> : <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+      <span>{strings.have}</span>
+      <SecondaryButton disabled={busy} onClick={() => void save(true)}><FolderOpen size={14} aria-hidden />{strings.set}</SecondaryButton>
+    </div>}
+    {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+    </>
   );
 }
 
@@ -85,33 +83,16 @@ type Props = {
 export function Vevo2SingingFields({ value, onChange, controlClassName }: Props) {
   const { language } = useI18n();
   const strings = vevo2SingingStrings[language];
-  const { data, isSuccess } = useLibrarySongs();
-  const songs = (data ?? []).filter(song => song.audioUrl && !song.isGenerating);
+  const { songs, loaded } = useFinishedSongs();
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <label className="grid gap-1">
-        <span>{strings.voice}</span>
-        <select required value={value.voice_song_id} className={controlClassName}
-          onChange={event => onChange({ ...value, voice_song_id: event.target.value })}>
-          <option value="">{strings.choose}</option>
-          {value.voice_song_id && !songs.some(song => song.id === value.voice_song_id) &&
-            <option value={value.voice_song_id} disabled>{value.voice_song_id}</option>}
-          {songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-        </select>
-      </label>
-      <label className="grid gap-1">
-        <span>{strings.melody}</span>
-        <select value={value.melody_song_id ?? ''} className={controlClassName}
-          onChange={event => onChange({ ...value, melody_song_id: event.target.value || undefined })}>
-          <option value="">{strings.none}</option>
-          {value.melody_song_id && !songs.some(song => song.id === value.melody_song_id) &&
-            <option value={value.melody_song_id} disabled>{value.melody_song_id}</option>}
-          {songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-        </select>
-      </label>
-      {isSuccess && !songs.length &&
-        <p className="text-xs text-zinc-500 sm:col-span-2">{strings.empty}</p>}
+    <div className="grid gap-3">
+      <LibrarySongPicker label={strings.voice} value={value.voice_song_id} placeholder={strings.choose} controlClassName={controlClassName}
+        onChange={id => onChange({ ...value, voice_song_id: id })} />
+      <LibrarySongPicker label={strings.melody} value={value.melody_song_id ?? ''} placeholder={strings.none} none={strings.none}
+        controlClassName={controlClassName} onChange={id => onChange({ ...value, melody_song_id: id || undefined })} />
+      {loaded && !songs.length &&
+        <p className="text-xs text-zinc-500">{strings.empty}</p>}
     </div>
   );
 }

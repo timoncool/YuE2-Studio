@@ -1,5 +1,6 @@
 import React from 'react';
 import { useI18n } from '../context/I18nContext';
+import { LibrarySongPicker } from './LibrarySongPicker';
 
 export const magentaModel = 'magenta_realtime_2';
 export type MagentaOptions = { reference_song_id?: string };
@@ -22,6 +23,8 @@ const labels = {
   pt: ['Referência de estilo', 'Usar descrição de estilo', 'Referência indisponível', 'Usar o estilo da faixa selecionada.'],
 };
 
+export const magentaTitle = (language: string) => (labels[language as keyof typeof labels] ?? labels.en)[0];
+
 export function MagentaFields({ value, onChange, tracks, controlClassName }: {
   value: MagentaOptions;
   onChange: (value: MagentaOptions) => void;
@@ -33,14 +36,9 @@ export function MagentaFields({ value, onChange, tracks, controlClassName }: {
   const reference = value.reference_song_id ?? '';
   const missing = Boolean(reference) && !tracks.some(track => track.id === reference);
 
-  return <label className="grid gap-1 text-xs text-zinc-700 dark:text-zinc-300">
-    <span>{label}</span>
-    <select className={controlClassName} value={reference}
-      onChange={event => onChange(event.target.value ? { reference_song_id: event.target.value } : {})}>
-      <option value="">{textMode}</option>
-      {missing && <option value={reference} disabled>{unavailable}</option>}
-      {tracks.map(track => <option key={track.id} value={track.id}>{track.title}</option>)}
-    </select>
+  return <div className="grid gap-1 text-xs text-zinc-700 dark:text-zinc-300">
+    <LibrarySongPicker label={label} value={reference} placeholder={textMode} none={textMode} missing={unavailable} showLabel={false}
+      controlClassName={controlClassName ?? ''} onChange={id => onChange(id ? { reference_song_id: id } : {})} />
     {reference && !missing && <span className="text-zinc-500">{audioMode}</span>}
-  </label>;
+  </div>;
 }

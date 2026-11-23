@@ -48,7 +48,8 @@ import { SongTextParts } from './SongTextParts';
 import { styleLint, writerInstruction } from '../services/songWriting';
 import { styleAdvice } from '../i18n/styleAdvice';
 import { songWritingStrings } from '../i18n/songWriting';
-import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
+import { MagentaFields, magentaModel, magentaTitle, restoreMagentaOptions } from './MagentaFields';
+import { formCardStrings } from '../i18n/formCards';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
@@ -2312,11 +2313,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </select>
                     )}
                     {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
-                    {vevo2 && native.profile?.model_directory && <Vevo2ModelDirectory
-                      key={native.profile.configured_directory ?? ''}
-                      directory={native.profile.configured_directory ?? ''}
-                      defaultDirectory={native.profile.model_directory} licenseUrl={native.profile.license_url}
-                      controlClassName={CONTROL} onChanged={refreshNativeChoice} />}
                     {native.profile && !native.ready && !nativeSets && !native.profile.installable &&
                       <p role="status" className="text-xs">{nativeStrings.unavailable}</p>}
                     {hotstepHeart && native.profile?.installable && !native.ready &&
@@ -2338,6 +2334,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <AudioCppModelInstall key={audioFamily} model={audioFamily} bytes={native.profile.missing_bytes ?? native.profile.total_bytes}
                         target={{ catalogue: '/v1/music/audio-cpp/models', installPath: '/v1/music/audio-cpp/models/install', label: native.profile.label.split(' · ')[0] }}
                         licenseUrl={mulaCover ? undefined : native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
+                    {vevo2 && native.profile?.model_directory && <Vevo2ModelDirectory
+                      key={native.profile.configured_directory ?? ''}
+                      directory={native.profile.configured_directory ?? ''}
+                      licenseUrl={native.profile.installable ? undefined : native.profile.license_url} onChanged={refreshNativeChoice} />}
                   </div>
                 </Card>
               ) : <Card title={musicStrings.model}>
@@ -2395,6 +2395,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   onInstall={native.refresh}
                   missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />
               </Card>}
+              {hotstep && <Card title={mulaCoverTitle(language)}>
+                <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
+                  refresh={native.refresh} controlClassName={CONTROL} />
+              </Card>}
+              {magenta && <Card title={magentaTitle(language)}>
+                <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />
+              </Card>}
+              {(soulx || vevo2) && <Card title={formCardStrings[language].voiceMelody}>
+                {soulx && <SoulXSingerFields key={audioFamily} conversion={soulxConversion} value={soulxInputs} onChange={setSoulxInputs} controlClassName={CONTROL} />}
+                {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
+              </Card>}
               <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : miniMaxEngine ? mmText.captionStructured : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
@@ -2412,7 +2423,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 </> : !vevo2 && !soulx && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && !soulx && <Card title={t('lyrics')}
+              {miDasheng ? <Card title={formCardStrings[language].scene}><MiDashengFields value={scene} onChange={setScene} /></Card> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && !soulx && <Card title={t('lyrics')}
                 actions={miniMaxEngine ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${overBudget ? 'bg-rose-500/10 text-rose-600 dark:text-rose-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}
                   title={promptQuery.error ? `${mmText.promptBudget} — ${promptQuery.error.message}` : promptCheck?.exact === false ? `${mmText.promptBudget} — ${mmText.promptBudgetEstimated}` : mmText.promptBudget}>
                   {mmText.promptBudgetShort} {promptQuery.error ? '!' : promptCheck ? `${promptCheck.exact ? '' : '≈'}${promptCheck.tokens} / ${promptCheck.limit}` : '…'}
@@ -2440,9 +2451,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 <AutoTextarea className={CONTROL} value={abc} onChange={event => setAbc(event.target.value)}
                   disabled={effectiveCot === 'off'} aria-label={tt('scoreCardTitle')} />
               </Card>}
-              {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
-              {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
-                refresh={native.refresh} controlClassName={CONTROL} />}
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} profileReady={native.ready} dit={aceDit || native.profile?.roles?.dit}
                 onPickDit={file => setAceStudio(current => ({ ...current, synth_model: file }))} listening={aceListening} onListen={what => void listenAce(what)}
                 card={(title, body, actions) => <Card title={title} actions={actions} fold="ace-source" foldedByDefault={aceTask.task === 'text2music'}>{body}</Card>} />}
@@ -2462,8 +2470,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {miniMaxEngine && native.profile?.ready && <Card title={mmText.componentOverride} fold="minimax-components" foldedByDefault={Object.keys(mmComponents).length === 0}>
                 <MiniMaxComponents value={mmComponents} onChange={setMmComponents} setFiles={native.profile.roles} />
               </Card>}
-              {soulx && <SoulXSingerFields key={audioFamily} conversion={soulxConversion} value={soulxInputs} onChange={setSoulxInputs} controlClassName={CONTROL} />}
-              {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {hotstepHeart && <HotStepSa3Controls value={hotstepHeartDraft} onChange={setHotstepHeartDraft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} hasSampler={false} />}
               {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
@@ -3472,7 +3478,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             {pauseSeconds !== null && !queueBusy ? pauseText.cancel : tt('generateForeverStop')}</button>
         </div>}
         <div className="flex items-stretch gap-1.5">
-        <div className="flex min-w-0 flex-1 rounded-xl shadow-lg">
+          <PickerPill look="split" className="max-w-[45%] shrink-0" align="left" label={tt('createIntoPlaylist')} showLabel={false}
+            status={<ListMusic size={15} className={`shrink-0 ${chosenPlaylistName ? 'text-pink-500' : ''}`} aria-hidden />}
+            value={chosenPlaylistName ?? tt('createIntoPlaylist')}>
+            {close => <>
+              <NewCollectionOption label={tt('createIntoNewPlaylist')} onPick={() => { close(); setNewPlaylistOpen(true); }} />
+              <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
+              <CollectionOption value="" selected={!chosenPlaylist} name={tt('createIntoNoPlaylist')} meta={t('library')}
+                onPick={() => { choosePlaylist(''); close(); }} />
+              {playlists.map(entry => <CollectionOption key={entry.id} value={entry.id} selected={entry.id === chosenPlaylist} name={entry.name}
+                cover={entry.coverUrl} meta={`${entry.kind === 'album' ? t('album') : t('playlist')} · ${songCount(entry.songIds?.length ?? 0)}`}
+                onPick={() => { choosePlaylist(entry.id); close(); }} />)}
+            </>}
+          </PickerPill>
+        <div className="create-split flex min-w-0 flex-1 rounded-xl shadow-lg">
         <button
           type="button"
           onClick={submit}
@@ -3485,7 +3504,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           {yue && composing && instrumental ? tt('composingScore') : yue && instrumental ? tt('createInstrumental') : t('create')}
           {activeJobCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{activeJobCount}</span>}
         </button>
-        {!cloud && <PickerPill kind="dialog" look="primary" align="right" label={musicStrings.createOptions} icon={<ChevronDown size={18} aria-hidden />}>
+        {!cloud && <PickerPill kind="dialog" look="primary" align="right" className="[.create-split:has(>button:disabled)_&]:opacity-50 [.create-split:has(>button:disabled)_&]:hover:opacity-80" label={musicStrings.createOptions} icon={<ChevronDown size={18} aria-hidden />}>
           {() => <div className="space-y-3 p-1 text-xs">
             <Switch checked={forever} onChange={enabled => enabled ? setForever(true) : stopForever()} label={tt('generateForever')} hint={tt('generateForeverHint')} />
             <fieldset disabled={!forever} className="space-y-1.5 disabled:opacity-50">
@@ -3510,19 +3529,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           </div>}
         </PickerPill>}
         </div>
-          <PickerPill look="split" className="max-w-[45%] shrink-0" align="right" label={tt('createIntoPlaylist')} showLabel={false}
-            status={<ListMusic size={15} className={`shrink-0 ${chosenPlaylistName ? 'text-pink-500' : ''}`} aria-hidden />}
-            value={chosenPlaylistName ?? tt('createIntoPlaylist')}>
-            {close => <>
-              <NewCollectionOption label={tt('createIntoNewPlaylist')} onPick={() => { close(); setNewPlaylistOpen(true); }} />
-              <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
-              <CollectionOption value="" selected={!chosenPlaylist} name={tt('createIntoNoPlaylist')} meta={t('library')}
-                onPick={() => { choosePlaylist(''); close(); }} />
-              {playlists.map(entry => <CollectionOption key={entry.id} value={entry.id} selected={entry.id === chosenPlaylist} name={entry.name}
-                cover={entry.coverUrl} meta={`${entry.kind === 'album' ? t('album') : t('playlist')} · ${songCount(entry.songIds?.length ?? 0)}`}
-                onPick={() => { choosePlaylist(entry.id); close(); }} />)}
-            </>}
-          </PickerPill>
         </div>
       </footer>
       {yue && editorOpen && (

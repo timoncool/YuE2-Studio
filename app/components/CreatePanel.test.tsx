@@ -1200,7 +1200,8 @@ it('uses a saved Vevo2 weights folder without offering a conversion download', a
   let directory: string | null = null;
   const request = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/model-directory')) {
-      directory = JSON.parse(String(init?.body)).directory;
+      const body = JSON.parse(String(init?.body));
+      directory = body.pick ? local : body.directory;
       return Response.json({ configured_directory: directory });
     }
     return Response.json({ engine: 'audio.cpp', models: [{
@@ -1218,9 +1219,7 @@ it('uses a saved Vevo2 weights folder without offering a conversion download', a
   await flush();
   expect(buttonNamed('create')?.disabled).toBe(true);
   expect(host.querySelector(`a[href="${license}"]`)?.textContent).toBe('Original model terms');
-  const label = [...host.querySelectorAll('label')].find(item => item.textContent?.includes('Folder containing your Vevo2 weights'));
-  type(label!.querySelector('input')!, local);
-  click(buttonNamed('Use this folder')!);
+  click(buttonNamed('Choose folder')!);
   await flush();
   expect(directory).toBe(local);
   expect(buttonNamed('Use the Studio folder')).toBeDefined();
@@ -1279,11 +1278,10 @@ it('restores a Magenta reference and submits either the available reference or t
     music_source: { kind: 'audio_cpp', model }, magenta: { reference_song_id: 'ref-take' }, lyrics: '',
   });
 
-  const reference = [...host.querySelectorAll('select')].find(select => select.value === 'ref-take')!;
-  act(() => {
-    reference.value = '';
-    reference.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const reference = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Style reference"]')!;
+  expect(reference.value).toBe('Reference take');
+  click(reference);
+  click([...document.querySelectorAll('[role="option"]')].find(option => option.textContent === 'Use text style')!);
   expect(field('textarea[aria-label="styleCardTitle"]')!.value).toBe('jazz piano');
   click(generate);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'audio_cpp', model }, style: 'jazz piano', magenta: {}, lyrics: '' });
@@ -1292,7 +1290,7 @@ it('restores a Magenta reference and submits either the available reference or t
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 2 } })));
   await flush();
   expect(generate.disabled).toBe(true);
-  expect(reference.selectedOptions[0].disabled).toBe(true);
+  expect(host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Style reference"]')!.value).toBe('Reference unavailable');
 });
 
 it('asks for an explicit profile when a migrated ACE take used custom weights', async () => {

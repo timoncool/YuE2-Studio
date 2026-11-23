@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
-import { useLibrarySongs } from '../services/studioQueries';
 import { transcribe } from '../services/transcription';
-import Combobox from './kit/Combobox';
+import { LibrarySongPicker, useFinishedSongs } from './LibrarySongPicker';
+import { FieldLabel } from './kit/FieldLabel';
 
 export type HotStepCoverDraft = { original: string; abc: string };
 
@@ -22,8 +22,7 @@ export function HotStepCoverFields({ draft, onChange, ready, refresh, controlCla
 }) {
   const { language } = useI18n();
   const text = labels[language];
-  const { data } = useLibrarySongs();
-  const tracks = (data ?? []).filter(song => song.audioUrl && !song.isGenerating);
+  const { songs: tracks } = useFinishedSongs();
   const active = useRef<AbortController | null>(null);
   const [listening, setListening] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -69,16 +68,12 @@ export function HotStepCoverFields({ draft, onChange, ready, refresh, controlCla
   };
 
   return <div className="space-y-2">
-    <div className="grid gap-1">
-      <span aria-hidden>{text.original}</span>
-      <Combobox label={text.original} value={draft.original} placeholder={text.choose}
-        options={tracks.map(song => ({ value: song.id, label: song.title || '—', hint: song.style?.slice(0, 80) }))}
-        inputClassName={`${controlClassName} font-semibold`} onChange={choose} />
-    </div>
+    <LibrarySongPicker label={text.original} value={draft.original} placeholder={text.choose} showLabel={false} controlClassName={controlClassName}
+      onChange={id => choose(id)} />
     <button type="button" disabled={!draft.original || listening} className="text-xs underline disabled:opacity-50"
       onClick={() => void hear()}>{listening ? text.listening : text.transcribe}</button>
-    <label className="grid gap-1">
-      <span>{text.score}</span>
+    <label className="grid">
+      <FieldLabel>{text.score}</FieldLabel>
       <textarea rows={4} className={controlClassName} value={draft.abc} disabled={listening}
         onChange={event => onChange({ ...draft, abc: event.target.value })} />
     </label>

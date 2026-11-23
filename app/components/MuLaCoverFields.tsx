@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useI18n } from '../context/I18nContext';
-import { useLibrarySongs } from '../services/studioQueries';
-import Combobox from './kit/Combobox';
+import { LibrarySongPicker } from './LibrarySongPicker';
 
 export const mulaCoverTitle = (language: string) => (strings[language as keyof typeof strings] ?? strings.en).original;
 
@@ -25,8 +24,6 @@ type Props = {
 export function MuLaCoverFields({ value, onChange, onInstall, missingSoxr, controlClassName }: Props) {
   const { language } = useI18n();
   const text = strings[language];
-  const { data } = useLibrarySongs();
-  const songs = (data ?? []).filter(song => song.audioUrl && !song.isGenerating);
   const [installing, setInstalling] = useState(false);
   const [error, setError] = useState('');
 
@@ -49,11 +46,9 @@ export function MuLaCoverFields({ value, onChange, onInstall, missingSoxr, contr
 
   return (
     <div className="space-y-2">
-      <Combobox label={text.original} value={value} placeholder={text.choose}
-        options={songs.map(song => ({ value: song.id, label: song.title || '—', hint: song.style?.slice(0, 80) }))}
-        inputClassName={`${controlClassName} font-semibold`}
-        onChange={id => {
-          const score = songs.find(song => song.id === id)?.generationParams?.abc;
+      <LibrarySongPicker label={text.original} value={value} placeholder={text.choose} showLabel={false} controlClassName={controlClassName}
+        onChange={(id, song) => {
+          const score = song?.generationParams?.abc;
           onChange(id, typeof score === 'string' ? score : '');
         }} />
       <a className="text-xs underline" target="_blank" rel="noreferrer"
