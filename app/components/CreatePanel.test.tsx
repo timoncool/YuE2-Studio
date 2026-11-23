@@ -119,6 +119,8 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
   element.dispatchEvent(new Event('input', { bubbles: true }));
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+const chooseSet = (id: string) => act(() => { host.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`)!.click(); });
+const chosenSet = () => host.querySelector<HTMLInputElement>('input[type="radio"][name$="-set"]:checked')?.value ?? '';
 const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
 
 it('opens engine management for the current engine and retains the Create draft', async () => {
@@ -412,18 +414,14 @@ it('keeps settings by native engine and profile and submits the selected pair', 
     act(() => root.render(panel({ musicEngine: engine })));
     await flush();
   };
-  const select = (name: string) => act(() => {
-    const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-    model.value = name;
-    model.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const select = (name: string) => chooseSet(name);
   const number = (label: string) =>
     [...host.querySelectorAll('label')].find(node => node.textContent?.trim() === label)!.querySelector('input')!;
   const create = () => buttonNamed('create') as HTMLButtonElement;
   await setup('minimaxmusic-cpp');
   select('missing');
   expect(create().disabled).toBe(true);
-  expect(host.textContent).toContain('model.gguf');
+  expect(host.textContent).not.toContain('model.gguf');
   select('balanced');
   type(number('Duration (seconds)'), '36');
   type(number('Language model seed'), '4');
@@ -438,10 +436,10 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   type(number('Duration (seconds)'), '48');
   await setup('acestep-cpp');
   select('balanced');
-  expect(host.textContent).toContain('This engine is not installed.');
+  expect(host.textContent).toContain('Download ACE-Step');
   expect(create().disabled).toBe(true);
   aceInstalled = true;
-  click(buttonNamed('Refresh models')!);
+  act(() => { window.dispatchEvent(new Event('focus')); });
   await flush();
   expect(number('Duration (seconds)').value).toBe('');
   type(number('CFG'), '2.5');
@@ -469,7 +467,7 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   expect(create().textContent).toContain('2');
   expect(number('Duration (seconds)').value).toBe('');
   expect(number('Language model seed').value).toBe('');
-  expect(host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!.value).toBe('balanced');
+  expect(chosenSet()).toBe('balanced');
   expect(field('textarea[aria-label="lyrics"]')!.value).toBe('');
   expect(sent).toHaveLength(2);
 
@@ -500,17 +498,13 @@ it('offers the ACE runtime update while the installed fallback remains usable', 
   });
   act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
   await flush();
-  const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-  act(() => { model.value = 'balanced'; model.dispatchEvent(new Event('change', { bubbles: true })); });
+  chooseSet('balanced');
   type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
   expect(buttonNamed('create')?.disabled).toBe(false);
   click(buttonNamed('Update · 1 GiB')!);
   expect(install).toHaveBeenCalledOnce();
-  updateRequired = false;
-  click(buttonNamed('Refresh models')!);
-  await flush();
-  expect(buttonNamed('Update · 1 GiB')).toBeUndefined();
   expect(buttonNamed('create')?.disabled).toBe(false);
+  expect(host.textContent).not.toContain('Refresh models');
 });
 
 it('downloads the missing weights of the chosen ACE set from the form', async () => {
@@ -533,13 +527,14 @@ it('downloads the missing weights of the chosen ACE set from the form', async ()
   });
   act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
   await flush();
-  const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-  act(() => { model.value = 'minimal'; model.dispatchEvent(new Event('change', { bubbles: true })); });
+  chooseSet('minimal');
   await flush();
-  click(buttonNamed('Install ACE-Step 1.5 · 1 GiB')!);
+  expect(host.textContent).not.toContain('vae-BF16.gguf');
+  click(buttonNamed('Download ACE-Step — 1.0 GB')!);
   await flush();
   expect(requests).toEqual([{ model: 'minimal' }]);
-  expect(host.textContent).toContain('Installing ACE-Step 1.5… 50%');
+  expect(host.textContent).toContain('Downloading the model · 0.5 of 1.0 GB');
+  expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('50');
 });
 
 it('creates native ACE covers and restores a migrated repaint with its source, reference and range', async () => {
@@ -559,7 +554,7 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   const create = () => buttonNamed('create') as HTMLButtonElement;
   act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
   await flush();
-  select('Local model', 'balanced');
+  chooseSet('balanced');
   await flush();
   type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
   select('ACE-Step task', 'cover');
@@ -635,11 +630,7 @@ it('keeps compatible native ACE LoRA separate and restores its saved scale', asy
     act(() => root.render(panel({ musicEngine: engine, initialData })));
     await flush();
   };
-  const select = (profile: string) => act(() => {
-    const input = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-    input.value = profile;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const select = (profile: string) => chooseSet(profile);
   const create = () => buttonNamed('create') as HTMLButtonElement;
   await show('acestep-cpp');
   select('balanced');
@@ -682,11 +673,7 @@ it('restores native MiniMax DiT and LM LoRA scales only in the MiniMax request',
   const show = async (engine: 'minimaxmusic-cpp' | 'acestep-cpp', initialData?: { song: Song; timestamp: number }) => {
     act(() => root.render(panel({ musicEngine: engine, initialData })));
     await flush();
-    const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-    act(() => {
-      model.value = 'balanced';
-      model.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    chooseSet('balanced');
     await flush();
   };
   const create = () => buttonNamed('create') as HTMLButtonElement;
@@ -746,7 +733,7 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   const submit = async () => { click(buttonNamed('create')!); await flush(); };
 
   await setup('minimaxmusic-cpp');
-  choose(model(), 'balanced');
+  chooseSet('balanced');
   expect(format()?.value).toBe('flac');
   await submit();
   choose(format()!, 'wav32');
@@ -754,7 +741,7 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   type(numeric('lmTopK')!, '35');
   type(numeric('DiT cfgScale')!, '2.4');
   await submit();
-  choose(model(), 'quality');
+  chooseSet('quality');
   expect(format()?.value).toBe('flac');
   choose(format()!, 'mp3');
   expect(numeric('lmCfgScale')?.value).toBe('');
@@ -763,14 +750,14 @@ it('posts the remembered MiniMax output format and keeps it out of ACE requests'
   type(numeric('fadeOutLabel')!, '1');
   await submit();
   await setup('acestep-cpp');
-  choose(model(), 'balanced');
+  chooseSet('balanced');
   expect(format()).toBeUndefined();
   expect(numeric('lmCfgScale')).toBeUndefined();
   await submit();
   await setup('minimaxmusic-cpp');
-  expect(model().value).toBe('quality');
+  expect(chosenSet()).toBe('quality');
   expect(format()?.value).toBe('mp3');
-  choose(model(), 'balanced');
+  chooseSet('balanced');
   expect(format()?.value).toBe('wav32');
   expect(numeric('lmTopK')?.value).toBe('35');
   await submit();
@@ -801,7 +788,7 @@ it.each([
     profiles: [{ id: 'original', label: 'Original', ready: true, total_bytes: 1, missing: [] }] })));
   act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 1 } })));
   await flush();
-  expect(host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!.value).toBe('original');
+  expect(chosenSet()).toBe('original');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: { kind: 'native', engine, model: 'original' },
     style: 'folk', lyrics: 'verse', duration_seconds: 18, steps: 7, seed: 42, ...extra });
@@ -850,7 +837,7 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
     .find(label => label.textContent?.startsWith('Model'))!.querySelector('select')!;
   choose(model, 'minimaxmusic-cpp');
   await flush();
-  choose(host.querySelector('select[aria-label="Local model"]')!, 'quality-q8');
+  chooseSet('quality-q8');
   await flush();
   expect(pairRequests).toHaveLength(1);
   expect(pairRequests[0]).toMatchObject({ music_source: source, sequence: expect.any(Number), client_id: expect.any(String) });
@@ -911,11 +898,7 @@ it('shows the engine memory failure and returns to the working pair with the dra
     model.dispatchEvent(new Event('change', { bubbles: true }));
   });
   await flush();
-  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-  act(() => {
-    profile.value = 'minimal';
-    profile.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  chooseSet('minimal');
   await flush();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('ran out of GPU memory');
   expect(host.textContent).toContain('Active pair · YuE2');
@@ -1012,7 +995,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   expect(engine.value).toBe('audio.cpp');
   choose(engine, 'minimaxmusic-cpp');
   await flush();
-  choose(model(), 'quality-q8');
+  chooseSet('quality-q8');
   type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
   type(field('textarea[aria-label="lyrics"]')!, 'Morning light');
   type(labeled('Seed').querySelector('input')!, '11');
@@ -1032,7 +1015,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   choose(engine, 'minimaxmusic-cpp');
   await flush();
   expect(document.activeElement).toBe(engine);
-  expect(model().value).toBe('quality-q8');
+  expect(chosenSet()).toBe('quality-q8');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
   expect(host.textContent).toContain('CUDA 13 1.8 audio s/s');
   expect(host.textContent).toContain('46c4c90');
@@ -1088,17 +1071,17 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   await flush();
   const generate = () => buttonNamed('create') as HTMLButtonElement;
   expect(generate().disabled).toBe(true);
-  expect(host.textContent).toContain('language_model_q8_0.gguf');
+  expect(host.textContent).not.toContain('language_model_q8_0.gguf');
   ready = true;
-  click(buttonNamed('Refresh models')!);
+  act(() => { window.dispatchEvent(new Event('focus')); });
   await flush();
   expect(generate().disabled).toBe(false);
   engineInstalled = false;
-  click(buttonNamed('Refresh models')!);
+  act(() => { window.dispatchEvent(new Event('focus')); });
   await flush();
   expect(generate().disabled).toBe(true);
   engineInstalled = true;
-  click(buttonNamed('Refresh models')!);
+  act(() => { window.dispatchEvent(new Event('focus')); });
   await flush();
   expect(generate().disabled).toBe(false);
   expect(host.textContent).toContain('quality-q8 · Q8_0');
@@ -1276,19 +1259,15 @@ it('asks for an explicit profile when a migrated ACE take used custom weights', 
   act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 1 } })));
   await flush();
 
-  const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
   const generate = buttonNamed('create') as HTMLButtonElement;
-  expect(profile.value).toBe('');
+  expect(chosenSet()).toBe('');
   expect(generate.disabled).toBe(true);
   expect(host.textContent).toContain('Choose a profile to create a new take.');
   for (const model of models) expect(host.textContent).toContain(model);
   const duration = [...host.querySelectorAll('label')].find(label => label.textContent === 'Duration (seconds)')!.querySelector('input')!;
   expect(duration.value).toBe('120');
 
-  act(() => {
-    profile.value = 'native';
-    profile.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  chooseSet('native');
   expect(generate.disabled).toBe(false);
   expect(host.textContent).not.toContain(models[0]);
   click(generate);
@@ -1300,10 +1279,10 @@ it('asks for an explicit profile when a migrated ACE take used custom weights', 
 
   act(() => root.render(panel({ musicEngine: engine, initialData: { song, timestamp: 2 } })));
   await flush();
-  expect(profile.value).toBe('');
+  expect(chosenSet()).toBe('');
   expect(host.textContent).toContain(models[0]);
   click(host.querySelector('button[aria-label="resetCreateForm"]')!);
-  expect(profile.value).toBe('native');
+  expect(chosenSet()).toBe('native');
   expect(host.textContent).not.toContain(models[0]);
   expect(duration.value).toBe('120');
   expect(field('textarea[aria-label="lyrics"]')!.value).toBe('');
@@ -1629,7 +1608,6 @@ describe('OpenRouter music creation', () => {
     act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
     await flush();
     expect(select('Model').value).toBe('cloud:test/music');
-    expect(select('Music engine').value).toBe('openrouter');
     expect(localStorage.getItem('yue:openrouter-music-model')).toBe('test/music');
     type(field('textarea[aria-label="styleCardTitle"]')!, 'ambient soul, soft piano');
     click(create());
@@ -1842,7 +1820,7 @@ it('shows the MuLaCover weights and resampler steps independently', async () => 
   expect(buttonNamed('create')?.disabled).toBe(true);
 
   weightsMissing = false;
-  click(buttonNamed('Refresh models')!);
+  act(() => { window.dispatchEvent(new Event('focus')); });
   await flush();
   expect(buttonNamed('Install resampler')).toBeDefined();
   expect(buttonNamed('create')?.disabled).toBe(true);
@@ -2252,8 +2230,7 @@ it.each(integratedPairs)('integrated U3 Create and Reuse $family × $engine', as
     await flush();
   }
   if (fixture.engine === 'acestep-cpp') {
-    const profile = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
-    act(() => { profile.value = 'original'; profile.dispatchEvent(new Event('change', { bubbles: true })); });
+    chooseSet('original');
     await flush();
   }
   type(field('textarea[aria-label="styleCardTitle"]')!, 'warm piano pop');

@@ -13,9 +13,25 @@ export const isProfileMusicEngine = (value: unknown): value is ProfileMusicEngin
 export const isMusicEngine = (value: unknown): value is MusicEngine =>
   value === 'local' || value === 'openrouter' || isProfileMusicEngine(value);
 
-interface NativeProfile {
+export interface SetDownload {
+  downloaded_bytes: number;
+  total_bytes: number;
+  done: boolean;
+  error?: string | null;
+}
+
+export interface NativeProfile {
   id: string;
   label: string;
+  /** The set's name by language code, from the component catalogue. */
+  labels?: Record<string, string>;
+  vram_gb?: number;
+  /** A variant for particular cards, offered under "all variants". */
+  advanced?: boolean;
+  /** The main set this card holds best. */
+  recommended?: boolean;
+  installing?: boolean;
+  download?: SetDownload | null;
   total_bytes: number;
   missing_bytes?: number;
   adapters?: string[];
@@ -133,6 +149,11 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined, l
   const [preferences, setPreferences] = useState(loadPreferences);
   const [legacyAce, setLegacyAce] = useState<{ models: string[]; settings: Settings }>();
   const [refreshCount, setRefreshCount] = useState(0);
+  useEffect(() => {
+    const refresh = () => setRefreshCount(count => count + 1);
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
   const native = useProfileCatalog(engine === 'audio.cpp' || engine === 'hotstep' ? undefined : engine, refreshCount);
   const audio = useProfileCatalog(engine === 'audio.cpp' || listModels ? 'audio.cpp' : undefined, refreshCount);
   const hotstep = useProfileCatalog(engine === 'hotstep' || listModels ? 'hotstep' : undefined, refreshCount);
@@ -140,7 +161,8 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined, l
   const profiles = result?.data?.profiles ?? [];
   const remembered = engine ? preferences.selected[engine] ?? (engine === 'audio.cpp' ? audioCppMiniMax : engine === 'hotstep' ? 'heartmula-mulacover' : undefined) : undefined;
   const pending = engine === 'acestep-cpp' ? legacyAce : undefined;
-  const profile = pending ? undefined : profiles.find(entry => entry.id === remembered);
+  const profile = pending ? undefined : profiles.find(entry => entry.id === remembered)
+    ?? (engine && !preferences.selected[engine] ? profiles.find(entry => entry.recommended) : undefined);
   const pair = profile && engine ? JSON.stringify([engine, profile.id]) : undefined;
   const update = (next: Preferences) => {
     setPreferences(next);
@@ -151,7 +173,7 @@ export function useNativeMusicProfiles(engine: ProfileMusicEngine | undefined, l
     audioProfiles: audio?.data?.profiles ?? [],
     hotstepProfiles: hotstep?.data?.profiles ?? [],
     profile,
-    selectedId: remembered,
+    selectedId: profile?.id ?? remembered,
     error: result?.error === true,
     loading: Boolean(engine && !result),
     installed: result?.data?.engine_installed === true,

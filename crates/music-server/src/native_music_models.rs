@@ -72,8 +72,11 @@ pub(crate) async fn describe(engine: &str, profiles: &mut Value) {
     let recommended = recommended(&sets, crate::hardware::hardware().total_vram_gb);
     for row in rows {
         let Some(id) = row["id"].as_str().map(str::to_owned) else { continue };
-        let advanced = sets.iter().find(|set| set.id == id).is_some_and(|set| set.advanced);
-        row["advanced"] = Value::Bool(advanced);
+        let set = sets.iter().find(|set| set.id == id);
+        row["advanced"] = Value::Bool(set.is_some_and(|set| set.advanced));
+        if let Some(set) = set {
+            row["labels"] = serde_json::to_value(&set.label).unwrap_or(Value::Null);
+        }
         row["recommended"] = Value::Bool(recommended.as_deref() == Some(id.as_str()));
         let assets = missing_assets(engine, &id);
         let download = match downloader() {

@@ -50,6 +50,7 @@ import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, restoreMagentaOptions } from './MagentaFields';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
+import { NativeModelSetPicker } from './NativeModelSetPicker';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
@@ -527,6 +528,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const nativeAdaptersReady = enabledNativeAdapters.every(adapter =>
     installedNativeAdapters.some(installed => installed.id === adapter.id && !installed.error));
   const audioCpp = nativeEngine === 'audio.cpp';
+  const nativeSets = musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp';
   const audioCppYue = audioCpp && native.profile?.id === audioCppYueProfile;
   const audioCppAce = audioCpp && native.profile?.id === audioCppAceProfile;
   const hotstepSa3 = nativeEngine === 'hotstep' && native.profile?.id === hotStepSa3Profile;
@@ -2046,20 +2048,23 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   {musicModels.map(model => <option key={model.id} value={`cloud:${model.id}`}>{model.name || model.id} · OpenRouter</option>)}
                 </select>
               </label>
-              <label className="flex items-center gap-2 text-xs font-medium">
-                <span className="shrink-0">{musicStrings.engine}</span>
-                <select className={CONTROL} value={musicEngine}
-                  aria-describedby={speedProfile ? speedReferenceId : undefined} onChange={event => {
-                  const engine = event.target.value;
-                  const linked = linkedFamily?.pairs.find(pair => pair.engine === engine);
-                  if (linked) chooseLinkedPair(linked);
-                }}>
-                  {linkedFamily ? linkedFamily.pairs.map(pair => <option key={pair.engine} value={pair.engine}>{pair.label}</option>)
-                    : <option value={musicEngine}>{nativeEngine ? profileMusicEngines[nativeEngine] : cloud ? 'OpenRouter' : 'yue2.cpp'}</option>}
-                </select>
-              </label>
+              {linkedFamily && linkedFamily.pairs.length > 1 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer font-medium text-zinc-500 dark:text-zinc-400">{t('advanced')}</summary>
+                  <label className="mt-2 flex items-center gap-2 font-medium">
+                    <span className="shrink-0">{musicStrings.engine}</span>
+                    <select className={CONTROL} value={musicEngine}
+                      aria-describedby={speedProfile ? speedReferenceId : undefined} onChange={event => {
+                      const linked = linkedFamily.pairs.find(pair => pair.engine === event.target.value);
+                      if (linked) chooseLinkedPair(linked);
+                    }}>
+                      {linkedFamily.pairs.map(pair => <option key={pair.engine} value={pair.engine}>{pair.label}</option>)}
+                    </select>
+                  </label>
+                </details>
+              )}
               {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
-              {onOpenEngines && <button type="button" className="block text-xs text-pink-600 underline dark:text-pink-300"
+              {onOpenEngines && !nativeEngine && <button type="button" className="block text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
           )}
@@ -2114,10 +2119,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   <div className="space-y-2">
                     {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
                     {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
-                    {!native.loading && !native.error && !native.installed && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
-                    {!native.loading && !native.error && (!native.installed || native.adapterRuntimeUpdate) &&
-                      (musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp') &&
-                      <NativeMusicRuntimeInstall key={musicEngine} engine={musicEngine} update={native.adapterRuntimeUpdate} onInstalled={native.refresh} />}
+                    {!native.loading && !native.error && !native.installed && !nativeSets && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
+                    {!native.loading && !native.error && native.installed && native.adapterRuntimeUpdate && nativeSets &&
+                      <NativeMusicRuntimeInstall key={musicEngine} engine={musicEngine} update onInstalled={native.refresh} />}
+                    {!native.loading && !native.error && nativeSets && native.profiles.length > 0 &&
+                      <NativeModelSetPicker key={musicEngine} engine={musicEngine} name={profileMusicEngines[musicEngine]}
+                        profiles={native.profiles} selected={native.profile} engineInstalled={native.installed}
+                        onSelect={id => { native.select(id); pair.select(); }} onChanged={refreshNativeChoice} />}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
                     {native.originalModels && (
                       <div className="space-y-1 text-xs" role="status">
@@ -2126,7 +2134,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </div>
                     )}
                     {onMusicEngineChange && (audioCpp || nativeEngine === 'hotstep') && native.profile && <p className="text-xs">{native.profile.label}</p>}
-                    {native.profiles.length > 0 && (!onMusicEngineChange || (!audioCpp && nativeEngine !== 'hotstep')) && (
+                    {native.profiles.length > 0 && !nativeSets && (!onMusicEngineChange || (!audioCpp && nativeEngine !== 'hotstep')) && (
                       <select aria-label={nativeStrings.model} className={CONTROL} value={native.profile?.id ?? ''}
                         onChange={event => { native.select(event.target.value); pair.select(); }}>
                         <option value="">{musicStrings.choose}</option>
@@ -2139,14 +2147,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       directory={native.profile.configured_directory ?? ''}
                       defaultDirectory={native.profile.model_directory} licenseUrl={native.profile.license_url}
                       controlClassName={CONTROL} onChanged={refreshNativeChoice} />}
-                    {native.profile && !native.ready && <p role="status" className="text-xs">
-                      {nativeStrings.unavailable}{native.profile.missing?.length && !native.profile.installable ? ` · ${native.profile.missing.join(', ')}` : ''}
-                    </p>}
-                    {(musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp') && native.installed && native.profile?.installable && !native.ready &&
-                      <AudioCppModelInstall key={`${musicEngine}:${native.profile.id}`} model={native.profile.id}
-                        target={{ catalogue: `/v1/music/native/${musicEngine}/profiles`, installPath: `/v1/music/native/${musicEngine}/profiles/install`,
-                          label: musicEngine === 'acestep-cpp' ? 'ACE-Step 1.5' : 'MiniMax Music3' }}
-                        bytes={native.profile.missing_bytes ?? 0} language={language} onInstalled={refreshNativeChoice} />}
+                    {native.profile && !native.ready && !nativeSets && !native.profile.installable &&
+                      <p role="status" className="text-xs">{nativeStrings.unavailable}</p>}
                     {hotstepHeart && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepHeartmulaProfile} model={hotStepHeartmulaProfile} bytes={native.profile.missing_bytes ?? 0}
                         language={language} onInstalled={refreshNativeChoice} />}
@@ -2166,9 +2168,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <AudioCppModelInstall key={audioFamily} model={audioFamily} bytes={native.profile.missing_bytes ?? native.profile.total_bytes}
                         target={{ catalogue: '/v1/music/audio-cpp/models', installPath: '/v1/music/audio-cpp/models/install', label: native.profile.label.split(' · ')[0] }}
                         licenseUrl={mulaCover ? undefined : native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
-                    <button type="button" className="text-xs text-pink-600 underline dark:text-pink-300" onClick={refreshNativeChoice}>
-                      {musicStrings.refresh}
-                    </button>
+                    {onOpenEngines && <button type="button" className="text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
+                      onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
                   </div>
                 </Card>
               ) : <Card title={musicStrings.model}>
