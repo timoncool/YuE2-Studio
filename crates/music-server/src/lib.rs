@@ -10533,7 +10533,7 @@ fn adopt_refusals(components: &[model_manager::Component], root: &std::path::Pat
                     }
                     let installed = std::fs::metadata(root.join(component.filename)).is_ok_and(|meta| meta.len() == component.bytes);
                     (!installed && size != component.bytes).then(|| {
-                        serde_json::json!({ "file": name, "kind": "size", "size": size, "needs": component.bytes, "repository": component.repository, "revision": component.revision })
+                        serde_json::json!({ "file": name, "kind": "size", "size": size, "needs": component.bytes, "source": component.url })
                     })
                 }
                 None => Some(serde_json::json!({ "file": name, "kind": "unknown", "size": size })),
@@ -14566,7 +14566,7 @@ mod tests {
         let folder = std::env::temp_dir().join(format!("adopt-{}", uuid::Uuid::now_v7()));
         let models = folder.join("models");
         std::fs::create_dir_all(&models).unwrap();
-        let component = model_manager::Component { id: "lm", kind: "lm", filename: "model.gguf", bytes: 4, sha256: "", repository: "org/repo", revision: "abcdef123", };
+        let component = model_manager::Component { id: "lm", kind: "lm", filename: "model.gguf", bytes: 4, sha256: "", url: "https://huggingface.co/org/repo/resolve/abcdef123/model.gguf", };
         let wrong = folder.join("model.gguf");
         std::fs::write(&wrong, b"other build").unwrap();
         let stray = folder.join("someone-else.gguf");
@@ -14604,7 +14604,7 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let models = tempfile::tempdir().unwrap();
         let sha = |body: &[u8]| -> &'static str { Box::leak(sha2::Sha256::digest(body).iter().map(|byte| format!("{byte:02x}")).collect::<String>().into_boxed_str()) };
-        let component = |id: &'static str, filename: &'static str, body: &[u8]| model_manager::Component { id, kind: "dit", filename, bytes: body.len() as u64, sha256: sha(body), repository: "", revision: "" };
+        let component = |id: &'static str, filename: &'static str, body: &[u8]| model_manager::Component { id, kind: "dit", filename, bytes: body.len() as u64, sha256: sha(body), url: "" };
         let turbo = component("turbo", "turbo.gguf", b"turbo weights");
         let merge = component("merge", "merge.gguf", b"merge weights");
         std::fs::write(folder.path().join("renamed.gguf"), b"turbo weights").unwrap();

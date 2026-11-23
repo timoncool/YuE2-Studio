@@ -1,0 +1,188 @@
+{
+  "files": {
+    "yue2/backbone-bf16": {
+      "label": "YuE2-3B-BF16.gguf",
+      "kind": "model",
+      "part": "backbone",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-BF16.gguf",
+      "bytes": 7166072352,
+      "sha256": "668ca9ffa4622449916aae5068b5737363e7ec186a824cd3d7a1a8a95269f166",
+      "path": "YuE2-3B-BF16.gguf"
+    },
+    "yue2/backbone-q8": {
+      "label": "YuE2-3B-Q8_0.gguf",
+      "kind": "model",
+      "part": "backbone",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q8_0.gguf",
+      "bytes": 3810232064,
+      "sha256": "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b",
+      "path": "YuE2-3B-Q8_0.gguf"
+    },
+    "yue2/backbone-q6": {
+      "label": "YuE2-3B-Q6_K.gguf",
+      "kind": "model",
+      "part": "backbone",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q6_K.gguf",
+      "bytes": 2943331072,
+      "sha256": "42068d5e57713df11b9f6a5a3751072d9bbefe231d1d088f9c100e026ffa4ef9",
+      "path": "YuE2-3B-Q6_K.gguf"
+    },
+    "yue2/backbone-q5": {
+      "label": "YuE2-3B-Q5_K_M.gguf",
+      "kind": "model",
+      "part": "backbone",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-3B-Q5_K_M.gguf",
+      "bytes": 2622936832,
+      "sha256": "cd3efd250b734a229172800f08f33a893ad1f66b521666e176cdae4a0729b281",
+      "path": "YuE2-3B-Q5_K_M.gguf"
+    },
+    "yue2/vae-f32": {
+      "label": "YuE2-Vae-F32.gguf",
+      "kind": "model",
+      "part": "vae",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/YuE2-Vae-F32.gguf",
+      "bytes": 530497344,
+      "sha256": "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a",
+      "path": "YuE2-Vae-F32.gguf"
+    },
+    "yue2/vae-rs-x3-v1": {
+      "label": "VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf",
+      "kind": "model",
+      "part": "vae-decoder",
+      "url": "https://huggingface.co/goldhub/YuE2-VAE-RS-x3/resolve/be7adad4d8f345549cfb59f94af26e9e3ca6ae67/VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf",
+      "bytes": 803056768,
+      "sha256": "368a91278f0b25e67bc14b1a894f9e8c341c5fccb70afa880fbc1de6afdb4959",
+      "path": "VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf"
+    },
+    "yue2/vae-rs-x3-v2": {
+      "label": "VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf",
+      "kind": "model",
+      "part": "vae-decoder",
+      "url": "https://huggingface.co/goldhub/YuE2-VAE-RS-x3/resolve/be7adad4d8f345549cfb59f94af26e9e3ca6ae67/VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf",
+      "bytes": 803056768,
+      "sha256": "93de6e8a18246670f4cf49d5f4f193aece95dda48463eda13a303e7f0d313f97",
+      "path": "VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf"
+    },
+    "yue2/transcriber-f32": {
+      "label": "SheetSage2-F32.gguf",
+      "kind": "model",
+      "part": "transcriber",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/SheetSage2-F32.gguf",
+      "bytes": 228738176,
+      "sha256": "4988c01b64c2812dd71eb89a9ab1937a3385ff2ba869bf495ccb69af4ec744cd",
+      "path": "SheetSage2-F32.gguf"
+    },
+    "yue2/transcriber-q8": {
+      "label": "SheetSage2-Q8_0.gguf",
+      "kind": "model",
+      "part": "transcriber",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/SheetSage2-Q8_0.gguf",
+      "bytes": 105629856,
+      "sha256": "95d8fa8761753b4833782a52b68d5c0afa3bd3cfbc03d3dcbbf8ded0c13f611e",
+      "path": "SheetSage2-Q8_0.gguf"
+    },
+    "yue2/mert-f32": {
+      "label": "MERT-v2-FullSong-F32.gguf",
+      "kind": "model",
+      "part": "transcriber-base",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/MERT-v2-FullSong-F32.gguf",
+      "bytes": 2529780448,
+      "sha256": "695b247660405474fffa7bab4d019227325b8d169f96aaa96bad488033fec637",
+      "path": "MERT-v2-FullSong-F32.gguf"
+    },
+    "yue2/mert-q8": {
+      "label": "MERT-v2-FullSong-Q8_0.gguf",
+      "kind": "model",
+      "part": "transcriber-base",
+      "url": "https://huggingface.co/Serveurperso/YuE2-GGUF/resolve/e630f2b8f6aedf8254c3186438633c1b5eeaf80a/MERT-v2-FullSong-Q8_0.gguf",
+      "bytes": 902283712,
+      "sha256": "35a6032ec7e8123c02becdefc7bfe10a3adb33faa8a1951dc0af864b4494b8ef",
+      "path": "MERT-v2-FullSong-Q8_0.gguf"
+    },
+    "yue2/companion-v9": {
+      "label": "nar_lora_joint_v9.safetensors",
+      "kind": "model",
+      "part": "companion",
+      "url": "https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4/resolve/e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5/nar_lora_joint_v9.safetensors",
+      "bytes": 140560592,
+      "sha256": "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e",
+      "path": "nar_lora_joint_v9.safetensors"
+    }
+  },
+  "sets": {
+    "yue2-cpp": [
+      {
+        "id": "light",
+        "label": {
+          "en": "Light - Q5_K_M backbone (6 GB cards)",
+          "ru": "Light - Q5_K_M backbone (6 GB cards)",
+          "zh": "Light - Q5_K_M backbone (6 GB cards)",
+          "ja": "Light - Q5_K_M backbone (6 GB cards)",
+          "ko": "Light - Q5_K_M backbone (6 GB cards)",
+          "pt": "Light - Q5_K_M backbone (6 GB cards)"
+        },
+        "roles": {
+          "backbone": "yue2/backbone-q5",
+          "vae": "yue2/vae-f32",
+          "transcriber": "yue2/transcriber-q8",
+          "transcriber-base": "yue2/mert-q8",
+          "companion": "yue2/companion-v9"
+        }
+      },
+      {
+        "id": "balanced",
+        "label": {
+          "en": "Balanced - Q6_K backbone",
+          "ru": "Balanced - Q6_K backbone",
+          "zh": "Balanced - Q6_K backbone",
+          "ja": "Balanced - Q6_K backbone",
+          "ko": "Balanced - Q6_K backbone",
+          "pt": "Balanced - Q6_K backbone"
+        },
+        "roles": {
+          "backbone": "yue2/backbone-q6",
+          "vae": "yue2/vae-f32",
+          "transcriber": "yue2/transcriber-q8",
+          "transcriber-base": "yue2/mert-q8",
+          "companion": "yue2/companion-v9"
+        }
+      },
+      {
+        "id": "quality-q8",
+        "label": {
+          "en": "Quality - Q8_0 backbone, near lossless",
+          "ru": "Quality - Q8_0 backbone, near lossless",
+          "zh": "Quality - Q8_0 backbone, near lossless",
+          "ja": "Quality - Q8_0 backbone, near lossless",
+          "ko": "Quality - Q8_0 backbone, near lossless",
+          "pt": "Quality - Q8_0 backbone, near lossless"
+        },
+        "roles": {
+          "backbone": "yue2/backbone-q8",
+          "vae": "yue2/vae-f32",
+          "transcriber": "yue2/transcriber-q8",
+          "transcriber-base": "yue2/mert-q8",
+          "companion": "yue2/companion-v9"
+        }
+      },
+      {
+        "id": "native",
+        "label": {
+          "en": "Full native - BF16 backbone, original weights",
+          "ru": "Full native - BF16 backbone, original weights",
+          "zh": "Full native - BF16 backbone, original weights",
+          "ja": "Full native - BF16 backbone, original weights",
+          "ko": "Full native - BF16 backbone, original weights",
+          "pt": "Full native - BF16 backbone, original weights"
+        },
+        "roles": {
+          "backbone": "yue2/backbone-bf16",
+          "vae": "yue2/vae-f32",
+          "transcriber": "yue2/transcriber-f32",
+          "transcriber-base": "yue2/mert-f32",
+          "companion": "yue2/companion-v9"
+        }
+      }
+    ]
+  }
+}

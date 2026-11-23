@@ -108,8 +108,7 @@ interface AdoptRefusal {
   kind: 'size' | 'unknown' | 'copy';
   size?: number;
   needs?: number;
-  repository?: string;
-  revision?: string;
+  source?: string;
   error?: string;
 }
 
@@ -1315,7 +1314,7 @@ export const SetupGate: React.FC<{
                       ? t('adoptRefusedSize')
                           .replace('{size}', (refusal.size ?? 0).toLocaleString())
                           .replace('{needs}', (refusal.needs ?? 0).toLocaleString())
-                          .replace('{source}', `huggingface.co/${refusal.repository ?? ''} @ ${(refusal.revision ?? '').slice(0, 7)}`)
+                          .replace('{source}', (refusal.source ?? '').replace(/^https:\/\//, ''))
                       : refusal.kind === 'copy'
                         ? t('adoptRefusedCopy').replace('{error}', refusal.error ?? '')
                         : t('adoptRefusedUnknown')}

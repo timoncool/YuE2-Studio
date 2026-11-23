@@ -53,6 +53,9 @@ pub(crate) struct FileEntry {
     pub note: String,
     #[serde(default)]
     pub mirrors: Vec<String>,
+    /// What the file is to its engine, where the engine tells its files apart (`backbone`, `vae`, ...).
+    #[serde(default)]
+    pub part: Option<String>,
     /// SHA-256 of files inside an archive, by name: what a pick takes out, and what an
     /// unpacked archive must still hold to count as installed.
     #[serde(default)]
@@ -134,6 +137,7 @@ fn required_roles(engine: &str) -> &'static [&'static str] {
     match engine {
         crate::ace::ENGINE_ID => &crate::ace::ROLES,
         crate::native_minimax::ENGINE_ID => &crate::native_minimax::ROLES,
+        crate::model_manager::ENGINE_ID => &crate::model_manager::ROLES,
         _ => &[],
     }
 }
@@ -350,6 +354,12 @@ pub(crate) fn set_files(engine: &str, set: &str) -> Option<Vec<(&'static Asset, 
             Some((asset, crate::pin_sha::sha256(asset.url)?))
         })
         .collect()
+}
+
+
+/// The files of the catalogue in use whose id starts with `prefix`, by id.
+pub(crate) fn files_under(prefix: &str) -> Vec<(String, FileEntry)> {
+    current().catalogue.files.range(prefix.to_owned()..).take_while(|(id, _)| id.starts_with(prefix)).map(|(id, file)| (id.clone(), file.clone())).collect()
 }
 
 pub(crate) fn file(id: &str) -> Option<FileEntry> {
@@ -615,6 +625,7 @@ mod export {
         crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
             .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
     }
+
 
 
 

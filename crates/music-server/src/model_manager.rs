@@ -13,8 +13,8 @@ use sha2::{Digest, Sha256};
 use tokio::sync::RwLock;
 
 pub const ENGINE_ID: &str = "yue2-cpp";
-const REPOSITORY: &str = "Serveurperso/YuE2-GGUF";
-const REVISION: &str = "e630f2b8f6aedf8254c3186438633c1b5eeaf80a";
+/// The parts every YuE2 set of the component catalogue fills (`distribution/components-src/yue2.json`).
+pub(crate) const ROLES: [&str; 5] = ["backbone", "vae", "transcriber", "transcriber-base", "companion"];
 /// Part of every set, picked or not: the engine merges it under every render
 /// and the trainer keeps it under every LoRA.
 const COMPANION: &str = "companion-v9";
@@ -45,8 +45,6 @@ pub struct ModelManager {
 #[derive(Debug, Clone, Serialize)]
 pub struct Catalog {
     pub engine_id: &'static str,
-    pub repository: &'static str,
-    pub revision: &'static str,
     pub recommended_profile_id: &'static str,
     pub profiles: Vec<Profile>,
     pub components: Vec<Component>,
@@ -72,17 +70,15 @@ pub struct Component {
     pub filename: &'static str,
     pub bytes: u64,
     pub sha256: &'static str,
-    /// Where this file comes from. The lighter quantisations are published by
-    /// someone else, and a single hard-coded repository is what kept them out.
-    pub repository: &'static str,
-    pub revision: &'static str,
+    /// The file at its pinned revision, from the component catalogue.
+    pub url: &'static str,
 }
 
 impl Component {
     /// The file at its pinned revision on Hugging Face: what the studio downloads, and what a person
     /// downloading by hand needs, since the repository's latest files may be other builds.
     pub fn url(&self) -> String {
-        format!("https://huggingface.co/{}/resolve/{}/{}?download=true", self.repository, self.revision, self.filename)
+        format!("{}?download=true", self.url)
     }
 }
 
@@ -199,8 +195,6 @@ impl ModelManager {
     pub fn catalog(&self) -> Catalog {
         Catalog {
             engine_id: ENGINE_ID,
-            repository: REPOSITORY,
-            revision: REVISION,
             recommended_profile_id: recommended_profile(),
             profiles: profiles(),
             components: components(),
@@ -872,7 +866,7 @@ fn part_path(path: &Path) -> PathBuf {
 
 /// The parts of a declared set, named in the statistics beside it.
 pub fn profile_components(profile_id: &str) -> Vec<String> {
-    PROFILE_SETS.iter().find(|set| set.0 == profile_id).map(|set| set.2.iter().map(|id| id.to_string()).collect()).unwrap_or_default()
+    profile_sets().iter().find(|set| set.0 == profile_id).map(|set| set.2.iter().map(|id| id.to_string()).collect()).unwrap_or_default()
 }
 
 
@@ -903,21 +897,55 @@ pub fn profile_matching(component_ids: &[String]) -> Option<&'static str> {
     })
 }
 
-const PROFILE_SETS: [(&str, &str, [&str; 5]); 4] = [
-    ("light", "Light - Q5_K_M backbone (6 GB cards)", ["backbone-q5", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
-    ("balanced", "Balanced - Q6_K backbone", ["backbone-q6", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
-    ("quality-q8", "Quality - Q8_0 backbone, near lossless", ["backbone-q8", "vae-f32", "transcriber-q8", "mert-q8", COMPANION]),
-    ("native", "Full native - BF16 backbone, original weights", ["backbone-bf16", "vae-f32", "transcriber-f32", "mert-f32", COMPANION]),
-];
+type ProfileSet = (&'static str, &'static str, Vec<&'static str>);
+
+/// YuE2's files and sets as the component catalogue in use lists them, made once per catalogue: the files under
+/// `yue2/`, by the ids settings have always stored, and the sets of this engine.
+fn published() -> &'static (Vec<Component>, Vec<ProfileSet>) {
+    static MADE: std::sync::Mutex<Option<(u64, &'static (Vec<Component>, Vec<ProfileSet>))>> = std::sync::Mutex::new(None);
+    let sequence = crate::components::sequence();
+    let mut made = MADE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((seen, published)) = *made {
+        if seen == sequence {
+            return published;
+        }
+    }
+    let leak = |text: &str| -> &'static str { Box::leak(text.to_owned().into_boxed_str()) };
+    let components: Vec<Component> = crate::components::files_under("yue2/")
+        .into_iter()
+        .map(|(id, file)| Component {
+            id: leak(&id["yue2/".len()..]),
+            kind: leak(file.part.as_deref().unwrap_or("")),
+            filename: leak(&file.path),
+            bytes: file.bytes,
+            sha256: leak(&file.sha256),
+            url: leak(&file.url),
+        })
+        .collect();
+    let sets: Vec<ProfileSet> = crate::components::sets(ENGINE_ID)
+        .into_iter()
+        .map(|set| {
+            let ids = ROLES.iter().filter_map(|role| set.roles.get(*role)).map(|id| leak(id.trim_start_matches("yue2/"))).collect();
+            (leak(&set.id), leak(&set.label["en"]), ids)
+        })
+        .collect();
+    let published: &'static (Vec<Component>, Vec<ProfileSet>) = Box::leak(Box::new((components, sets)));
+    *made = Some((sequence, published));
+    published
+}
+
+fn profile_sets() -> &'static [ProfileSet] {
+    &published().1
+}
 
 pub(crate) fn profiles() -> Vec<Profile> {
-    PROFILE_SETS.iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
+    profile_sets().iter().map(|(id, label, ids)| profile(id, label, ids)).collect()
 }
 
 /// The bytes of a set's backbone and VAE, the weights that sit in memory while a song is made.
 pub fn profile_weights_bytes(id: &str) -> u64 {
     let all = components();
-    PROFILE_SETS
+    profile_sets()
         .iter()
         .find(|(profile, _, _)| *profile == id)
         .map(|(_, _, ids)| {
@@ -947,50 +975,8 @@ pub(super) fn stock_backbone_sha(sha: &str) -> bool {
     components().iter().any(|component| component.kind == "backbone" && component.sha256 == sha)
 }
 
-fn components() -> Vec<Component> {
-    vec![
-        c("backbone-bf16", "backbone", "YuE2-3B-BF16.gguf", 7166072352, "668ca9ffa4622449916aae5068b5737363e7ec186a824cd3d7a1a8a95269f166"),
-        c("backbone-q8", "backbone", "YuE2-3B-Q8_0.gguf", 3810232064, "41121ce97786d7795a325bcf123ca196956c03bb252c9e75384cfc1f2fc19e6b"),
-        c("backbone-q6", "backbone", "YuE2-3B-Q6_K.gguf", 2943331072, "42068d5e57713df11b9f6a5a3751072d9bbefe231d1d088f9c100e026ffa4ef9"),
-        c("backbone-q5", "backbone", "YuE2-3B-Q5_K_M.gguf", 2622936832, "cd3efd250b734a229172800f08f33a893ad1f66b521666e176cdae4a0729b281"),
-        // The VAE ships in F32 only: its weights are the audio.
-        c("vae-f32", "vae", "YuE2-Vae-F32.gguf", 530497344, "93e49dfb1970e89ad64cacb17cf13b5d05f6bb30ef7ed3adae3050bcb728638a"),
-        // Ruach Studio's float32 decoders, YuE2-VAE-RS x3 v1 and v2 (CC BY-NC 4.0, like YuE2): F32 only, as released. They need an engine
-        // whose VAE reader knows their keys (decoder_pre_units, decoder_extra_units, halo_frames, weights_f32): timoncool/yue2.cpp#2
-        Component {
-            id: "vae-rs-x3-v1",
-            kind: "vae-decoder",
-            filename: "VAE-RS/YuE2-VAE-RS-x3_v1-F32.gguf",
-            bytes: 803056768,
-            sha256: "368a91278f0b25e67bc14b1a894f9e8c341c5fccb70afa880fbc1de6afdb4959",
-            repository: RUACH_VAE_REPOSITORY,
-            revision: RUACH_VAE_REVISION,
-        },
-        Component {
-            id: "vae-rs-x3-v2",
-            kind: "vae-decoder",
-            filename: "VAE-RS/YuE2-VAE-RS-x3_v2-F32.gguf",
-            bytes: 803056768,
-            sha256: "93de6e8a18246670f4cf49d5f4f193aece95dda48463eda13a303e7f0d313f97",
-            repository: RUACH_VAE_REPOSITORY,
-            revision: RUACH_VAE_REVISION,
-        },
-        // SheetSage2's head; the MERT encoder it reads is a file of its own
-        c("transcriber-f32", "transcriber", "SheetSage2-F32.gguf", 228738176, "4988c01b64c2812dd71eb89a9ab1937a3385ff2ba869bf495ccb69af4ec744cd"),
-        c("transcriber-q8", "transcriber", "SheetSage2-Q8_0.gguf", 105629856, "95d8fa8761753b4833782a52b68d5c0afa3bd3cfbc03d3dcbbf8ded0c13f611e"),
-        c("mert-f32", "transcriber-base", "MERT-v2-FullSong-F32.gguf", 2529780448, "695b247660405474fffa7bab4d019227325b8d169f96aaa96bad488033fec637"),
-        c("mert-q8", "transcriber-base", "MERT-v2-FullSong-Q8_0.gguf", 902283712, "35a6032ec7e8123c02becdefc7bfe10a3adb33faa8a1951dc0af864b4494b8ef"),
-        // Mothersuperior's pair of the v9 tokenizer head, CC BY-NC 4.0
-        Component {
-            id: COMPANION,
-            kind: "companion",
-            filename: "nar_lora_joint_v9.safetensors",
-            bytes: 140560592,
-            sha256: "585f303da1d5252d228d1e8ac6d4c4d11d970df9297406935cc8bdafa49cfa7e",
-            repository: COMPANION_REPOSITORY,
-            revision: "e2e63d859f3af879baf1b4d4e9f22d1eeda6fde5",
-        },
-    ]
+pub(crate) fn components() -> Vec<Component> {
+    published().0.clone()
 }
 
 fn optional_kind(kind: &str) -> bool {
@@ -1029,12 +1015,6 @@ fn precision(filename: &str) -> &str {
 }
 
 /// Ruach Studio's decoders: https://huggingface.co/goldhub/YuE2-VAE-RS-x3, pinned.
-const RUACH_VAE_REPOSITORY: &str = "goldhub/YuE2-VAE-RS-x3";
-const RUACH_VAE_REVISION: &str = "be7adad4d8f345549cfb59f94af26e9e3ca6ae67";
-
-fn c(id: &'static str, kind: &'static str, filename: &'static str, bytes: u64, sha256: &'static str) -> Component {
-    Component { id, kind, filename, bytes, sha256, repository: REPOSITORY, revision: REVISION }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1064,7 +1044,8 @@ mod tests {
     fn a_manual_address_names_the_pinned_revision() {
         for component in components() {
             let url = component.url();
-            assert_eq!(url, format!("https://huggingface.co/{}/resolve/{}/{}?download=true", component.repository, component.revision, component.filename));
+            assert_eq!(url, format!("{}?download=true", component.url));
+            assert!(url.starts_with("https://huggingface.co/") && url.contains("/resolve/"), "{url}");
             assert!(!url.contains("/resolve/main/"), "{} is not pinned", component.id);
             assert!(crate::net::mirror_url(&url).starts_with("https://hf-mirror.com/"), "{}", component.id);
         }
@@ -1255,19 +1236,20 @@ mod tests {
     #[test]
     fn catalog_pins_every_published_file() {
         assert_eq!(components().len(), 12);
-        assert!(components().iter().all(|component| component.sha256.len() == 64 && component.revision.len() == 40));
-        let ruach = |component: &&Component| component.repository == RUACH_VAE_REPOSITORY;
-        assert!(components().iter().filter(|component| component.id != COMPANION && !ruach(component)).all(|component| component.revision == REVISION));
-        // the Ruach Studio decoders: their own pinned repository, float32 only, offered as VAEs
-        assert!(components().iter().filter(ruach).all(|component| component.revision == RUACH_VAE_REVISION && component.kind == "vae-decoder" && component.filename.ends_with("-F32.gguf")));
-        assert_eq!(components().iter().filter(ruach).count(), 2);
+        assert!(components().iter().all(|component| component.sha256.len() == 64 && !component.kind.is_empty()));
+        // the Ruach Studio decoders: float32 only, offered as VAEs
+        let decoders: Vec<_> = components().into_iter().filter(|component| component.kind == "vae-decoder").collect();
+        assert_eq!(decoders.len(), 2);
+        assert!(decoders.iter().all(|component| component.filename.ends_with("-F32.gguf")));
+        assert_eq!(profile_sets().len(), 4);
+        assert!(profile_sets().iter().all(|(_, _, ids)| ids.len() == ROLES.len()));
     }
 
     #[tokio::test]
     async fn file_hashing_does_not_block_the_async_runtime() {
         let path = std::env::temp_dir().join(format!("yue2-hash-test-{}", uuid::Uuid::now_v7()));
         fs::File::create(&path).unwrap().set_len(8 * 1024 * 1024).unwrap();
-        let component = Component { id: "test", kind: "test", filename: "test", bytes: 8 * 1024 * 1024, sha256: "not-a-real-digest", repository: REPOSITORY, revision: REVISION };
+        let component = Component { id: "test", kind: "test", filename: "test", bytes: 8 * 1024 * 1024, sha256: "not-a-real-digest", url: "https://example.invalid/test" };
         let hash_task = tokio::spawn(verified_file_async(path.clone(), component));
         tokio::time::timeout(std::time::Duration::from_secs(1), tokio::time::sleep(std::time::Duration::from_millis(1))).await.unwrap();
         assert!(!hash_task.await.unwrap().unwrap());
