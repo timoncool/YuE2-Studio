@@ -731,6 +731,20 @@ pub(crate) fn listen_pack() -> &'static [Asset] {
     })
 }
 
+
+/// The listening pack for this way of hearing. Where the song is heard on the card, the
+/// captioner comes in the CUDA trainer archive (it carries `ace-caption.exe` with the CUDA
+/// ggml); its own archive has no CUDA backend and would describe on the processor.
+fn listen_files_for(hearing: crate::listen::Hearing) -> impl Iterator<Item = &'static Asset> {
+    let on_card = cfg!(windows) && hearing.on_card;
+    let trainer = on_card.then(|| &pack()[0]);
+    listen_pack()
+        .iter()
+        .filter(move |asset| !asset.id.starts_with("moss-lm") || asset.relative_path.ends_with(hearing.lm))
+        .filter(move |asset| !(on_card && asset.marker == CAPTIONER))
+        .chain(trainer)
+}
+
 fn now() -> String {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs().to_string()).unwrap_or_default()
 }
@@ -1120,8 +1134,7 @@ impl Training {
     /// The listening pack this machine downloads and runs: every file but the MOSS-Music build its card does not take
     /// (`listen::hearing`).
     fn listen_files(&self) -> impl Iterator<Item = &'static Asset> {
-        let hearing = crate::listen::hearing(&crate::hardware::hardware(), false);
-        listen_pack().iter().filter(move |asset| !asset.id.starts_with("moss-lm") || asset.relative_path.ends_with(hearing.lm))
+        listen_files_for(crate::listen::hearing(&crate::hardware::hardware(), false))
     }
 
     /// The listening pack's files with whether each is on disk.
@@ -2721,7 +2734,8 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, b"previous weights").unwrap();
         }
-        let missing: Vec<_> = training.listen_files().filter(|asset| !training.listen_installed(asset)).map(|asset| asset.id).collect();
+        let processor = crate::listen::Hearing { lm: "moss-lm-q4_k_m.gguf", on_card: false, seconds: 30.0 };
+        let missing: Vec<_> = listen_files_for(processor).filter(|asset| !training.listen_installed(asset)).map(|asset| asset.id).collect();
         assert_eq!(missing, ["ace-caption"]);
 
         let captioner = training.downloader.runtime_dir(trainer_folder()).join(CAPTIONER);
@@ -2730,10 +2744,19 @@ mod tests {
         drop(training);
 
         let restarted = Training::new(root.path(), "yue2");
-        assert!(restarted.listen_ready());
-        assert!(restarted.listen_status().iter().all(|file| file["installed"].as_bool() == Some(true)));
-        assert!(restarted.install_listen().await.is_ok());
+        assert!(listen_files_for(processor).all(|asset| restarted.listen_installed(asset)));
         assert!(restarted.downloader.active_for(LISTEN_SCOPE).await.is_none());
+    }
+
+
+    #[test]
+    #[cfg(windows)]
+    fn a_card_hears_with_the_cuda_captioner_of_the_trainer_archive() {
+        let card = crate::listen::Hearing { lm: "moss-lm-q8_0.gguf", on_card: true, seconds: 120.0 };
+        let ids: Vec<_> = listen_files_for(card).map(|asset| asset.id).collect();
+        assert!(ids.contains(&"music-train"), "{ids:?}");
+        assert!(!ids.contains(&"ace-caption"), "the processor build is not downloaded for a card: {ids:?}");
+        assert!(ids.contains(&"moss-lm") && !ids.contains(&"moss-lm-q4"), "{ids:?}");
     }
 
     #[cfg(windows)]
