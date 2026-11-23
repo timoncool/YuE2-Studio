@@ -1599,9 +1599,9 @@ function AppContent() {
           // this is a wait - not a decision. The download page appears only
           // when components are genuinely missing.
           return (
-            <div className="flex h-full min-h-0 flex-col">
+            <div className="flex h-full min-h-0 min-w-0 flex-col">
               {nativeModels !== 'unknown' && (
-                <div className="flex justify-center py-2">
+                <div className="flex flex-wrap justify-center gap-x-1 px-4 py-2">
                   <button type="button" onClick={() => chooseMusicEngine('openrouter')}
                     className="rounded-lg px-3 py-2 text-sm font-medium text-pink-600 hover:underline dark:text-pink-400">
                     {t('lmProvider.useOpenRouter')}

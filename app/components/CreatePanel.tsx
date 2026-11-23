@@ -2161,7 +2161,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
           )}
-          {onMusicEngineChange && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle'
+          {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle'
             && !(pair.status.stage === 'needs_install' && (native.profile?.installable || yue)))) && (
             <div className="space-y-1 text-xs">
               <p role="status">
