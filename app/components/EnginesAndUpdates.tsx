@@ -193,7 +193,7 @@ export function EnginesAndUpdates({ focus }: {
   const catalogueProblem = catalogueError || data?.components?.refresh_error;
   return (
     <section aria-label={title} className="space-y-4">
-      <UpdatePlanView />
+      <UpdatePlanView quietWhenEmpty />
       <div className="flex flex-wrap items-center gap-3">
         <SecondaryButton disabled={busy} onClick={() => {
           if (!refreshingCatalogue) void refreshCatalogue();

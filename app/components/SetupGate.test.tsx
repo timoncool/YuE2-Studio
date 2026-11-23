@@ -54,6 +54,7 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     ] });
     if (url === '/v1/rvc/native/runtime') return Response.json({ supported: false, reason: 'Unsupported GPU' });
     if (url === '/v1/components/updates') return Response.json({ mode: 'notify', updates: [] });
+    if (url === '/setup/catalog') return Response.json({ profiles: [], roles: [] });
     return Response.json({});
   });
   vi.stubGlobal('fetch', onlyRead);
@@ -65,7 +66,7 @@ it('opens upgrades from the notification target and reads per-engine readiness w
       <SettingsModal isOpen target={engineUpdateTarget} onNavigate={vi.fn()} onClose={vi.fn()} theme="light" onToggleTheme={vi.fn()} />
     </QueryClientProvider>));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(host.querySelector('h3')?.textContent).toBe('Engines and updates');
+    expect(host.querySelector('h3')?.textContent).toBe('Models and engines');
     const engineCard = (id: string) => host.querySelector(`[data-engine="${id}"]`)?.textContent ?? '';
     expect(engineCard('local')).toContain('YuE2Ready');
     expect(engineCard('local')).not.toContain('In use now');
@@ -90,8 +91,8 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(engineCard('minimaxmusic-cpp')).toContain('In use now');
     expect(host.querySelector('[data-engine="minimaxmusic-cpp"] p')?.textContent).not.toContain('managed12345');
-    // two reads of the page and one of the YuE2 card's own set picker
-    expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(3);
+    // two reads of the engines, one of the YuE2 card's set picker and one of the own-set block below it
+    expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(4);
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -271,7 +272,8 @@ describe('saving a model set from Settings', () => {
         <SettingsModal isOpen target={target} onNavigate={setTarget} onClose={close} theme="light" onToggleTheme={() => {}} />
       </>;
     }
-    await act(async () => root.render(<SettingsWindow />));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await act(async () => root.render(<QueryClientProvider client={client}><SettingsWindow /></QueryClientProvider>));
     return close;
   }
 
@@ -281,21 +283,29 @@ describe('saving a model set from Settings', () => {
     await act(async () => target!.click());
   }
   const mutations = () => calls.filter(({ url }) => url === '/setup/select' || url === '/setup/download');
+  // ready sets are chosen in the YuE2 card now; Done saves a hand-picked quantisation per role
+  async function chooseNextBackbone() {
+    const role = [...host.querySelectorAll('select')].find(select => [...select.options].some(option => option.value === 'backbone-q6'))!;
+    await act(async () => {
+      role.value = 'backbone-q6';
+      role.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
 
-  it('opens the component update panel for the notification action target', async () => {
-    await mountSettings({ initialTarget: 'models:component-updates' });
-    const panel = [...host.querySelectorAll('details')]
-      .find(detail => detail.querySelector('summary')?.textContent?.includes('updateSettingsEntry'));
-    expect(panel?.open).toBe(true);
+  it('opens Models and engines, with the engines and their update plan, for the notification action target', async () => {
+    await mountSettings({ initialTarget: 'engines:updates' });
+    expect(host.querySelector('h3')?.textContent).toBe('Models and engines');
+    expect(host.querySelector('section[aria-label="Models and engines"]')).not.toBeNull();
+    expect([...host.querySelectorAll('summary')].some(summary => summary.textContent?.includes('updateSettingsEntry'))).toBe(false);
   });
 
   it('returns to the requested page after a manual tab change and retains model edits', async () => {
     await mountSettings();
-    await press('Next set');
+    await chooseNextBackbone();
     await press('account');
     expect(host.querySelector('h3')?.textContent).toBe('account');
     await press('Open models from the window bridge');
-    expect(host.querySelector('h3')?.textContent).toBe('modelsSection');
+    expect(host.querySelector('h3')?.textContent).toBe('Models and engines');
     await press('done');
     expect(JSON.parse(mutations()[0].init?.body as string)).toEqual({ component_ids: next });
   });
@@ -304,7 +314,7 @@ describe('saving a model set from Settings', () => {
     const close = await mountSettings();
     const pending = deferred<Response>();
     save = () => pending.promise;
-    await press('Next set');
+    await chooseNextBackbone();
     await press('account');
     await press('done');
     expect(mutations()).toHaveLength(1);
@@ -320,7 +330,7 @@ describe('saving a model set from Settings', () => {
   it('leaves Settings open and preserves the error when selection fails', async () => {
     const close = await mountSettings();
     save = async () => response({ error: 'Cannot save selection' }, 409);
-    await press('Next set');
+    await chooseNextBackbone();
     await press('done');
     expect(host.querySelector('[role="alert"]')?.textContent).toBe('Cannot save selection');
     expect(close).not.toHaveBeenCalled();
@@ -329,7 +339,7 @@ describe('saving a model set from Settings', () => {
 
   it('leaves an edited set with missing weights open without starting a download', async () => {
     const close = await mountSettings({ installed: false });
-    await press('Next set');
+    await chooseNextBackbone();
     await press('done');
     expect(host.querySelector('[role="alert"]')?.textContent).toBe('downloadSelectedProfile');
     expect(close).not.toHaveBeenCalled();

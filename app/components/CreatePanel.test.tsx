@@ -161,7 +161,7 @@ it('opens engine management for the current engine and retains the Create draft'
   const draft = field('textarea[aria-label="styleCardTitle"]')!;
   type(draft, 'Draft folk arrangement');
   openModelSettings();
-  click(buttonNamed('Engines and updates')!);
+  click(buttonNamed('Models and engines')!);
   expect(onOpenEngines).toHaveBeenCalledWith('local');
   expect(draft.value).toBe('Draft folk arrangement');
   expect(sent).toHaveLength(0);

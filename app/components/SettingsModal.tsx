@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BarChart3, Bell, Boxes, Bug, Cloud, Cpu, Image as ImageIcon, Info, Monitor, Plug, User as UserIcon, X } from 'lucide-react';
+import { BarChart3, Bell, Boxes, Bug, Cloud, Gauge, Image as ImageIcon, Info, Monitor, Plug, User as UserIcon, X } from 'lucide-react';
 import { SiGithub } from '@icons-pack/react-simple-icons';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../context/I18nContext';
@@ -7,7 +7,7 @@ import { LANGUAGE_NAMES, type Language } from '../i18n/translations';
 import { ProviderSettings } from './ProviderSettings';
 import { EngineSettings } from './EngineSettings';
 import { EnginesAndUpdates } from './EnginesAndUpdates';
-import { enginePageStrings } from '../i18n/enginePage';
+import { engineCardText } from '../i18n/engineCards';
 import { SetupGate, type SetupSelection } from './SetupGate';
 import { CoverTemplateSettings } from './CoverTemplateSettings';
 import { AgentPanel } from './AgentPanel';
@@ -58,7 +58,10 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, onNavigate, onClose, theme, onToggleTheme }) => {
   const { user, setDisplayName } = useAuth();
   const { t, language, setLanguage } = useI18n();
-  const [section, focus] = target.split(':');
+  const [requested, focus] = target.split(':');
+  // engines live in the models section now; their old addresses still lead there
+  const section = requested === 'engines' ? 'models' : requested;
+  const sectionText = engineCardText[language].sections;
   const [modelsVisited, setModelsVisited] = useState(false);
   const modelSelection = useRef<SetupSelection>(null);
   const [savingModels, setSavingModels] = useState(false);
@@ -96,10 +99,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
 
   const sections: Array<{ id: SectionId; label: string; hint: string; icon: React.ReactNode }> = [
     { id: 'account', label: t('account'), hint: t('accountSectionHint'), icon: <UserIcon size={16} /> },
-    { id: 'models', label: t('modelsSection'), hint: t('modelsSectionHint'), icon: <Boxes size={16} /> },
-    { id: 'engines', label: enginePageStrings[language][0], hint: '', icon: <Cpu size={16} /> },
-    { id: 'engine', label: t('localEngine'), hint: t('engineSectionHint'), icon: <Cpu size={16} /> },
-    { id: 'cloud', label: t('providers'), hint: t('cloudSectionHint'), icon: <Cloud size={16} /> },
+    { id: 'models', label: sectionText.models, hint: sectionText.modelsHint, icon: <Boxes size={16} /> },
+    { id: 'engine', label: sectionText.engine, hint: sectionText.engineHint, icon: <Gauge size={16} /> },
+    { id: 'cloud', label: sectionText.cloud, hint: sectionText.cloudHint, icon: <Cloud size={16} /> },
     { id: 'agent', label: t('agentSection'), hint: t('agentSectionHint'), icon: <Plug size={16} /> },
     { id: 'covers', label: t('coversSection'), hint: t('coversSectionHint'), icon: <ImageIcon size={16} /> },
     { id: 'interface', label: t('appearance'), hint: t('interfaceSectionHint'), icon: <Monitor size={16} /> },
@@ -195,11 +197,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
             {section === 'covers' && <CoverTemplateSettings />}
             {(section === 'models' || modelsVisited) && (
               <div className="-m-6" hidden={section !== 'models'}>
+                <div className="mx-auto max-w-2xl px-5 pt-6"><EnginesAndUpdates focus={focus} /></div>
                 <SetupGate mode="settings" focus={focus} selectionRef={modelSelection} />
               </div>
             )}
             {section === 'engine' && <EngineSettings />}
-            {section === 'engines' && <EnginesAndUpdates focus={focus} onNavigate={onNavigate} />}
             {section === 'cloud' && <ProviderSettings />}
             {section === 'agent' && <AgentPanel />}
             {section === 'privacy' && <div className="space-y-8"><HubSettings /><FileTagSettings /></div>}

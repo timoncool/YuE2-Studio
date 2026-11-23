@@ -11,6 +11,7 @@ const en = {
   modelsHint: 'Each model downloads on its own; keep only the ones you use.',
   downloaded: 'Downloaded',
   catalogue: 'Component catalogue',
+  sections: { models: 'Models and engines', modelsHint: 'What is downloaded, quality, updates and add-ons', engine: 'Performance', engineHint: 'Graphics card, memory, fine tuning and diagnostics', cloud: 'Cloud and network', cloudHint: 'OpenRouter key, proxy and download source', yueSet: 'Your own YuE2 set', yueSetHint: 'A quantisation for each YuE2 role, for those who pick by hand. Ready sets are in the YuE2 card above.' },
   about: {
     local: 'Songs with vocals from lyrics and a style, with a score you can edit.',
     'acestep-cpp': 'Fast songs and instrumentals from an idea, covers and edits of a fragment.',
@@ -34,6 +35,7 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: 'Каждая модель качается отдельно; держите только те, которыми пользуетесь.',
     downloaded: 'Скачано',
     catalogue: 'Каталог компонентов',
+    sections: { models: 'Модели и движки', modelsHint: 'Что скачано, качество, обновления и дополнения', engine: 'Производительность', engineHint: 'Видеокарта, память, тонкая настройка и диагностика', cloud: 'Облако и сеть', cloudHint: 'Ключ OpenRouter, прокси и источник загрузок', yueSet: 'Свой набор YuE2', yueSetHint: 'Квант для каждой роли YuE2 — для тех, кто подбирает вручную. Готовые наборы — в карточке YuE2 выше.' },
     about: {
       local: 'Песни с вокалом по тексту и стилю, с партитурой, которую можно править.',
       'acestep-cpp': 'Быстрые песни и инструменталы по идее, каверы и правка фрагмента.',
@@ -54,6 +56,7 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: '每个模型单独下载；只保留你用的。',
     downloaded: '已下载',
     catalogue: '组件目录',
+    sections: { models: '模型和引擎', modelsHint: '已下载内容、质量、更新和附加组件', engine: '性能', engineHint: '显卡、内存、微调和诊断', cloud: '云端和网络', cloudHint: 'OpenRouter 密钥、代理和下载来源', yueSet: '自定义 YuE2 组合', yueSetHint: '为 YuE2 的每个角色手动选择量化。现成组合在上方的 YuE2 卡片中。' },
     about: {
       local: '根据歌词和风格生成带人声的歌曲，乐谱可编辑。',
       'acestep-cpp': '根据想法快速生成歌曲和器乐，翻唱和片段修改。',
@@ -74,6 +77,7 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: 'モデルは個別にダウンロードされます。使うものだけ残してください。',
     downloaded: 'ダウンロード済み',
     catalogue: 'コンポーネントカタログ',
+    sections: { models: 'モデルとエンジン', modelsHint: 'ダウンロード済み、品質、更新、追加機能', engine: 'パフォーマンス', engineHint: 'グラフィックカード、メモリ、詳細設定、診断', cloud: 'クラウドとネットワーク', cloudHint: 'OpenRouter キー、プロキシ、ダウンロード元', yueSet: '自分の YuE2 セット', yueSetHint: 'YuE2 の役割ごとに量子化を手で選ぶ人向け。既製のセットは上の YuE2 カードにあります。' },
     about: {
       local: '歌詞とスタイルからボーカル入りの曲を作り、楽譜も編集できます。',
       'acestep-cpp': 'アイデアから素早く曲やインストを作り、カバーや部分修正も。',
@@ -94,6 +98,7 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: '모델은 각각 따로 다운로드됩니다. 쓰는 것만 두세요.',
     downloaded: '다운로드됨',
     catalogue: '구성 요소 카탈로그',
+    sections: { models: '모델과 엔진', modelsHint: '다운로드한 것, 품질, 업데이트와 추가 기능', engine: '성능', engineHint: '그래픽카드, 메모리, 세부 설정과 진단', cloud: '클라우드와 네트워크', cloudHint: 'OpenRouter 키, 프록시, 다운로드 소스', yueSet: '나만의 YuE2 세트', yueSetHint: 'YuE2 역할별 양자화를 직접 고르는 분을 위한 것입니다. 준비된 세트는 위 YuE2 카드에 있습니다.' },
     about: {
       local: '가사와 스타일로 보컬이 있는 곡을 만들고, 악보를 편집할 수 있습니다.',
       'acestep-cpp': '아이디어로 빠르게 곡과 연주곡을 만들고, 커버와 부분 수정도 합니다.',
@@ -114,6 +119,7 @@ export const engineCardText: Record<Language, typeof en> = {
     modelsHint: 'Cada modelo é baixado à parte; mantenha só os que usa.',
     downloaded: 'Baixado',
     catalogue: 'Catálogo de componentes',
+    sections: { models: 'Modelos e motores', modelsHint: 'O que está baixado, qualidade, atualizações e extras', engine: 'Desempenho', engineHint: 'Placa gráfica, memória, ajuste fino e diagnóstico', cloud: 'Nuvem e rede', cloudHint: 'Chave OpenRouter, proxy e origem dos downloads', yueSet: 'Seu próprio conjunto YuE2', yueSetHint: 'Uma quantização para cada papel do YuE2, para quem escolhe à mão. Os conjuntos prontos estão no cartão YuE2 acima.' },
     about: {
       local: 'Músicas com vocais a partir da letra e do estilo, com uma partitura editável.',
       'acestep-cpp': 'Músicas e instrumentais rápidos a partir de uma ideia, covers e edição de um trecho.',

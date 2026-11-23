@@ -45,7 +45,7 @@ export const readUpdatePlan = () => fetch('/setup/update', { headers: SELF_READ 
 
 /** The update screen's plan: three groups, the totals and one button that downloads it all and then removes what is
  * no longer needed. `onDone` follows a finished update; `onLater` is given where the screen can be put off. */
-export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => void }> = ({ onDone, onLater }) => {
+export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => void; quietWhenEmpty?: boolean }> = ({ onDone, onLater, quietWhenEmpty = false }) => {
   const { t } = useI18n();
   const [state, setState] = useState<UpdateAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -148,8 +148,8 @@ export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => voi
           <RotateCw size={16} className="mt-0.5 shrink-0" />{t('updateRestartToApply')}
         </div>
       )}
-      {!plan && !error && <Loader2 size={18} className="animate-spin text-zinc-400" />}
-      {empty && job?.status !== 'done' && <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('updateNothing')}</p>}
+      {!plan && !error && !quietWhenEmpty && <Loader2 size={18} className="animate-spin text-zinc-400" />}
+      {empty && job?.status !== 'done' && !quietWhenEmpty && <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('updateNothing')}</p>}
       {group(t('updateUpdated'), updated.map((row) => line(`${row.part}-${row.id}`, row.name, version(row.from, row.to), size(row), reason(row.reason_code, row.reason), progress(row))))}
       {group(t('updateAdded'), added.map((row) => line(`${row.part}-${row.id}`, row.name, version(null, row.to), size(row), reason(row.reason_code, row.reason), progress(row))))}
       {plan && group(t('updateRetired'), plan.retired.map((gone) => line(gone.what, gone.name, null, gone.size > 0 ? `−${bytes(gone.size)}` : '', reason(gone.reason_code, gone.reason), null)))}

@@ -18,6 +18,7 @@ import { OwnModelPanel } from './OwnModelPanel';
 import { ModelStorageCard } from './ModelStorageCard';
 import { setTelemetry } from '../services/studioHub';
 import { programName } from '../services/programs';
+import { engineCardText } from '../i18n/engineCards';
 import type { TranslationKey } from '../i18n/translations';
 import {
   componentKindLabel,
@@ -810,14 +811,6 @@ export const SetupGate: React.FC<{
   ], [language]);
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [updateOpen, setUpdateOpen] = useState(false);
-  const openUpdates = useCallback((panel: HTMLDetailsElement | null) => {
-    if (panel && focus === 'component-updates') {
-      panel.open = true;
-      setUpdateOpen(true);
-      panel.scrollIntoView?.({ block: 'nearest' });
-    }
-  }, [focus]);
   const [choice, setChoice] = useState<Record<string, string>>({});
   const choiceEdited = useRef(false);
   const pendingSelection = useRef<Promise<boolean> | null>(null);
@@ -1013,26 +1006,15 @@ export const SetupGate: React.FC<{
             {t('firstRun')}
           </div>
         )}
-        <h1 className={`${mode === 'first-run' ? 'mt-4 text-3xl' : 'text-2xl'} font-extrabold tracking-tight text-zinc-900 dark:text-white`}>
-          {mode === 'first-run' ? t('setupTitle') : t('resourcesTitle')}
-        </h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-          {mode === 'first-run' ? t('setupSubtitle') : t('resourcesSubtitle')}
-        </p>
+        {mode === 'first-run' ? <>
+          <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white">{t('setupTitle')}</h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">{t('setupSubtitle')}</p>
+        </> : <>
+          <h2 className="text-base font-bold text-zinc-900 dark:text-white">{engineCardText[language].sections.yueSet}</h2>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-zinc-500 dark:text-zinc-400">{engineCardText[language].sections.yueSetHint}</p>
+        </>}
 
         {mode === 'settings' && <WhereItRuns trainingVram={trainingInfo?.min_vram_gb ?? null} />}
-        {mode === 'settings' && (
-          <details ref={openUpdates} className="group mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-suno-card" onToggle={(event) => setUpdateOpen(event.currentTarget.open)}>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-white/5">
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-zinc-900 dark:text-white">{t('updateSettingsEntry')}</span>
-                <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">{t('updateSettingsHint')}</span>
-              </span>
-              <ChevronDown size={15} className="shrink-0 text-zinc-500 transition-transform group-open:rotate-180" />
-            </summary>
-            {updateOpen && <div className="border-t border-zinc-100 p-4 dark:border-white/5"><UpdatePlanView onDone={() => void refresh().catch((problem: unknown) => setError(problem instanceof Error ? problem.message : String(problem)))} /></div>}
-          </details>
-        )}
 
         {(error || (active?.status === 'failed' && active.error)) && (
           <div role="alert" className="mt-5 flex gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
@@ -1079,7 +1061,7 @@ export const SetupGate: React.FC<{
           <div className="space-y-3 p-4">
             {/* The ready-made sets, before the per-role choice: most people want
                 "the one my card can run", not a decision per role. */}
-            {(catalog?.profiles ?? []).filter((profile) => profile.installable).length > 0 && (
+            {mode === 'first-run' && (catalog?.profiles ?? []).filter((profile) => profile.installable).length > 0 && (
               <div className="space-y-2">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t('readyMadeSets')}</p>
                 <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{t('hubSetsOneEnough')}</p>
