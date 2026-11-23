@@ -567,6 +567,8 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("rvc_apply_install", "installed", "model"),
     ("native_music_runtime_install", "started", "download"),
     ("native_music_runtime_cancel", "cancelled", "download"),
+    ("native_music_model_install", "started", "download"),
+    ("native_music_model_cancel", "cancelled", "download"),
     ("rvc_native_runtime_install", "started", "download"),
     ("rvc_native_runtime_cancel", "cancelled", "download"),
     ("rvc_apply", "created", "song"),
@@ -1076,6 +1078,18 @@ fn native_music_runtime_route(args: &Value) -> Result<String, String> {
         return Err("Choose acestep-cpp or minimaxmusic-cpp.".into());
     }
     Ok(format!("/v1/music/native/{engine}/runtime"))
+}
+
+fn native_music_model_schema() -> Value {
+    object(json!({
+        "engine": { "type": "string", "enum": ["acestep-cpp", "minimaxmusic-cpp"] },
+        "profile": { "type": "string" }
+    }), &["engine", "profile"])
+}
+
+fn native_music_model_route(args: &Value) -> Result<String, String> {
+    let runtime = native_music_runtime_route(args)?;
+    Ok(runtime.replace("/runtime", "/profiles/install"))
 }
 
 fn rvc_runtime_schema() -> Value {
@@ -2388,6 +2402,18 @@ fn tools() -> &'static [Tool] {
                 description: "Cancel this native runtime download without removing any installed runtime.",
                 schema: native_music_runtime_schema,
                 call: |args| send(Method::DELETE, native_music_runtime_route(args)?, json!({})),
+            },
+            Tool {
+                name: "native_music_model_install",
+                description: "Download the weights a native ACE-Step or MiniMax model set (profile from ace_music_profiles or minimax_music_profiles) lacks, pinned and checked by SHA-256. Follow the download in the same profiles call.",
+                schema: native_music_model_schema,
+                call: |args| post(native_music_model_route(args)?, json!({"model": text(args, "profile")?})),
+            },
+            Tool {
+                name: "native_music_model_cancel",
+                description: "Cancel this model set download; files already verified stay.",
+                schema: native_music_model_schema,
+                call: |args| send(Method::DELETE, native_music_model_route(args)?, json!({"model": text(args, "profile")?})),
             },
             Tool {
                 name: "sound_effect_model_get",

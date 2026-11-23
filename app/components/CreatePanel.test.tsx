@@ -513,6 +513,35 @@ it('offers the ACE runtime update while the installed fallback remains usable', 
   expect(buttonNamed('create')?.disabled).toBe(false);
 });
 
+it('downloads the missing weights of the chosen ACE set from the form', async () => {
+  const requests: unknown[] = [];
+  let installing = false;
+  vi.mocked(fetch).mockImplementation(async (url, options) => {
+    if (String(url).endsWith('/acestep-cpp/profiles/install')) {
+      requests.push(JSON.parse(String(options?.body)));
+      installing = true;
+      return Response.json({ installing: true });
+    }
+    if (String(url).endsWith('/acestep-cpp/profiles')) return Response.json({
+      engine: 'acestep-cpp', engine_installed: true,
+      profiles: [{ id: 'minimal', label: 'Minimal', ready: false, missing: ['vae-BF16.gguf'], total_bytes: 2 ** 30,
+        installable: true, missing_bytes: 2 ** 30, installing,
+        download: installing ? { downloaded_bytes: 2 ** 29, total_bytes: 2 ** 30, done: false } : null }],
+    });
+    if (String(url).endsWith('/acestep-cpp/runtime')) return Response.json({ supported: true, installed: true });
+    return Response.json([]);
+  });
+  act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
+  await flush();
+  const model = host.querySelector<HTMLSelectElement>('select[aria-label="Local model"]')!;
+  act(() => { model.value = 'minimal'; model.dispatchEvent(new Event('change', { bubbles: true })); });
+  await flush();
+  click(buttonNamed('Install ACE-Step 1.5 · 1 GiB')!);
+  await flush();
+  expect(requests).toEqual([{ model: 'minimal' }]);
+  expect(host.textContent).toContain('Installing ACE-Step 1.5… 50%');
+});
+
 it('creates native ACE covers and restores a migrated repaint with its source, reference and range', async () => {
   librarySongs = [
     { id: 'origin', title: 'Source track', audioUrl: '/origin.wav' },

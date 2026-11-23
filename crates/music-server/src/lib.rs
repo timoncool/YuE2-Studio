@@ -22,6 +22,7 @@ mod cover_art;
 mod cover_prompt;
 mod providers;
 mod openrouter_stream;
+mod native_music_models;
 mod native_music_runtime;
 mod native_runtime_archive;
 mod native_minimax;
@@ -1872,6 +1873,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/music/native/{engine}/runtime", get(native_music_runtime::status).post(native_music_runtime::start).delete(native_music_runtime::cancel))
         .route("/v1/music/native/minimaxmusic-cpp/profiles", get(minimax_music_profiles))
         .route("/v1/music/native/acestep-cpp/profiles", get(ace_music_profiles))
+        .route("/v1/music/native/{engine}/profiles/install", post(native_music_models::install).delete(native_music_models::cancel))
         .route("/v1/engine/logs", get(engine_logs))
         .route("/v1/diagnostics", get(diagnostics::get))
         .route("/v1/diagnostics/report", post(diagnostics::make_report))
@@ -8109,9 +8111,12 @@ fn native_executable_profile(
 async fn native_profile_catalog(
     read: impl FnOnce() -> Value + Send + 'static,
 ) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let catalog = tokio::task::spawn_blocking(read)
+    let mut catalog = tokio::task::spawn_blocking(read)
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    if let Some(engine) = catalog["engine"].as_str().map(str::to_owned) {
+        native_music_models::describe(&engine, &mut catalog["profiles"]).await;
+    }
     Ok(Json(catalog))
 }
 

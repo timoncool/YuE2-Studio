@@ -31,6 +31,7 @@ type RvcStatus = { installed: boolean; supported: boolean; reason?: string | nul
 function modelInstallPath(engine: string, path?: string | null) {
   if (engine === 'audio.cpp' && path === '/v1/music/audio-cpp/models/install') return path;
   if (engine === 'hotstep' && path && /^\/v1\/music\/native\/hotstep\/(?:[a-z0-9-]+\/)?install$/.test(path)) return path;
+  if ((engine === 'acestep-cpp' || engine === 'minimaxmusic-cpp') && path === `/v1/music/native/${engine}/profiles/install`) return path;
 }
 
 function InstallDetails({ label, initialOpen = false, children }: { label: string; initialOpen?: boolean; children: ReactNode }) {

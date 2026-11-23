@@ -113,7 +113,10 @@ For a native ACE-Step or MiniMax song, call `ace_music_profiles` or `minimax_mus
 Use `native_music_runtime_status` with `engine` set to `acestep-cpp` or
 `minimaxmusic-cpp` to check the pinned runtime. `native_music_runtime_install`
 starts an installation. Follow progress with the status tool and use
-`native_music_runtime_cancel` to stop an active download. Model weights are separate.
+`native_music_runtime_cancel` to stop an active download. Model weights are separate:
+`native_music_model_install` with `engine` and `profile` downloads what that set lacks,
+and the profiles call shows `installing`, `download` and `missing_bytes` while it runs;
+`native_music_model_cancel` stops it and keeps the files already verified.
 For offline provisioning, launch Studio with `STUDIO_NATIVE_RUNTIME_CACHE` pointing
 to a directory containing the runtime-only archives under their original names.
 The same optional cache is verified during release builds. Studio checks the

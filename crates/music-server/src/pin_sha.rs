@@ -106,6 +106,7 @@ pub fn sha256(url: &str) -> Option<&'static str> {
     if let Some(sha) = crate::training::base_asset_sha(url)
         .or_else(|| crate::engine_hip::archive_sha(url))
         .or_else(|| crate::native_music_runtime::sha256(url))
+        .or_else(|| crate::native_music_models::sha256(url))
     {
         return Some(sha);
     }

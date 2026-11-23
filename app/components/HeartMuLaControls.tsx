@@ -159,7 +159,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     setCancelling(true);
     try {
       const needsHotstep = target ? target.catalogue === '/v1/music/native/hotstep/profiles' : hotstep;
-      const route = needsHotstep ? '/v1/music/native/hotstep/install' : '/v1/music/audio-cpp/models/install';
+      const route = needsHotstep ? '/v1/music/native/hotstep/install' : target?.installPath ?? '/v1/music/audio-cpp/models/install';
       const response = await fetch(apiUrl(route), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },

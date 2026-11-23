@@ -112,6 +112,18 @@ fn installation(data_root: &Path) -> Installation {
     )
 }
 
+/// The files of a model set and their exact sizes, `None` for an unknown set.
+pub(crate) fn profile_weights(id: &str) -> Option<Vec<(&'static str, u64)>> {
+    PROFILES
+        .iter()
+        .find(|profile| profile.id == id)
+        .map(|profile| profile.weights.iter().map(|weight| (weight.name, weight.bytes)).collect())
+}
+
+pub(crate) fn profile_ids() -> impl Iterator<Item = &'static str> {
+    PROFILES.iter().map(|profile| profile.id)
+}
+
 pub(crate) async fn resolve_installation(
     data_root: &Path,
     replay: Option<&serde_json::Value>,

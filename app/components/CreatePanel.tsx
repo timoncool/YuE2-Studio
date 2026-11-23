@@ -2184,6 +2184,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {native.profile && !native.ready && <p role="status" className="text-xs">
                       {nativeStrings.unavailable}{native.profile.missing?.length ? ` · ${native.profile.missing.join(', ')}` : ''}
                     </p>}
+                    {(musicEngine === 'acestep-cpp' || musicEngine === 'minimaxmusic-cpp') && native.installed && native.profile?.installable && !native.ready &&
+                      <AudioCppModelInstall key={`${musicEngine}:${native.profile.id}`} model={native.profile.id}
+                        target={{ catalogue: `/v1/music/native/${musicEngine}/profiles`, installPath: `/v1/music/native/${musicEngine}/profiles/install`,
+                          label: musicEngine === 'acestep-cpp' ? 'ACE-Step 1.5' : 'MiniMax Music3' }}
+                        bytes={native.profile.missing_bytes ?? 0} language={language} onInstalled={refreshNativeChoice} />}
                     {hotstepHeart && native.profile?.installable && !native.ready &&
                       <AudioCppModelInstall key={hotStepHeartmulaProfile} model={hotStepHeartmulaProfile} bytes={native.profile.missing_bytes ?? 0}
                         language={language} onInstalled={refreshNativeChoice} />}
