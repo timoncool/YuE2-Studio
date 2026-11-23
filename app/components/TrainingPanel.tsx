@@ -1378,7 +1378,7 @@ export const TrainingPanel: React.FC = () => {
           <>
             <p className="min-w-0 flex-1 text-sm text-zinc-600 dark:text-zinc-400">
               {t('trainingIntro')}
-              {ownModel && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel)}</span>}
+              {ownModel && <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel.split(/[\\/]/).pop()!.replace(/\.gguf$/i, ''))}</span>}
             </p>
             <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>
           </>

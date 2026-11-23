@@ -3,10 +3,11 @@ import { trainingAssetLabel } from './trainingAssets';
 import { LANGUAGE_NAMES, translations, type Language } from './translations';
 
 describe('training and provider labels', () => {
-  it('uses translated labels for an older installed trainer while keeping its revision', () => {
+  it('names a training component in the window language, without the build revision', () => {
     const installed = { id: 'music-train', label: 'Trainer (HOT-Step 75923e70)' };
-    expect(trainingAssetLabel('ru', installed)).toBe('Тренер (HOT-Step 75923e70)');
-    expect(trainingAssetLabel('ja', installed)).toBe('トレーナー (HOT-Step 75923e70)');
+    expect(trainingAssetLabel('ru', installed)).toBe('Тренер');
+    expect(trainingAssetLabel('ja', installed)).toBe('トレーナー');
+    expect(trainingAssetLabel('ru', { id: 'yue2-convrot-base', label: 'YuE2 base for training (INT8 ConvRot)' })).toBe('Базовая модель YuE2 для обучения');
     expect(trainingAssetLabel('pt', { id: 'extension', label: 'Custom trainer' })).toBe('Custom trainer');
   });
 
