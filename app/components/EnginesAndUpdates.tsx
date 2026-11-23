@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useI18n } from '../context/I18nContext';
-import { enginePageStrings, runtimeSourceStrings, showUnsupportedEngines } from '../i18n/enginePage';
+import { componentCatalogueStrings, enginePageStrings, runtimeSourceStrings, showUnsupportedEngines } from '../i18n/enginePage';
 import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
 import { SELF_READ, useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
@@ -28,6 +28,7 @@ type ProfileStatus = {
 };
 type RuntimeStatus = { supported: boolean; installed?: boolean; revision?: string; installed_revision?: string | null };
 type RvcStatus = { installed: boolean; supported: boolean; reason?: string | null };
+type ComponentsState = { sequence: number; published: string; source: 'built-in' | 'downloaded'; checked_at?: number | null; refresh_error?: string | null };
 function modelInstallPath(engine: string, path?: string | null) {
   if (engine === 'audio.cpp' && path === '/v1/music/audio-cpp/models/install') return path;
   if (engine === 'hotstep' && path && /^\/v1\/music\/native\/hotstep\/(?:[a-z0-9-]+\/)?install$/.test(path)) return path;
@@ -64,12 +65,13 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
   }, [focus]);
   const [title, active, installed, missing, checking, unavailable, manageModels, settings] = enginePageStrings[language];
   const [managedPackage, localExecutable] = runtimeSourceStrings[language];
+  const catalogueText = componentCatalogueStrings[language];
   const setup = useSetupStatus<{ ready?: boolean; engine_ready?: boolean }>();
   const cloud = useOpenRouterSettings<{ configured?: boolean }>();
   const catalogue = useQuery({
     queryKey: ['engine-page'],
     queryFn: async ({ signal }) => {
-      const [pair, local, rvc, profiles, ace, minimax, signed] = await Promise.all([
+      const [pair, local, rvc, profiles, ace, minimax, signed, components] = await Promise.all([
         read<PairStatus>('/v1/music/pair', signal),
         read<{ executable?: string | null; executable_source?: string; in_effect?: { backend?: string } }>('/engine/options', signal),
         read<RvcStatus>('/v1/rvc/native/runtime', signal),
@@ -77,8 +79,9 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
         read<RuntimeStatus>('/v1/music/native/acestep-cpp/runtime', signal),
         read<RuntimeStatus>('/v1/music/native/minimaxmusic-cpp/runtime', signal),
         read<Catalogue>('/v1/components/music-engines', signal),
+        read<ComponentsState>('/v1/components', signal),
       ]);
-      return { pair, local, rvc, profiles, ace, minimax, signed };
+      return { pair, local, rvc, profiles, ace, minimax, signed, components };
     },
     staleTime: 0,
     refetchInterval: query => query.state.data?.signed?.source === 'bundled' ? 2_000 : false,
@@ -91,7 +94,12 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
     setRefreshingSigned(true);
     setSignedError('');
     try {
-      await postSignedPackage('/v1/components/music-engines/refresh');
+      const components = await fetch(apiUrl('/v1/components/refresh'), { method: 'POST', headers: SELF_READ });
+      if (!components.ok) {
+        const body = await components.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${components.status}`);
+      }
+      if (data?.signed?.platform) await postSignedPackage('/v1/components/music-engines/refresh');
     } catch (error) {
       setSignedError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -113,7 +121,7 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
       {focus === 'updates' && <UpdatePlanView />}
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" className={action} disabled={catalogue.isFetching || setup.isFetching || cloud.isFetching || refreshingSigned} onClick={() => {
-          if (data?.signed?.platform && !refreshingSigned) void refreshSigned();
+          if (!refreshingSigned) void refreshSigned();
           void refresh();
         }}>{t('refresh')}</button>
         {hasUnsupported && <label className="flex items-center gap-2 text-sm">
@@ -121,6 +129,12 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
           {showUnsupportedEngines[language]}
         </label>}
       </div>
+      {data?.components && <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        {catalogueText.list(data.components.sequence, new Date(data.components.published).toLocaleDateString(language))}
+        {data.components.source === 'built-in' && <> · {catalogueText.builtIn}</>}
+        {data.components.checked_at && <> · {catalogueText.checked(new Date(data.components.checked_at * 1000).toLocaleString(language))}</>}
+      </p>}
+      {data?.components?.refresh_error && !signedError && <p role="status" className="text-sm">{catalogueText.failed(data.components.refresh_error)}</p>}
       {signedError && <p role="alert" className="text-sm">{signedError}</p>}
       <ul ref={list} className="grid gap-2" aria-label={title}>
         <li data-engine="local" className={'space-y-1 rounded-lg border p-3' + mark('local')}>

@@ -120,6 +120,7 @@ async fn report(state: &AppState) -> Value {
         },
         "dll_missing": dll,
         "data_dir": root.to_string_lossy(),
+        "components": serde_json::to_value(crate::components::state()).unwrap_or(Value::Null),
     })
 }
 
@@ -144,6 +145,9 @@ fn text(report: &Value, log: &[String]) -> String {
     }
     out.push_str(&format!("RAM: {} of {} MB used\n", shown(&memory["ram_used_mb"]), shown(&memory["ram_total_mb"])));
     out.push_str(&format!("Engine device: {} · options: {}\n", shown(&report["engine_device"]), report["engine_options"]));
+    let components = &report["components"];
+    out.push_str(&format!("Component catalogue: {} of {} ({}; built in {}){}\n", shown(&components["sequence"]), shown(&components["published"]), shown(&components["source"]), shown(&components["built_in_sequence"]),
+        components["refresh_error"].as_str().map(|error| format!(" · last refresh failed: {error}")).unwrap_or_default()));
     out.push_str(&format!("Models: {} · free {} · ready: {}\n", report["models_dir"].as_str().unwrap_or_default(), gb(&report["free_bytes"]), report["models_ready"]));
     for model in report["models"].as_array().into_iter().flatten() {
         out.push_str(&format!("  {} {}\n", if model["installed"] == true { "[OK]" } else { "[--]" }, model["id"].as_str().unwrap_or_default()));
