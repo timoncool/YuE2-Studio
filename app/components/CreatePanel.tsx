@@ -2121,7 +2121,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   <div className="space-y-2">
                     {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
                     {native.error && <p role="alert" className="text-xs">{nativeStrings.error}</p>}
-                    {!native.loading && !native.error && !native.installed && !nativeSets && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
+                    {!native.loading && !native.error && !native.installed && !nativeSets && !native.profile?.installable && <p role="status" className="text-xs">{nativeStrings.engineMissing}</p>}
                     {!native.loading && !native.error && native.installed && native.adapterRuntimeUpdate && nativeSets &&
                       <NativeMusicRuntimeInstall key={musicEngine} engine={musicEngine} update onInstalled={native.refresh} />}
                     {!native.loading && !native.error && nativeSets && native.profiles.length > 0 &&
