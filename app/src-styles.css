@@ -69,7 +69,43 @@ summary {
         --breakpoint-mobile: 768px;
         --vh: 1vh;
         --vw: 1vw;
+        --color-surface: #ffffff;
+        --color-surface-2: #f4f4f5;
+        --color-overlay: #ffffff;
+        --color-border: #e4e4e7;
+        --color-text: #18181b;
+        --color-muted: #71717a;
+        --color-accent: #db2777;
+        --color-on-accent: #ffffff;
+        --color-accent-2: #ec4899;
+        --color-warn: #b45309;
+        --color-good: #059669;
+        --color-bad: #e11d48;
+        --ease-out: cubic-bezier(0, 0, 0.2, 1);
       }
+
+      .dark {
+        --color-surface: #18181b;
+        --color-surface-2: #27272a;
+        --color-overlay: #27272a;
+        --color-border: #3f3f46;
+        --color-text: #f4f4f5;
+        --color-muted: #a1a1aa;
+        --color-accent: #ec4899;
+        --color-on-accent: #ffffff;
+        --color-accent-2: #f472b6;
+        --color-warn: #fbbf24;
+        --color-good: #34d399;
+        --color-bad: #fb7185;
+      }
+
+      .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-feature-settings: "tnum"; }
+
+      @keyframes pop-in {
+        from { opacity: 0; transform: translateY(6px) scale(0.985); }
+        to { opacity: 1; transform: none; }
+      }
+      .anim-pop { animation: pop-in 0.2s var(--ease-out) both; }
 
       html, body, #root { height: 100%; }
 
