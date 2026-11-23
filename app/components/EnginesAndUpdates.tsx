@@ -7,7 +7,7 @@ import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
 import { SELF_READ, useSetupStatus } from '../services/studioQueries';
 import { engineCardText } from '../i18n/engineCards';
-import { musicSourceStrings } from '../i18n/musicSource';
+import { musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
 import { YueModelSetPicker } from './YueModelSetPicker';
@@ -24,7 +24,7 @@ const native = [
   { id: 'audio.cpp', name: 'audio.cpp', path: '/v1/music/audio-cpp/models' },
   { id: 'hotstep', name: 'HOT-Step', path: '/v1/music/native/hotstep/profiles' },
 ] as const;
-type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; missing_bytes?: number; install_path?: string | null };
+type ModelStatus = { id: string; label?: string; name?: string; ready: boolean; missing_bytes?: number; install_path?: string | null; status?: string };
 type ProfileStatus = {
   engine_installed: boolean;
   adapter_runtime_update?: boolean;
@@ -105,7 +105,8 @@ function ModelRows({ engine, catalogue, models, onChanged }: { engine: string; c
         {models.filter(model => model.ready || modelInstallPath(engine, model.install_path)).map(model => {
           const [title, ...rest] = (model.label ?? model.name ?? model.id).split(' · ');
           const installPath = modelInstallPath(engine, model.install_path);
-          const meta = [hints[model.id], rest.filter(part => part !== 'HOT-Step').join(' · ')].filter(Boolean).join(' · ');
+          const quant = rest.filter(part => part !== 'HOT-Step').join(' · ').replace(/\s*\(experimental\)/i, '');
+          const meta = [hints[model.id], quant, model.status === 'experimental' ? nativeMusicSourceStrings[language].experimental : ''].filter(Boolean).join(' · ');
           return (
             <li key={model.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
               <span className="min-w-0 flex-1">
