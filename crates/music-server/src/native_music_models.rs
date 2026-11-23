@@ -55,6 +55,16 @@ fn missing_assets(engine: &str, profile: &str) -> anyhow::Result<Vec<&'static As
     Ok(missing)
 }
 
+/// The memory a set may take: the card's own on a graphics card; on a Mac, whose memory macOS and the studio share,
+/// half of it up to 16 GiB and three quarters above.
+fn set_budget_gb(hardware: &crate::hardware::Hardware) -> f64 {
+    if !cfg!(target_os = "macos") {
+        return hardware.total_vram_gb;
+    }
+    let unified = hardware.total_vram_gb.max(hardware.total_ram_gb);
+    unified * if unified <= 16.0 { 0.5 } else { 0.75 }
+}
+
 /// The main set the card holds with the most memory to spare for quality: the largest whose video memory fits, the
 /// smallest when none does.
 fn recommended(sets: &[crate::components::ModelSet], vram_gb: f64) -> Option<String> {
@@ -69,7 +79,7 @@ pub(crate) async fn describe(engine: &str, profiles: &mut Value) {
     let Some(rows) = profiles.as_array_mut().filter(|_| native(engine)) else { return };
     let installing = lock(engine).is_some_and(|lock| lock.try_lock().is_err());
     let sets = crate::components::sets(engine);
-    let recommended = recommended(&sets, crate::hardware::hardware().total_vram_gb);
+    let recommended = recommended(&sets, set_budget_gb(&crate::hardware::hardware()));
     for row in rows {
         let Some(id) = row["id"].as_str().map(str::to_owned) else { continue };
         let set = sets.iter().find(|set| set.id == id);
