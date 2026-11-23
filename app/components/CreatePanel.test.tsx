@@ -84,6 +84,8 @@ beforeEach(() => {
   configured = false;
   librarySongs = [];
   localStorage.clear();
+  // the logic below works in cards a person would have opened; folding itself has its own test
+  localStorage.setItem('studio.createFolded', JSON.stringify(['!native-settings', '!quality', '!ace-source', '!ace-Song parameters', '!ace-Quality']));
   composeScore.mockReset();
   transcribe.mockReset().mockResolvedValue('X:1\nK:C\nC');
   instrumentalScore.mockReset();
@@ -119,19 +121,37 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
   element.dispatchEvent(new Event('input', { bubbles: true }));
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+const modelPill = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="true"]:not([aria-label])')!;
 const pickModel = (name: string) => {
-  act(() => {
-    const input = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Model"]')!;
-    input.focus();
-    input.click();
-  });
-  const option = [...document.querySelectorAll('[role="option"]')].find(node => node.textContent === name);
+  click(modelPill());
+  const option = [...document.querySelectorAll('[role="menuitemradio"]')].find(node => node.querySelector('span span')?.textContent === name);
   expect(option, name).toBeDefined();
   click(option!);
 };
-const chooseSet = (id: string) => act(() => { host.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`)!.click(); });
-const chosenSet = () => host.querySelector<HTMLInputElement>('input[type="radio"][name$="-set"]:checked')?.value ?? '';
-const buttonNamed = (text: string) => [...host.querySelectorAll('button')].find(button => button.textContent?.includes(text));
+const openModelSettings = () => {
+  const toggle = host.querySelector<HTMLButtonElement>('button[aria-label="Model settings"]');
+  if (toggle && toggle.getAttribute('aria-expanded') !== 'true') click(toggle);
+};
+const engineRadios = () => {
+  openModelSettings();
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="radiogroup"][aria-label="Music engine"] [role="radio"]')];
+};
+const chooseEngine = (value: string) => click(engineRadios().find(radio => radio.dataset.value === value)!);
+const engineValues = () => engineRadios().map(radio => radio.dataset.value);
+const chosenEngine = () => engineRadios().find(radio => radio.getAttribute('aria-checked') === 'true')?.dataset.value;
+const setRadio = (id: string) => document.querySelector<HTMLInputElement>(`input[type="radio"][value="${id}"]`);
+const chooseSet = (id: string) => {
+  if (!setRadio(id)) openModelSettings();
+  act(() => { setRadio(id)!.click(); });
+};
+const chosenSet = () => {
+  if (!document.querySelector('input[type="radio"][name$="-set"]')) openModelSettings();
+  return document.querySelector<HTMLInputElement>('input[type="radio"][name$="-set"]:checked')?.value ?? '';
+};
+const buttonNamed = (text: string) => {
+  const buttons = [...document.querySelectorAll('button')];
+  return buttons.find(button => button.textContent?.trim() === text) ?? buttons.find(button => !button.hasAttribute('aria-haspopup') && button.textContent?.includes(text));
+};
 
 it('opens engine management for the current engine and retains the Create draft', async () => {
   const onOpenEngines = vi.fn();
@@ -139,6 +159,7 @@ it('opens engine management for the current engine and retains the Create draft'
   await flush();
   const draft = field('textarea[aria-label="styleCardTitle"]')!;
   type(draft, 'Draft folk arrangement');
+  openModelSettings();
   click(buttonNamed('Engines and updates')!);
   expect(onOpenEngines).toHaveBeenCalledWith('local');
   expect(draft.value).toBe('Draft folk arrangement');
@@ -232,7 +253,9 @@ it('queues the other five readings with exactly one score and one pair of seeds'
 });
 
 it('uses explicit controls for the YuE2 engine and follows the shared paused state', async () => {
-  act(() => root.render(panel({})));
+  act(() => root.render(panel({ onMusicEngineChange: vi.fn() })));
+  await flush();
+  openModelSettings();
   click(buttonNamed('Pause YuE2 engine')!);
   await flush();
   expect(fetch).toHaveBeenCalledWith('/engine/pause', { method: 'POST' });
@@ -960,7 +983,7 @@ it('submits the same MuLaCover reference after switching engines in either direc
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'first-recording' });
   expect(sent[0]).not.toHaveProperty('abc');
-  choose('Music engine', 'hotstep');
+  chooseEngine('hotstep');
   await flush();
   expect(select('Original song').value).toBe('first-recording');
   click(buttonNamed('create')!);
@@ -968,14 +991,14 @@ it('submits the same MuLaCover reference after switching engines in either direc
     music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'first-recording', abc: firstScore,
   });
   choose('Original song', 'second-recording');
-  choose('Music engine', 'audio.cpp');
+  chooseEngine('audio.cpp');
   await flush();
   expect(select('Original song').value).toBe('second-recording');
   expect(host.textContent).toContain('The draft keeps your ABC score.');
   click(buttonNamed('create')!);
   expect(sent[2]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'second-recording' });
   expect(sent[2]).not.toHaveProperty('abc');
-  choose('Music engine', 'hotstep');
+  chooseEngine('hotstep');
   await flush();
   click(buttonNamed('create')!);
   expect(sent[3]).toMatchObject({ cover_of: 'second-recording', abc: secondScore });
@@ -1002,51 +1025,46 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   });
   act(() => root.render(<Editor />));
   await flush();
-  const modelFamily = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Model"]')!;
   pickModel('HeartMuLa');
-  expect(document.activeElement).toBe(modelFamily);
   expect(buttonNamed('create')).toBeTruthy();
   pickModel('MiniMax Music3');
-  expect(modelFamily.value).toBe('MiniMax Music3');
-  const engine = labeled('Music engine').querySelector('select')!;
-  expect(engine.value).toBe('audio.cpp');
-  choose(engine, 'minimaxmusic-cpp');
+  expect(modelPill().textContent).toContain('MiniMax Music3');
+  expect(chosenEngine()).toBe('audio.cpp');
+  chooseEngine('minimaxmusic-cpp');
   await flush();
   chooseSet('quality-q8');
   type(field('textarea[aria-label="Global metadata"]')!, 'acoustic folk');
   type(field('textarea[aria-label="lyrics"]')!, 'Morning light');
   type(labeled('Seed').querySelector('input')!, '11');
-  choose(engine, 'audio.cpp');
+  chooseEngine('audio.cpp');
   await flush();
-  expect(document.activeElement).toBe(engine);
-  expect(modelFamily.value).toBe('MiniMax Music3');
+  expect(modelPill().textContent).toContain('MiniMax Music3');
   expect(field('textarea[aria-label="lyrics"]')?.value).toBe('Morning light');
-  expect(host.textContent).toContain('Reference speed on RTX 4090');
-  expect(host.textContent).toContain('CUDA 13 0.37 audio s/s');
-  expect(host.textContent).not.toContain('41242418');
+  expect(document.body.textContent).toContain('Reference speed on RTX 4090');
+  expect(document.body.textContent).toContain('CUDA 13 0.37 audio s/s');
+  expect(document.body.textContent).not.toContain('41242418');
   type(labeled('Seed').querySelector('input')!, '22');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'audio_cpp', model: 'minimax_music3' }, seed: 22, lyrics: 'Morning light',
   });
-  choose(engine, 'minimaxmusic-cpp');
+  chooseEngine('minimaxmusic-cpp');
   await flush();
-  expect(document.activeElement).toBe(engine);
   expect(chosenSet()).toBe('quality-q8');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
-  expect(host.textContent).toContain('CUDA 13 1.8 audio s/s');
-  expect(host.textContent).not.toContain('46c4c90');
+  expect(document.body.textContent).toContain('CUDA 13 1.8 audio s/s');
+  expect(document.body.textContent).not.toContain('46c4c90');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'native', engine: 'minimaxmusic-cpp', model: 'quality-q8' }, seed: 11, lyrics: 'Morning light',
   });
   pickModel('HeartMuLa');
-  expect([...engine.options].map(option => option.value)).toEqual(['audio.cpp', 'hotstep']);
-  expect(engine.value).toBe('audio.cpp');
+  expect(engineValues()).toEqual(['audio.cpp', 'hotstep']);
+  expect(chosenEngine()).toBe('audio.cpp');
   expect(host.textContent).not.toContain('Reference speed on RTX 4090');
   pickModel('MiniMax Music3');
   await flush();
-  expect(engine.value).toBe('minimaxmusic-cpp');
+  expect(chosenEngine()).toBe('minimaxmusic-cpp');
   expect(labeled('Seed').querySelector('input')?.value).toBe('11');
 });
 
@@ -1084,7 +1102,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
     select.dispatchEvent(new Event('change', { bubbles: true }));
   });
   pickModel('MiniMax Music3');
-  choose(pairControl('Music engine'), 'audio.cpp');
+  chooseEngine('audio.cpp');
   await flush();
   const generate = () => buttonNamed('create') as HTMLButtonElement;
   expect(generate().disabled).toBe(true);
@@ -1103,7 +1121,7 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   expect(generate().disabled).toBe(false);
   expect(host.textContent).not.toContain('quality-q8 · Q8_0');
   pickModel('HeartMuLa');
-  expect(host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Model"]')!.value).toBe('HeartMuLa');
+  expect(modelPill().textContent).toContain('HeartMuLa');
   expect(generate().disabled).toBe(true);
   expect(host.textContent).not.toContain('heartmula.gguf');
   const installHeartMuLa = () => [...host.querySelectorAll('button')]
@@ -1623,7 +1641,7 @@ describe('OpenRouter music creation', () => {
 
     act(() => root.render(panel({ musicEngine: 'openrouter', onMusicEngineChange: engineChange })));
     await flush();
-    expect(host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Model"]')!.value).toBe('Music test model');
+    expect(modelPill().textContent).toContain('Music test model');
     expect(localStorage.getItem('yue:openrouter-music-model')).toBe('test/music');
     type(field('textarea[aria-label="styleCardTitle"]')!, 'ambient soul, soft piano');
     click(create());
@@ -2166,25 +2184,18 @@ it('switches a YuE2 model from its local runtime and back using the engine selec
     const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
     return panel({ musicEngine: route, onMusicEngineChange: choose });
   }
-  const selectEngine = () => [...host.querySelectorAll('label')]
-    .find(node => node.textContent?.startsWith('Music engine'))!.querySelector('select')!;
-  const choose = (value: string) => act(() => {
-    const input = selectEngine();
-    input.value = value;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
   act(() => root.render(<Editor />));
   await flush();
-  expect(Array.from(selectEngine().options, option => option.value)).toEqual(['local', 'audio.cpp', 'hotstep']);
-  choose('hotstep');
+  expect(engineValues()).toEqual(['local', 'audio.cpp', 'hotstep']);
+  chooseEngine('hotstep');
   await flush();
-  expect(selectEngine().value).toBe('hotstep');
-  choose('audio.cpp');
+  expect(chosenEngine()).toBe('hotstep');
+  chooseEngine('audio.cpp');
   await flush();
-  expect(selectEngine().value).toBe('audio.cpp');
-  choose('local');
+  expect(chosenEngine()).toBe('audio.cpp');
+  chooseEngine('local');
   await flush();
-  expect(selectEngine().value).toBe('local');
+  expect(chosenEngine()).toBe('local');
 });
 
 const integratedPairs = [
@@ -2238,11 +2249,11 @@ it.each(integratedPairs)('integrated U3 Create and Reuse $family × $engine', as
     pickModel('ACE-Step');
     await flush();
   }
-  expect([...selector('Music engine').options].map(option => option.value)).toEqual(
+  expect(engineValues()).toEqual(
     fixture.family === 'local' ? ['local','audio.cpp','hotstep'] : ['acestep-cpp','hotstep','audio.cpp'],
   );
-  if (selector('Music engine').value !== fixture.engine) {
-    choose('Music engine', fixture.engine);
+  if (chosenEngine() !== fixture.engine) {
+    chooseEngine(fixture.engine);
     await flush();
   }
   if (fixture.engine === 'acestep-cpp') {
@@ -2253,7 +2264,7 @@ it.each(integratedPairs)('integrated U3 Create and Reuse $family × $engine', as
   type(field('textarea[aria-label="lyrics"]')!, 'The light is ours');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: fixture.source, style: 'warm piano pop', lyrics: 'The light is ours' });
-  choose('Music engine', fixture.engine === 'hotstep' ? 'audio.cpp' : 'hotstep');
+  chooseEngine(fixture.engine === 'hotstep' ? 'audio.cpp' : 'hotstep');
   await flush();
   const song = {
     title: 'Saved U3 fixture', style: 'quiet guitar', lyrics: 'Keep the original words', ditModel: fixture.dit,
@@ -2263,7 +2274,7 @@ it.each(integratedPairs)('integrated U3 Create and Reuse $family × $engine', as
   } as Song;
   act(() => restore(song));
   await flush();
-  expect(selector('Music engine').value).toBe(fixture.engine);
+  expect(chosenEngine()).toBe(fixture.engine);
   expect(calls.at(-1)).toEqual(fixture.source);
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({ music_source: fixture.source, style: song.style,

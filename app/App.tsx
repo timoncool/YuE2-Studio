@@ -114,7 +114,7 @@ import { getAudioUrl } from './services/api';
 import { useAuth } from './context/AuthContext';
 import { useResponsive } from './context/ResponsiveContext';
 import { I18nProvider, useI18n } from './context/I18nContext';
-import { List } from 'lucide-react';
+import { List, Menu } from 'lucide-react';
 import { PlaylistDetail } from './components/PlaylistDetail';
 import { Toast, ToastType } from './components/Toast';
 import { engineUpdateTarget } from './i18n/enginePage';
@@ -1695,7 +1695,7 @@ function AppContent() {
             {sidePanel}
 
             {/* Mobile Toggle Button */}
-            <div className="md:hidden absolute top-4 right-4 z-50">
+            <div className="md:hidden absolute top-4 right-4 z-20">
               <button
                 onClick={() => setMobileShowList(!mobileShowList)}
                 className="bg-zinc-800 text-white px-4 py-2 rounded-full shadow-lg border border-white/10 flex items-center gap-2 text-sm font-bold"
@@ -1784,7 +1784,15 @@ function AppContent() {
           onToggleJournal={() => setJournalOpen(open => !open)}
         />
 
-        <main aria-label={pageTitle} className="relative ml-[72px] flex min-h-0 min-w-0 flex-1 overflow-hidden md:ml-0">
+        <div className="fixed inset-x-0 top-0 z-30 flex h-11 items-center gap-1 border-b border-zinc-200 bg-white pr-3 dark:border-white/5 dark:bg-suno-sidebar md:hidden">
+          <button type="button" onClick={() => setShowLeftSidebar(true)} aria-label={t('expandSidebar')} title={t('expandSidebar')}
+            className="inline-flex size-11 shrink-0 items-center justify-center text-zinc-600 hover:text-black dark:text-zinc-300 dark:hover:text-white">
+            <Menu size={20} />
+          </button>
+          <span className="min-w-0 truncate text-sm font-semibold text-zinc-900 dark:text-white">{pageTitle}</span>
+        </div>
+
+        <main aria-label={pageTitle} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden max-md:pt-11">
           {createKept && <Activity mode={showingCreate ? 'visible' : 'hidden'}>{renderContent('create')}</Activity>}
           {!(createKept && showingCreate) && renderContent()}
         </main>

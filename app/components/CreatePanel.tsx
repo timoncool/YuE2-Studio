@@ -13,7 +13,7 @@ import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X,
+  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X, Check, SlidersHorizontal,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
@@ -76,7 +76,9 @@ import { useMusicPair, type PairSource } from '../services/musicPair';
 import { musicPairStrings } from '../i18n/musicPair';
 import { engineErrorText } from '../i18n/engineErrors';
 import { ErrorNote } from './kit/ErrorNote';
-import Combobox from './kit/Combobox';
+import { PickerOption, PickerPill } from './kit/PickerPill';
+import { nativeModelSetStrings } from '../i18n/nativeModelSet';
+import { CatalogSegments } from './kit/Catalog';
 import { Hint } from './kit/Hint';
 import { generationHint, randomSeedPlaceholder } from '../i18n/generationHints';
 import { SecondaryButton } from './kit/Buttons';
@@ -1024,6 +1026,53 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const effectiveCot: YueCot = cot || (defaults.cot as YueCot) || 'full';
 
   const profileLabel = useMemo(() => setupLabel(t, language, setup), [setup, t, language]);
+  // models people switch between all the time stay in view; the rest sit in the searchable list beside them
+  const mainModels = ['local', 'acestep-cpp', 'minimaxmusic-cpp'];
+  const modelOptions = [
+    ...linkedMusicFamilies.map(family => ({ value: family.id, label: family.name, group: musicStrings.groupLocal })),
+    ...native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
+      pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id)))
+      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
+    ...native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
+      pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id)))
+      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
+    ...(nativeEngine === 'hotstep' && modelChoice === 'hotstep' ? [{ value: 'hotstep', label: 'HOT-Step', group: musicStrings.groupLocal }] : []),
+    ...(audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice)
+      ? [{ value: modelChoice, label: 'audio.cpp', group: musicStrings.groupLocal }] : []),
+    { value: 'openrouter', label: 'OpenRouter', group: musicStrings.groupCloud },
+    ...musicModels.map(model => ({ value: `cloud:${model.id}`, label: model.name || model.id, group: musicStrings.groupCloud })),
+    ...(modelChoice.startsWith('cloud:') && !musicModels.some(model => `cloud:${model.id}` === modelChoice)
+      ? [{ value: modelChoice, label: modelChoice.slice('cloud:'.length), group: musicStrings.groupCloud }] : []),
+  ];
+  const modelReady = yue ? ready : cloud ? Boolean(configured && selectedMusicModel) : native.ready;
+  const modelStateText = modelReady ? nativeModelSetStrings[language].ready : yue ? unavailableTitle : nativeStrings.unavailable;
+  const modelHints: Record<string, string> = { local: musicStrings.hintYue, 'acestep-cpp': musicStrings.hintAce, 'minimaxmusic-cpp': musicStrings.hintMiniMax, openrouter: musicStrings.hintCloud };
+  const modelHasSettings = Boolean(linkedFamily && linkedFamily.pairs.length > 1) || yue || (nativeSets && native.profiles.length > 0);
+  // the model card stays in the form only while it asks for something: a download, a choice the settings cannot make
+  const nativeCardNeeded = !onMusicEngineChange || native.loading || Boolean(native.error) || !native.ready || Boolean(native.originalModels)
+    || Boolean(vevo2 && native.profile?.model_directory) || native.profile?.status === 'experimental' || Boolean(native.installed && native.adapterRuntimeUpdate && nativeSets)
+    || (native.profiles.length > 0 && !nativeSets && !audioCpp && nativeEngine !== 'hotstep');
+  // the model's own side first (its quality, its synthesis model), how it runs last
+  const modelSettings = <>
+    {nativeSets && native.profiles.length > 0 && <NativeModelSetPicker key={`settings-${musicEngine}`} engine={musicEngine} name={profileMusicEngines[musicEngine]}
+      profiles={native.profiles} selected={native.profile} engineInstalled={native.installed}
+      onSelect={id => { native.select(id); pair.select(); }} onChanged={refreshNativeChoice} onReady={pair.select} />}
+    {yue && !serviceDown && <YueModelSetPicker onChanged={() => { void setupQuery.refetch(); pair.select(); }} />}
+    {aceEngine && native.profile?.ready && <AceDitSwitcher value={aceDit}
+      setDit={native.profile.roles?.dit} onChange={file => setAceStudio(current => ({ ...current, synth_model: file }))} />}
+    {linkedFamily && linkedFamily.pairs.length > 1 && <div className="space-y-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{musicStrings.engine}</p>
+      <CatalogSegments<string> label={musicStrings.engine} value={musicEngine} options={linkedFamily.pairs.map(entry => ({ value: entry.engine, label: entry.label }))}
+        onChange={value => { const linked = linkedFamily.pairs.find(entry => entry.engine === value); if (linked) chooseLinkedPair(linked); }} />
+      {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
+    </div>}
+    <div className="flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-2 dark:border-white/10">
+      {yue && !serviceDown && setup?.ready && <SecondaryButton disabled={engineAction} onClick={() => void changeEnginePause()}>
+        {enginePaused ? engineControl.resume : engineControl.pause}</SecondaryButton>}
+      {onOpenEngines && <button type="button" className="min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
+        onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]} ↗</button>}
+    </div>
+  </>;
 
   // A cover or a lyric timing finished: the library is read again for it.
   // What was finished before the page opened is in the library already.
@@ -2134,8 +2183,32 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
               <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{cloud ? musicStrings.groupCloud : musicStrings.groupLocal}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+            <div className="flex min-w-0 shrink items-center gap-1.5">
+              {onMusicEngineChange ? <>
+                <PickerPill className="w-[9.5rem] max-w-full" label={musicStrings.modelFamily} showLabel={false} align="right"
+                  status={<span title={modelStateText} className={`h-2 w-2 shrink-0 rounded-full ${modelReady ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                    <span className="sr-only">{modelStateText}</span></span>}
+                  value={modelOptions.find(option => option.value === modelChoice)?.label ?? modelChoice}>
+                  {close => <>
+                    {[musicStrings.groupLocal, musicStrings.groupCloud].map(group => {
+                      const entries = modelOptions.filter(option => option.group === group);
+                      return entries.length > 0 && <div key={group} className="mb-1 last:mb-0">
+                        <p className="px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">{group}</p>
+                        {entries.map(option => <PickerOption key={option.value} value={option.value} selected={option.value === modelChoice}
+                          name={option.label} hint={modelHints[option.value]}
+                          mark={option.value === modelChoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
+                          onPick={() => { chooseModelFamily(option.value); close(); }} />)}
+                      </div>;
+                    })}
+                  </>}
+                </PickerPill>
+                {modelHasSettings && <PickerPill label={musicStrings.modelSettings} icon={<SlidersHorizontal size={15} />} align="right">
+                  {() => <div className="space-y-3 p-1">
+                    <p className="px-1 text-xs font-semibold text-zinc-900 dark:text-white">{musicStrings.modelSettings}</p>
+                    {modelSettings}
+                  </div>}
+                </PickerPill>}
+              </> : yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
                 <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
               </span>}
@@ -2146,49 +2219,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
           </div>
 
-          {onMusicEngineChange && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium">
-                <span className="shrink-0">{musicStrings.modelFamily}</span>
-                <Combobox className="min-w-0 flex-1" inputClassName={CONTROL} label={musicStrings.modelFamily} value={modelChoice}
-                  onChange={chooseModelFamily} placeholder={musicStrings.findModel} noResults={musicStrings.noModels} options={[
-                    ...linkedMusicFamilies.map(family => ({ value: family.id, label: family.name, group: musicStrings.groupLocal })),
-                    ...native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
-                      pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id)))
-                      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
-                    ...native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
-                      pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id)))
-                      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
-                    ...(nativeEngine === 'hotstep' && modelChoice === 'hotstep' ? [{ value: 'hotstep', label: 'HOT-Step', group: musicStrings.groupLocal }] : []),
-                    ...(audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice)
-                      ? [{ value: modelChoice, label: 'audio.cpp', group: musicStrings.groupLocal }] : []),
-                    { value: 'openrouter', label: 'OpenRouter', group: musicStrings.groupCloud },
-                    ...musicModels.map(model => ({ value: `cloud:${model.id}`, label: model.name || model.id, group: musicStrings.groupCloud })),
-                    ...(modelChoice.startsWith('cloud:') && !musicModels.some(model => `cloud:${model.id}` === modelChoice)
-                      ? [{ value: modelChoice, label: modelChoice.slice('cloud:'.length), group: musicStrings.groupCloud }] : []),
-                  ]} />
-              </div>
-              {linkedFamily && linkedFamily.pairs.length > 1 && (
-                <details className="text-xs">
-                  <summary className="cursor-pointer font-medium text-zinc-500 dark:text-zinc-400">{t('advanced')}</summary>
-                  <label className="mt-2 flex items-center gap-2 font-medium">
-                    <span className="shrink-0">{musicStrings.engine}</span>
-                    <select className={CONTROL} value={musicEngine}
-                      aria-describedby={speedProfile ? speedReferenceId : undefined} onChange={event => {
-                      const linked = linkedFamily.pairs.find(pair => pair.engine === event.target.value);
-                      if (linked) chooseLinkedPair(linked);
-                    }}>
-                      {linkedFamily.pairs.map(pair => <option key={pair.engine} value={pair.engine}>{pair.label}</option>)}
-                    </select>
-                  </label>
-                  {speedProfile && <div className="mt-2"><CreateSpeedReference profile={speedProfile} id={speedReferenceId} /></div>}
-                </details>
-              )}
-              {speedProfile && !(linkedFamily && linkedFamily.pairs.length > 1) && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
-              {onOpenEngines && !nativeEngine && !yue && <button type="button" className="block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
-                onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
-            </div>
-          )}
           {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.sending || pair.error || (pair.matching && pair.status
             && (pair.busy || pair.status.stage === 'error' || (pair.status.stage === 'needs_install' && !native.profile?.installable && !yue)))) && (
             <div className="space-y-2 text-xs">
@@ -2212,15 +2242,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {pairText.loraKept} {adapters.filter(adapter => !adapter.disabled).map(adapter => adapter.id).join(', ')}
             </p>
           )}
-          {yue && !serviceDown && setup?.ready && (
-            <button type="button" disabled={engineAction} onClick={() => void changeEnginePause()}
-              className="rounded border border-zinc-200 px-2 py-1 text-xs font-medium disabled:opacity-50 dark:border-white/20">
-              {enginePaused ? engineControl.resume : engineControl.pause}
-            </button>
-          )}
           {!yue ? (
             <>
-              {nativeEngine ? (
+              {nativeEngine ? nativeCardNeeded && (
                 <Card title={nativeStrings.model}>
                   <div className="space-y-2">
                     {native.loading && <p role="status" className="text-xs">{nativeStrings.loading}</p>}
@@ -2232,8 +2256,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <NativeModelSetPicker key={musicEngine} engine={musicEngine} name={profileMusicEngines[musicEngine]}
                         profiles={native.profiles} selected={native.profile} engineInstalled={native.installed}
                         onSelect={id => { native.select(id); pair.select(); }} onChanged={refreshNativeChoice} onReady={pair.select} />}
-                    {aceEngine && native.profile?.ready && <AceDitSwitcher value={aceDit}
-                      setDit={native.profile.roles?.dit} onChange={file => setAceStudio(current => ({ ...current, synth_model: file }))} />}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
                     {native.originalModels && (
                       <div className="space-y-1 text-xs" role="status">
@@ -2275,8 +2297,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <AudioCppModelInstall key={audioFamily} model={audioFamily} bytes={native.profile.missing_bytes ?? native.profile.total_bytes}
                         target={{ catalogue: '/v1/music/audio-cpp/models', installPath: '/v1/music/audio-cpp/models/install', label: native.profile.label.split(' · ')[0] }}
                         licenseUrl={mulaCover ? undefined : native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
-                    {onOpenEngines && <button type="button" className="min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
-                      onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
                   </div>
                 </Card>
               ) : <Card title={musicStrings.model}>
@@ -2378,13 +2398,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 refresh={native.refresh} controlClassName={CONTROL} />}
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} profileReady={native.ready} dit={aceDit || native.profile?.roles?.dit}
                 onPickDit={file => setAceStudio(current => ({ ...current, synth_model: file }))} listening={aceListening} onListen={what => void listenAce(what)}
-                card={(title, body, actions) => <Card title={title} actions={actions} fold="ace-source">{body}</Card>} />}
+                card={(title, body, actions) => <Card title={title} actions={actions} fold="ace-source" foldedByDefault={aceTask.task === 'text2music'}>{body}</Card>} />}
               {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(aceDit || native.profile?.roles?.dit)} task={aceTask.task}
                 planning={acePlanning} ready={native.ready} canFormat={Boolean(style.trim() || lyrics.trim())} onPlan={(mode, idea) => void planAce(mode, idea)}
                 undo={acePlanning ? null : aceUndo?.mode ?? null}
                 onUndo={undoAcePlan}
                 adapters={selectedNativeAdapters.some(adapter => !adapter.disabled)}
-                card={(title, body, actions) => <Card title={title} actions={actions} fold={`ace-${title}`}>{body}</Card>} />}
+                card={(title, body, actions) => <Card title={title} actions={actions} fold={`ace-${title}`} foldedByDefault>{body}</Card>} />}
               {(aceEngine || miniMaxEngine) && native.profile && <AdapterPicker
                 key={nativeEngine} value={selectedNativeAdapters} onChange={aceEngine ? setAceAdapters : setMiniMaxAdapters} iconClass={ICON}
                 nativeLibrary={{ installed: installedNativeAdapters, slots: [
@@ -2409,7 +2429,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
               {(nativeEngine && !packedYue && abc.trim() || mulaCover && mulaCoverDraft.abc.trim()) && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
-                <Card title={nativeStrings.settings}>
+                <Card title={nativeStrings.settings} fold="native-settings" foldedByDefault>
                   <div className="grid grid-cols-2 gap-2">
                     {nativeControls.filter(([key]) => (vevo2 || soulx) ? key === 'seed' : !(miDasheng || magenta) || key !== 'steps').map(([key, label]) => (
                       <label key={key} className="space-y-1 text-xs">
@@ -2448,10 +2468,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               )}
             </>
           ) : <>
-          {onMusicEngineChange && !serviceDown && <Card title={nativeStrings.model}>
+          {onMusicEngineChange && !serviceDown && setup?.ready === false && <Card title={nativeStrings.model}>
             <YueModelSetPicker onChanged={() => { void setupQuery.refetch(); pair.select(); }} />
-            {onOpenEngines && <button type="button" className="mt-2 block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
-              onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
           </Card>}
           {serviceDown ? (
             <div className="flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-700 dark:text-rose-200">
@@ -2461,7 +2479,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           ) : !ready && setup?.ready !== false && (
             <div className="flex gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
               <CircleAlert className="mt-0.5 shrink-0" size={15} />
-              <div><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}</div>
+              <div className="min-w-0 flex-1"><b>{t('localGenerationUnavailable')}</b><br />{unavailableHint}</div>
+              {enginePaused && <SecondaryButton className="shrink-0 self-center" disabled={engineAction} onClick={() => void changeEnginePause()}>{engineControl.resume}</SecondaryButton>}
             </div>
           )}
 
@@ -3092,6 +3111,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
           <Card
             title={t('quality')}
             fold="quality"
+            foldedByDefault
             actions={
               <button type="button" onClick={() => resetParameters()} className="min-h-6 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">
                 {t('resetToDefaults')}
@@ -3329,6 +3349,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </p>
           )}
           </>}
+          {rvcVoice && !instrumental && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-white/10">
+              <input type="checkbox" checked={rvcAfter} onChange={event => setRvcAfter(event.target.checked)} className="h-4 w-4 accent-pink-500" />
+              {rvcQuickStrings[language].after}
+            </label>
+          )}
           {error && <div ref={errorBox} role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs leading-5 text-red-700 dark:text-red-200">{error}</div>}
         </div>
       </div>
@@ -3344,12 +3370,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               <button type="button" onClick={() => setTakeChoiceOpen(false)} className="ml-auto px-2 py-1.5 text-zinc-500 hover:text-zinc-800 dark:hover:text-white">{t('cancel')}</button>
             </div>
           </div>
-        )}
-        {rvcVoice && !instrumental && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={rvcAfter} onChange={event => setRvcAfter(event.target.checked)} />
-            {rvcQuickStrings[language].after}
-          </label>
         )}
         <label className="mb-2 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
           <span className="shrink-0">{tt('createIntoPlaylist')}</span>

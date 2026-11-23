@@ -6,7 +6,7 @@ export const musicSourceStrings = {
     catalogError: 'Could not load OpenRouter music models.', refresh: 'Refresh models',
     keyMissing: 'Add an OpenRouter API key to generate music.', openCloudSettings: 'Open cloud settings',
     openResources: 'Install local models',
-    groupLocal: 'On this computer', groupCloud: 'In the cloud · OpenRouter', findModel: 'Find a model', noModels: 'No model by that name',
+    groupLocal: 'On this computer', otherModels: 'Other models', hintYue: 'A song with vocals and its score', hintAce: 'Fast: idea to song, covers, edits', hintMiniMax: 'Long tracks from a detailed description', hintCloud: 'Cloud models with your key, no graphics card', modelSettings: 'Model settings', createOptions: 'Creation options', groupCloud: 'In the cloud · OpenRouter', findModel: 'Find a model', noModels: 'No model by that name',
   },
   ru: {
     updateModel: 'Обновить', transferStages: { verifying: 'Проверка…', downloading: 'Скачивание…', activating: 'Активация…' },
@@ -15,7 +15,7 @@ export const musicSourceStrings = {
     catalogError: 'Не удалось загрузить музыкальные модели OpenRouter.', refresh: 'Обновить список моделей',
     keyMissing: 'Добавьте API-ключ OpenRouter для генерации музыки.', openCloudSettings: 'Открыть настройки облака',
     openResources: 'Установить локальные модели',
-    groupLocal: 'На этом компьютере', groupCloud: 'В облаке · OpenRouter', findModel: 'Найти модель', noModels: 'Модели с таким названием нет',
+    groupLocal: 'На этом компьютере', otherModels: 'Другие модели', hintYue: 'Песня с вокалом и партитурой', hintAce: 'Быстро: идея → песня, каверы, правки', hintMiniMax: 'Длинные треки по подробному описанию', hintCloud: 'Облачные модели по ключу, без видеокарты', modelSettings: 'Настройки модели', createOptions: 'Параметры создания', groupCloud: 'В облаке · OpenRouter', findModel: 'Найти модель', noModels: 'Модели с таким названием нет',
   },
   zh: {
     updateModel: '更新', transferStages: { verifying: '正在验证…', downloading: '正在下载…', activating: '正在启用…' },
@@ -24,7 +24,7 @@ export const musicSourceStrings = {
     catalogError: '无法加载 OpenRouter 音乐模型。', refresh: '刷新模型列表',
     keyMissing: '请添加 OpenRouter API 密钥以生成音乐。', openCloudSettings: '打开云端设置',
     openResources: '安装本地模型',
-    groupLocal: '在本机上', groupCloud: '云端 · OpenRouter', findModel: '查找模型', noModels: '没有这个名称的模型',
+    groupLocal: '在本机上', otherModels: '其他模型', hintYue: '带人声和乐谱的歌曲', hintAce: '快速：从想法到歌曲、翻唱、修改', hintMiniMax: '按详细描述生成长曲目', hintCloud: '用你的密钥使用云端模型，无需显卡', modelSettings: '模型设置', createOptions: '生成选项', groupCloud: '云端 · OpenRouter', findModel: '查找模型', noModels: '没有这个名称的模型',
   },
   ja: {
     updateModel: '更新', transferStages: { verifying: '検証中…', downloading: 'ダウンロード中…', activating: '有効化中…' },
@@ -33,7 +33,7 @@ export const musicSourceStrings = {
     catalogError: 'OpenRouter の音楽モデルを読み込めませんでした。', refresh: 'モデル一覧を更新',
     keyMissing: '音楽を生成するには OpenRouter の API キーを追加してください。', openCloudSettings: 'クラウド設定を開く',
     openResources: 'ローカルモデルをインストール',
-    groupLocal: 'このコンピューターで', groupCloud: 'クラウド · OpenRouter', findModel: 'モデルを探す', noModels: 'その名前のモデルはありません',
+    groupLocal: 'このコンピューターで', otherModels: 'その他のモデル', hintYue: 'ボーカルと楽譜つきの曲', hintAce: '速い：アイデアから曲、カバー、編集', hintMiniMax: '詳しい説明から長い曲', hintCloud: 'キーで使うクラウドモデル、グラフィックカード不要', modelSettings: 'モデル設定', createOptions: '作成オプション', groupCloud: 'クラウド · OpenRouter', findModel: 'モデルを探す', noModels: 'その名前のモデルはありません',
   },
   ko: {
     updateModel: '업데이트', transferStages: { verifying: '검증 중…', downloading: '다운로드 중…', activating: '활성화 중…' },
@@ -42,7 +42,7 @@ export const musicSourceStrings = {
     catalogError: 'OpenRouter 음악 모델을 불러오지 못했습니다.', refresh: '모델 목록 새로고침',
     keyMissing: '음악을 생성하려면 OpenRouter API 키를 추가하세요.', openCloudSettings: '클라우드 설정 열기',
     openResources: '로컬 모델 설치',
-    groupLocal: '이 컴퓨터에서', groupCloud: '클라우드 · OpenRouter', findModel: '모델 찾기', noModels: '그런 이름의 모델이 없습니다',
+    groupLocal: '이 컴퓨터에서', otherModels: '다른 모델', hintYue: '보컬과 악보가 있는 곡', hintAce: '빠름: 아이디어에서 곡, 커버, 편집', hintMiniMax: '자세한 설명으로 긴 트랙', hintCloud: '키로 쓰는 클라우드 모델, 그래픽카드 불필요', modelSettings: '모델 설정', createOptions: '생성 옵션', groupCloud: '클라우드 · OpenRouter', findModel: '모델 찾기', noModels: '그런 이름의 모델이 없습니다',
   },
   pt: {
     updateModel: 'Atualizar', transferStages: { verifying: 'Verificando…', downloading: 'Baixando…', activating: 'Ativando…' },
@@ -51,7 +51,7 @@ export const musicSourceStrings = {
     catalogError: 'Não foi possível carregar os modelos musicais do OpenRouter.', refresh: 'Atualizar modelos',
     keyMissing: 'Adicione uma chave de API do OpenRouter para gerar música.', openCloudSettings: 'Abrir configurações da nuvem',
     openResources: 'Instalar modelos locais',
-    groupLocal: 'Neste computador', groupCloud: 'Na nuvem · OpenRouter', findModel: 'Encontrar um modelo', noModels: 'Nenhum modelo com esse nome',
+    groupLocal: 'Neste computador', otherModels: 'Outros modelos', hintYue: 'Uma música com vocais e a partitura', hintAce: 'Rápido: da ideia à música, covers, edições', hintMiniMax: 'Faixas longas a partir de uma descrição detalhada', hintCloud: 'Modelos na nuvem com a sua chave, sem placa gráfica', modelSettings: 'Definições do modelo', createOptions: 'Opções de criação', groupCloud: 'Na nuvem · OpenRouter', findModel: 'Encontrar um modelo', noModels: 'Nenhum modelo com esse nome',
   },
 };
 

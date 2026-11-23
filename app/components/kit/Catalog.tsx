@@ -88,7 +88,7 @@ export function CatalogSegments<T extends string>({ value, options, onChange, la
   return (
     <div role="radiogroup" aria-label={label} className="flex shrink-0 rounded-lg bg-zinc-100 p-1 dark:bg-white/5">
       {options.map(option => (
-        <button key={option.value} type="button" role="radio" aria-checked={value === option.value} onClick={() => onChange(option.value)}
+        <button key={option.value} type="button" role="radio" aria-checked={value === option.value} data-value={option.value} onClick={() => onChange(option.value)}
           className={`rounded-md px-3 py-1 text-xs font-semibold ${value === option.value ? 'bg-white text-black shadow-xs dark:bg-zinc-800 dark:text-white' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'}`}>
           {option.label}
         </button>
