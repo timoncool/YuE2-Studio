@@ -66,7 +66,7 @@ export const nativeMusicSourceStrings = {
     styleAndLyricsRequired: 'Enter both a style and lyrics for MiniMax Music3.',
     experimental: 'Experimental', manualWeights: 'Download the missing weights manually', modelDirectory: 'Place the files under the Studio data folder at', weightFiles: 'Weight files', modelLicense: 'Model license',
     h3PromptRequired: 'Enter an instrumental music prompt for MiniMax-H3.',
-    settings: 'Generation settings', default: 'Engine default', duration: 'Duration (seconds)', steps: 'Steps',
+    settings: 'Generation settings', default: 'Auto', duration: 'Duration (seconds)', steps: 'Steps',
     seed: 'Seed', lmSeed: 'Language model seed', scoreKept: 'The draft keeps your ABC score. This model does not use it.',
   },
   ru: {
@@ -76,7 +76,7 @@ export const nativeMusicSourceStrings = {
     styleAndLyricsRequired: 'Для MiniMax Music3 укажите стиль и текст песни.',
     experimental: 'Экспериментальная модель', manualWeights: 'Скачайте недостающие веса вручную', modelDirectory: 'Папка для файлов относительно папки данных Studio', weightFiles: 'Файлы весов', modelLicense: 'Лицензия модели',
     h3PromptRequired: 'Опишите инструментальную музыку для MiniMax-H3.',
-    settings: 'Настройки генерации', default: 'По умолчанию в движке', duration: 'Длительность (с)', steps: 'Шаги',
+    settings: 'Настройки генерации', default: 'Авто', duration: 'Длительность (с)', steps: 'Шаги',
     seed: 'Сид', lmSeed: 'Сид языковой модели', scoreKept: 'Партитура ABC сохранена в черновике. Эта модель её не использует.',
   },
   zh: {
@@ -86,7 +86,7 @@ export const nativeMusicSourceStrings = {
     styleAndLyricsRequired: '请为 MiniMax Music3 输入风格和歌词。',
     experimental: '实验性模型', manualWeights: '手动下载缺少的权重', modelDirectory: '将文件放在 Studio 数据目录下的', weightFiles: '权重文件', modelLicense: '模型许可证',
     h3PromptRequired: '请为 MiniMax-H3 输入器乐提示词。',
-    settings: '生成设置', default: '引擎默认值', duration: '时长（秒）', steps: '步数',
+    settings: '生成设置', default: '自动', duration: '时长（秒）', steps: '步数',
     seed: '种子', lmSeed: '语言模型种子', scoreKept: 'ABC 乐谱保留在草稿中。此模型不使用它。',
   },
   ja: {
@@ -96,7 +96,7 @@ export const nativeMusicSourceStrings = {
     styleAndLyricsRequired: 'MiniMax Music3 のスタイルと歌詞を入力してください。',
     experimental: '実験的なモデル', manualWeights: '不足している重みを手動でダウンロード', modelDirectory: 'Studio データフォルダー内の保存先', weightFiles: '重みファイル', modelLicense: 'モデルライセンス',
     h3PromptRequired: 'MiniMax-H3 にインスト曲のプロンプトを入力してください。',
-    settings: '生成設定', default: 'エンジンの既定値', duration: '長さ（秒）', steps: 'ステップ',
+    settings: '生成設定', default: '自動', duration: '長さ（秒）', steps: 'ステップ',
     seed: 'シード', lmSeed: '言語モデルのシード', scoreKept: 'ABC 楽譜は下書きに残ります。このモデルは楽譜を使いません。',
   },
   ko: {
@@ -106,7 +106,7 @@ export const nativeMusicSourceStrings = {
     styleAndLyricsRequired: 'MiniMax Music3의 스타일과 가사를 모두 입력하세요.',
     experimental: '실험 모델', manualWeights: '누락된 가중치를 수동으로 다운로드하세요', modelDirectory: 'Studio 데이터 폴더 아래 저장 경로', weightFiles: '가중치 파일', modelLicense: '모델 라이선스',
     h3PromptRequired: 'MiniMax-H3에 연주곡 프롬프트를 입력하세요.',
-    settings: '생성 설정', default: '엔진 기본값', duration: '길이(초)', steps: '단계',
+    settings: '생성 설정', default: '자동', duration: '길이(초)', steps: '단계',
     seed: '시드', lmSeed: '언어 모델 시드', scoreKept: 'ABC 악보는 초안에 저장됩니다. 이 모델은 악보를 사용하지 않습니다.',
   },
   pt: {
@@ -116,7 +116,7 @@ export const nativeMusicSourceStrings = {
     styleAndLyricsRequired: 'Informe o estilo e a letra para o MiniMax Music3.',
     experimental: 'Modelo experimental', manualWeights: 'Baixe manualmente os pesos ausentes', modelDirectory: 'Destino na pasta de dados do Studio', weightFiles: 'Arquivos de pesos', modelLicense: 'Licença do modelo',
     h3PromptRequired: 'Descreva a música instrumental para o MiniMax-H3.',
-    settings: 'Configurações de geração', default: 'Padrão do motor', duration: 'Duração (segundos)', steps: 'Etapas',
+    settings: 'Configurações de geração', default: 'Auto', duration: 'Duração (segundos)', steps: 'Etapas',
     seed: 'Semente', lmSeed: 'Semente do modelo de linguagem', scoreKept: 'A partitura ABC fica no rascunho. Este modelo não a utiliza.',
   },
 };

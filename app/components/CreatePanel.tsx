@@ -68,7 +68,7 @@ import { NumberField } from './NumberField';
 import { CreateSpeedReference, type CreateSpeedProfile } from './CreateSpeedReference';
 import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
 import { apiUrl } from '../services/apiBase';
-import { AceStudioFields, type AceStudioDraft, aceGenderLine, aceStudioFields, ditKind, keepAceStudio, keptAceStudio, restoreAceStudio } from './AceStudioFields';
+import { AceSongIdea, AceStudioFields, type AceStudioDraft, aceGenderLine, aceStudioFields, ditKind, keepAceStudio, keptAceStudio, restoreAceStudio } from './AceStudioFields';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
@@ -892,6 +892,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     } finally {
       setAcePlanning(null);
     }
+  };
+  const undoAcePlan = () => {
+    if (!aceUndo) return;
+    setStyle(aceUndo.style); setLyrics(aceUndo.lyrics); setAceStudio(aceUndo.draft); native.set('duration_seconds', aceUndo.duration); setAceUndo(null);
   };
   const [aceListening, setAceListening] = useState<'describe' | 'codes' | null>(null);
   // the engine listens to the source song: its caption, lyrics and metadata, or the audio codes a render can follow
@@ -2313,6 +2317,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </div>
                     )}
               </Card>}
+              {aceEngine && aceTask.task === 'text2music' && <AceSongIdea planning={acePlanning} ready={native.ready}
+                onPlan={(mode, idea) => void planAce(mode, idea)} undo={!acePlanning && aceUndo?.mode === 'inspire'} onUndo={undoAcePlan}
+                card={(title, body, actions) => <Card title={title} actions={actions}>{body}</Card>} />}
               <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : miniMaxEngine ? mmText.captionStructured : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
@@ -2367,7 +2374,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(aceDit || native.profile?.roles?.dit)} task={aceTask.task}
                 planning={acePlanning} ready={native.ready} canFormat={Boolean(style.trim() || lyrics.trim())} onPlan={(mode, idea) => void planAce(mode, idea)}
                 undo={acePlanning ? null : aceUndo?.mode ?? null}
-                onUndo={() => { if (!aceUndo) return; setStyle(aceUndo.style); setLyrics(aceUndo.lyrics); setAceStudio(aceUndo.draft); native.set('duration_seconds', aceUndo.duration); setAceUndo(null); }}
+                onUndo={undoAcePlan}
                 adapters={selectedNativeAdapters.some(adapter => !adapter.disabled)}
                 card={(title, body, actions) => <Card title={title} actions={actions} fold={`ace-${title}`}>{body}</Card>} />}
               {(aceEngine || miniMaxEngine) && native.profile && <AdapterPicker

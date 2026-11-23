@@ -25,7 +25,7 @@ export const acePt: typeof aceStrings.en = {
   aceSongIdea: 'Descreva a música', aceOpenInStudio: 'Escrever e abrir no estúdio', aceUseTrack: 'Usar uma faixa para cover ou remix',
   aceSimpleHint: 'Criar planeja a música com o modelo de linguagem do ACE-Step e a renderiza de uma vez.',
   aceSongParams: 'Parâmetros da música', aceSourceSection: 'Fonte e referência', aceSourceEmpty: 'Escolha uma faixa para fazer cover, remix, repintar, ou para adicionar, extrair ou completar instrumentos.',
-  acePresets: 'Preset de guidance',
+  acePresets: 'Predefinição',
   acePreset_default: 'Padrão', acePreset_clean: 'Vocal limpo', acePreset_creative: 'Criativo', acePreset_cover: 'Cover', acePreset_strict: 'Estrito', acePreset_adg: 'ADG',
   acePresetHint_default: 'CFG em todos os passos. Equilibrado, a base segura.',
   acePresetHint_clean: 'CFG até a metade: vocal mais limpo, melhor seguimento das tags, menos artefatos na letra.',

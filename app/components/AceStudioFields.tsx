@@ -212,6 +212,42 @@ const Stage: React.FC<{ title: string; hint: string; children: React.ReactNode }
   </section>
 );
 
+const PlanButton: React.FC<{ mode: 'inspire' | 'format'; label: string; disabled: boolean; planning: 'inspire' | 'format' | null; ready: boolean; onClick: () => void }> = ({ mode, label, disabled, planning, ready, onClick }) => (
+  <button type="button" onClick={onClick} disabled={disabled || planning !== null || !ready}
+    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 disabled:opacity-40 dark:text-pink-300">
+    {planning === mode ? <Loader2 size={12} className="animate-spin" /> : mode === 'inspire' ? <Sparkles size={12} /> : <ListChecks size={12} />}
+    {label}
+  </button>
+);
+
+const UndoLink: React.FC<{ onClick: () => void }> = ({ onClick }) => {
+  const { t } = useI18n();
+  return <button type="button" onClick={onClick} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-pink-600 hover:underline dark:text-pink-300">
+    <Undo2 size={12} />{(t as unknown as (key: string) => string)('aceUndo')}
+  </button>;
+};
+
+/** The idea a text-to-music song starts from: the language model writes the style, the lyrics and the metadata from it. */
+export function AceSongIdea({ planning, ready, onPlan, undo, onUndo, card }: {
+  planning: 'inspire' | 'format' | null;
+  ready: boolean;
+  onPlan: (mode: 'inspire', idea: string) => void;
+  undo: boolean;
+  onUndo: () => void;
+  card: (title: string, body: React.ReactNode, actions?: React.ReactNode) => React.ReactNode;
+}) {
+  const { t } = useI18n();
+  const tt = t as unknown as (key: string) => string;
+  const [idea, setIdea] = useState('');
+  return <>{card(tt('aceSongIdea'), <>
+    <textarea value={idea} onChange={event => setIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
+      className={`${CONTROL} resize-y`} />
+    <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('aceIdeaHint')}</p>
+    {undo && <UndoLink onClick={onUndo} />}
+  </>, <PlanButton mode="inspire" label={planning === 'inspire' ? tt('acePlanning') : tt('aceInspire')} disabled={!idea.trim()}
+    planning={planning} ready={ready} onClick={() => onPlan('inspire', idea)} />)}</>;
+}
+
 export function AceStudioFields({ value, onChange, kind, task, adapters, card, planning, ready, canFormat, onPlan, undo, onUndo }: {
   value: AceStudioDraft;
   onChange: (value: AceStudioDraft) => void;
@@ -229,7 +265,6 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
   const { t } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const [advanced, setAdvanced] = useState(false);
-  const [idea, setIdea] = useState('');
   const dit = DIT_DEFAULTS[kind];
   const turbo = kind === 'turbo';
   const set = (key: string) => (next: string | boolean) => onChange({ ...value, [key]: next });
@@ -246,27 +281,7 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
     && (numberOrUndefined(value.cfg_interval_end) ?? 1) === preset.end && (get('guidance') || '') === preset.mode)?.id;
   const reset = () => onChange({ vocal_language: get('vocal_language'), gender: value.gender ?? '', bpm: get('bpm'), keyscale: get('keyscale'), timesignature: get('timesignature') });
 
-  const planButton = (mode: 'inspire' | 'format', label: string, disabled: boolean) => (
-    <button type="button" onClick={() => onPlan(mode, idea)} disabled={disabled || planning !== null || !ready}
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 disabled:opacity-40 dark:text-pink-300">
-      {planning === mode ? <Loader2 size={12} className="animate-spin" /> : mode === 'inspire' ? <Sparkles size={12} /> : <ListChecks size={12} />}
-      {label}
-    </button>
-  );
-
-  const undoLink = (mode: 'inspire' | 'format') => undo === mode && (
-    <button type="button" onClick={onUndo} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-pink-600 hover:underline dark:text-pink-300">
-      <Undo2 size={12} />{tt('aceUndo')}
-    </button>
-  );
-
   return <>
-    {task === 'text2music' && card(tt('aceSongIdea'), <>
-      <textarea value={idea} onChange={event => setIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
-        className={`${CONTROL} resize-y`} />
-      <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('aceIdeaHint')}</p>
-      {undoLink('inspire')}
-    </>, planButton('inspire', planning === 'inspire' ? tt('acePlanning') : tt('aceInspire'), !idea.trim()))}
     {card(tt('aceSongParams'), <>
       <div className="grid grid-cols-2 gap-2">
         <Field label={tt('aceLanguage')}>
@@ -296,8 +311,8 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
         </div>
       </div>
       <p className="mt-2 text-[11px] leading-4 text-zinc-500">{tt('aceMetadataHint')}</p>
-      {undoLink('format')}
-    </>, planButton('format', tt('aceFormat'), !canFormat))}
+      {undo === 'format' && <UndoLink onClick={onUndo} />}
+    </>, <PlanButton mode="format" label={tt('aceFormat')} disabled={!canFormat} planning={planning} ready={ready} onClick={() => onPlan('format')} />)}
 
     {card(t('quality'), <div className="space-y-3">
       <Switch checked={think} onChange={set('think')} label={tt('aceThink')} hint={tt('aceThinkHint')} />

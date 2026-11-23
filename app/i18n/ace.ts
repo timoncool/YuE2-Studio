@@ -142,7 +142,7 @@ const ru: Strings = {
   aceSongIdea: 'Опишите песню', aceOpenInStudio: 'Написать и открыть в студии', aceUseTrack: 'Взять трек для кавера или ремикса',
   aceSimpleHint: '«Создать» планирует песню языковой моделью ACE-Step и сразу рендерит её.',
   aceSongParams: 'Параметры песни', aceSourceSection: 'Исходник и референс', aceSourceEmpty: 'Выберите трек, чтобы сделать кавер, ремикс, перерисовать часть или добавить, вырезать, дописать инструменты.',
-  acePresets: 'Пресет guidance',
+  acePresets: 'Пресет',
   acePreset_default: 'Стандарт', acePreset_clean: 'Чистый вокал', acePreset_creative: 'Креатив', acePreset_cover: 'Кавер', acePreset_strict: 'Точный', acePreset_adg: 'ADG',
   acePresetHint_default: 'CFG на всех шагах. Сбалансированно, безопасная база.',
   acePresetHint_clean: 'CFG до середины: чище вокал, лучше следование тегам, меньше артефактов текста.',
