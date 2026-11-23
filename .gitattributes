@@ -2,3 +2,6 @@
 * text=auto eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+# Signed as they are: a changed line ending breaks the signature.
+docs/components/*/components.json -text
+docs/components/*/components.json.sig -text
