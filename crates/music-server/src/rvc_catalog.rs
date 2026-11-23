@@ -20,7 +20,10 @@ use crate::{
 };
 
 const SAMPLE_LIMIT: u64 = 5_000_000;
-const BUNDLED: &str = include_str!("../../../config/rvc-voice-catalog.json");
+/// The voices of the component catalogue built into this binary: their verified samples stay with a newer catalogue.
+fn bundled() -> String {
+    crate::components::built_in_voices()
+}
 
 #[derive(Deserialize)]
 struct Manifest {
@@ -217,21 +220,9 @@ pub(super) struct ListedVoice {
 }
 
 async fn active_manifest() -> anyhow::Result<Vec<CatalogVoice>> {
-    match crate::component_catalogue::cached_catalogue(crate::component_catalogue::RVC)
-        .await
-        .and_then(|bytes| {
-            bytes
-                .map(|bytes| parse_manifest(std::str::from_utf8(&bytes)?))
-                .transpose()
-        }) {
-        Ok(Some(mut voices)) => {
-            attach_bundled_samples(&mut voices, parse_manifest(BUNDLED)?);
-            return Ok(voices);
-        }
-        Ok(None) => {}
-        Err(error) => eprintln!("Using bundled RVC voice catalogue: {error:#}"),
-    }
-    parse_manifest(BUNDLED)
+    let mut voices = parse_manifest(&crate::components::voices().context("the component catalogue has no RVC voices")?)?;
+    attach_bundled_samples(&mut voices, parse_manifest(&bundled())?);
+    Ok(voices)
 }
 
 fn attach_bundled_samples(active: &mut [CatalogVoice], bundled: Vec<CatalogVoice>) {
@@ -313,21 +304,8 @@ pub(super) async fn sample(RoutePath(id): RoutePath<String>) -> Result<Response,
 }
 
 pub(super) async fn refresh() -> Result<Json<serde_json::Value>, ApiFailure> {
-    let voices = tokio::time::timeout(
-        std::time::Duration::from_secs(45),
-        crate::component_catalogue::refresh_catalogue(
-            crate::component_catalogue::RVC,
-            &net::download_client(),
-            |bytes| {
-                let voices = parse_manifest(std::str::from_utf8(bytes)?)?;
-                anyhow::ensure!(!voices.is_empty(), "signed RVC catalogue is empty");
-                Ok(voices.len())
-            },
-        ),
-    )
-    .await
-    .map_err(rvc_voices::internal)?
-    .map_err(rvc_voices::internal)?;
+    crate::components::refresh(&net::download_client()).await.map_err(rvc_voices::internal)?;
+    let voices = active_manifest().await.map_err(rvc_voices::internal)?.len();
     Ok(Json(
         serde_json::json!({ "source": "signed", "voices": voices }),
     ))
@@ -507,7 +485,7 @@ async fn download(
 mod tests {
     #[test]
     fn retains_bundled_demos_only_for_the_same_pinned_voice() {
-        let mut active = parse_manifest(BUNDLED).unwrap();
+        let mut active = parse_manifest(&bundled()).unwrap();
         assert_eq!(
             active.iter().filter(|voice| voice.sample.is_some()).count(),
             37
@@ -517,7 +495,7 @@ mod tests {
         }
         let demo = "rvc-3d114ade3fdf27050c8a";
         let radio_tapok = "rvc-50ea3d733073550ef6f7";
-        attach_bundled_samples(&mut active, parse_manifest(BUNDLED).unwrap());
+        attach_bundled_samples(&mut active, parse_manifest(&bundled()).unwrap());
         assert!(
             active
                 .iter()
@@ -537,7 +515,7 @@ mod tests {
         let changed = active.iter_mut().find(|voice| voice.id == demo).unwrap();
         changed.sample = None;
         changed.weights.as_mut().unwrap().sha256 = "0".repeat(64);
-        attach_bundled_samples(&mut active, parse_manifest(BUNDLED).unwrap());
+        attach_bundled_samples(&mut active, parse_manifest(&bundled()).unwrap());
         assert!(
             active
                 .iter()
@@ -553,7 +531,7 @@ mod tests {
 
     #[test]
     fn bundled_manifest_has_pinned_indexed_and_unindexed_voices() {
-        let entries = parse_manifest(BUNDLED).unwrap();
+        let entries = parse_manifest(&bundled()).unwrap();
         let indexed = entries
             .iter()
             .find(|voice| voice.name == "guanguanV1")

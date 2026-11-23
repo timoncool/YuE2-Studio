@@ -39,8 +39,15 @@ def main():
     target = Path(sys.argv[1]) if len(sys.argv) > 1 else published
     files = {}
     sets = {}
+    voices = None
     for table in sorted(HERE.glob("*.json")):
         data = json.loads(table.read_text(encoding="utf-8"))
+        if "voices" in data:
+            if voices is not None:
+                fail(f"{table.name}: the RVC voices are defined twice")
+            voices = data["voices"]
+            if voices.get("schema_version") != 1 or not voices.get("voices"):
+                fail(f"{table.name}: the RVC voices need schema_version 1 and at least one voice")
         for file_id, entry in data.get("files", {}).items():
             where = f"{table.name}: file {file_id}"
             if file_id in files:
@@ -92,6 +99,8 @@ def main():
     previous = json.loads(published.read_text(encoding="utf-8")) if published.exists() else {"sequence": 0}
     catalogue = {"product": PRODUCT, "sequence": previous["sequence"], "published": previous.get("published", ""),
                  "files": files, "sets": sets}
+    if voices is not None:
+        catalogue["voices"] = voices
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(catalogue, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
     print(f"[OK] {len(files)} files, {sum(len(s) for s in sets.values())} sets -> {target}")

@@ -84,6 +84,9 @@ pub(crate) struct Catalogue {
     pub published: String,
     pub files: BTreeMap<String, FileEntry>,
     pub sets: BTreeMap<String, Vec<ModelSet>>,
+    /// The RVC voice catalogue, checked by `rvc_catalog` when it is read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voices: Option<serde_json::Value>,
     /// Entries this studio cannot use (an unknown kind, a set without a role it needs), left out.
     #[serde(skip)]
     pub skipped: Vec<String>,
@@ -170,6 +173,8 @@ fn parse(json: &[u8]) -> Result<Catalogue> {
         files: BTreeMap<String, serde_json::Value>,
         #[serde(default)]
         sets: BTreeMap<String, Vec<serde_json::Value>>,
+        #[serde(default)]
+        voices: Option<serde_json::Value>,
     }
     let raw: Raw = serde_json::from_slice(json).context("read the component catalogue")?;
     ensure!(raw.product == PRODUCT, "the component catalogue is for {}, not {PRODUCT}", raw.product);
@@ -216,7 +221,7 @@ fn parse(json: &[u8]) -> Result<Catalogue> {
         }
         sets.insert(engine, usable);
     }
-    Ok(Catalogue { product: raw.product, sequence: raw.sequence, published: raw.published, files, sets, skipped })
+    Ok(Catalogue { product: raw.product, sequence: raw.sequence, published: raw.published, files, sets, voices: raw.voices, skipped })
 }
 
 /// The signed copy built into this binary.
@@ -364,6 +369,17 @@ pub(crate) fn set_files(engine: &str, set: &str) -> Option<Vec<(&'static Asset, 
 /// The files of the catalogue in use whose id starts with `prefix`, by id.
 pub(crate) fn files_under(prefix: &str) -> Vec<(String, FileEntry)> {
     current().catalogue.files.range(prefix.to_owned()..).take_while(|(id, _)| id.starts_with(prefix)).map(|(id, file)| (id.clone(), file.clone())).collect()
+}
+
+
+/// The RVC voice catalogue in use, as JSON.
+pub(crate) fn voices() -> Option<String> {
+    both().into_iter().find_map(|loaded| loaded.catalogue.voices.as_ref().map(serde_json::Value::to_string))
+}
+
+/// The RVC voice catalogue built into this binary, as JSON.
+pub(crate) fn built_in_voices() -> String {
+    built_in().catalogue.voices.as_ref().map(serde_json::Value::to_string).unwrap_or_default()
 }
 
 pub(crate) fn file(id: &str) -> Option<FileEntry> {

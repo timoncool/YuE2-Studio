@@ -2,7 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import bundled from '../../config/rvc-voice-catalog.json';
+import catalogue from '../../docs/components/1/components.json';
+
+const bundled = catalogue.voices;
 import { I18nProvider } from '../context/I18nContext';
 import { StudioToolsPanel } from './StudioToolsPanel';
 

@@ -4235,7 +4235,7 @@ mod tests {
 
     #[test]
     fn catalog_filters_radio_tapok_before_paging() {
-        let source: Value = serde_json::from_str(include_str!("../../../config/rvc-voice-catalog.json")).unwrap();
+        let source: Value = serde_json::from_str(&crate::components::built_in_voices()).unwrap();
         let args = json!({"query": "Radio Tapok", "vocal_style": "high", "rvc_version": "v2",
             "sample_rate_hz": 40000, "has_index": true});
         let filtered = shape("rvc_catalog_list", &args, source["voices"].clone());
