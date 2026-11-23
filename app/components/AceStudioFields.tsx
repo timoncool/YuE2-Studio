@@ -3,6 +3,7 @@ import { ChevronDown, ListChecks, Loader2, Sparkles, Undo2 } from 'lucide-react'
 import { useI18n } from '../context/I18nContext';
 import { readAudioCodes, SCHEDULERS, SOLVERS } from '../services/aceEngine';
 import { NumberField } from './NumberField';
+import { SecondaryButton } from './kit/Buttons';
 
 /**
  * ACE-Step Studio 4.0.1's own form for the native engine, carried over as it was: the song's metadata, the planner
@@ -228,9 +229,11 @@ const UndoLink: React.FC<{ onClick: () => void }> = ({ onClick }) => {
 };
 
 /** The idea a text-to-music song starts from: the language model writes the style, the lyrics and the metadata from it. */
-export function AceSongIdea({ idea, onIdea, planning, ready, onPlan, undo, onUndo, card }: {
+export function AceSongIdea({ idea, onIdea, planning, ready, onPlan, onCreate, undo, onUndo, card }: {
   idea: string;
   onIdea: (idea: string) => void;
+  /** Writes the song from the idea and creates it when the writing succeeds. */
+  onCreate: (idea: string) => void;
   planning: 'inspire' | 'format' | null;
   ready: boolean;
   onPlan: (mode: 'inspire', idea: string) => void;
@@ -244,7 +247,12 @@ export function AceSongIdea({ idea, onIdea, planning, ready, onPlan, undo, onUnd
     <textarea value={idea} onChange={event => onIdea(event.target.value)} rows={2} placeholder={tt('aceIdeaPlaceholder')} aria-label={tt('aceSongIdea')}
       className={`${CONTROL} resize-y`} />
     <p className="mt-1.5 text-[11px] leading-4 text-zinc-500">{tt('aceIdeaHint')}</p>
-    {undo && <UndoLink onClick={onUndo} />}
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <SecondaryButton disabled={!idea.trim() || planning !== null || !ready} onClick={() => onCreate(idea)}>
+        {planning === 'inspire' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}{tt('aceInspireCreate')}
+      </SecondaryButton>
+      {undo && <UndoLink onClick={onUndo} />}
+    </div>
   </>, <PlanButton mode="inspire" label={planning === 'inspire' ? tt('acePlanning') : tt('aceInspire')} disabled={!idea.trim()}
     planning={planning} ready={ready} onClick={() => onPlan('inspire', idea)} />)}</>;
 }

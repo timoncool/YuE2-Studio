@@ -872,8 +872,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [acePlanning, setAcePlanning] = useState<'inspire' | 'format' | null>(null);
   // what the planner replaced, for the undo link under the card it was asked from
   const [aceUndo, setAceUndo] = useState<{ mode: 'inspire' | 'format'; style: string; lyrics: string; draft: AceStudioDraft; duration: string } | null>(null);
-  const planAce = async (mode: 'inspire' | 'format', idea = '') => {
-    if (!native.profile || acePlanning) return;
+  const planAce = async (mode: 'inspire' | 'format', idea = ''): Promise<boolean> => {
+    if (!native.profile || acePlanning) return false;
     setAceUndo({ mode, style, lyrics, draft: aceStudio, duration: native.settings.duration_seconds });
     setAcePlanning(mode);
     setError(null);
@@ -895,13 +895,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       if (typeof plan.lyrics === 'string' && plan.lyrics.trim()) setLyrics(plan.lyrics.trim());
       if (typeof plan.duration === 'number' && plan.duration > 0) native.set('duration_seconds', String(Math.round(plan.duration)));
       setAceStudio(current => ({ ...current, ...restoreAceStudio({ bpm: typeof plan.bpm === 'number' && plan.bpm > 0 ? plan.bpm : undefined, keyscale: plan.keyscale, timesignature: plan.timesignature, vocal_language: plan.vocal_language }) }));
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+      return false;
     } finally {
       setAcePlanning(null);
     }
   };
   const [aceIdea, setAceIdea] = useState('');
+  // set when "Write and create" got its plan: the song is submitted on the render that holds the written style and lyrics
+  const [createAfterPlan, setCreateAfterPlan] = useState(false);
   const undoAcePlan = () => {
     if (!aceUndo) return;
     setStyle(aceUndo.style); setLyrics(aceUndo.lyrics); setAceStudio(aceUndo.draft); native.set('duration_seconds', aceUndo.duration); setAceUndo(null);
@@ -1910,6 +1914,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     }
   };
 
+  useEffect(() => {
+    if (!createAfterPlan || acePlanning) return;
+    setCreateAfterPlan(false);
+    submit();
+  });
   const submit = () => {
     if (pair.blocked) return;
     if (nativeEngine) {
@@ -2315,6 +2324,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               </Card>}
               {aceEngine && aceTask.task === 'text2music' && <AceSongIdea idea={aceIdea} onIdea={setAceIdea} planning={acePlanning} ready={native.ready}
                 onPlan={(mode, idea) => void planAce(mode, idea)} undo={!acePlanning && aceUndo?.mode === 'inspire'} onUndo={undoAcePlan}
+                onCreate={idea => void planAce('inspire', idea).then(ok => { if (ok) setCreateAfterPlan(true); })}
                 card={(title, body, actions) => <Card title={title} actions={actions}>{body}</Card>} />}
               <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : miniMaxEngine ? mmText.captionStructured : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}

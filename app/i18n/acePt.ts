@@ -75,7 +75,7 @@ export const acePt: typeof aceStrings.en = {
   aceInstrumentalHint: 'Sem vocais: a letra não é enviada.',
   aceLyricsHint: 'Tags de seção entre colchetes: [Verse], [Chorus], [Bridge]. Uma letra vazia é escrita pelo modelo.',
   aceIdeaPlaceholder: 'Uma suave canção de amor bengali para uma noite tranquila…', aceIdeaHint: 'O próprio modelo de linguagem do ACE-Step transforma a ideia em estilo, letra e metadados, na sua placa.',
-  aceInspire: 'Escrever a música', acePlanning: 'Escrevendo', aceRandomIdea: 'Ideia aleatória',
+  aceInspire: 'Escrever a música', aceInspireCreate: 'Escrever e criar', acePlanning: 'Escrevendo', aceRandomIdea: 'Ideia aleatória',
   aceFormat: 'Completar os metadados', aceUndo: 'Desfazer',
   aceThink: 'Deixar o modelo pensar', aceThinkHint: 'O modelo de linguagem planeja a música primeiro: metadados, a letra quando não há, os códigos de estrutura.',
   aceSongs: 'Músicas', aceSongsHint: 'Músicas são planos separados do modelo de linguagem; takes são renderizações de cada plano com as seeds seguintes.',
