@@ -97,7 +97,7 @@ export function VoicesPage({ initialSongId, onSaved }: { initialSongId?: string;
             <PrimaryButton className="mt-3" onClick={() => setTab('catalog')}>{text.openCatalog}</PrimaryButton>
           </div>}
           {voices && voices.length > 0 && <ul className={`${CARD} divide-y divide-zinc-100 p-0 dark:divide-white/5`}>
-            {voices.map(item => <li key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            {voices.map(item => <li key={item.id} className="flex items-center gap-3 px-4 py-3">
               <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-pink-500/10 text-pink-600 dark:text-pink-300"><Mic size={18} aria-hidden /></span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-white">{voiceName(item)}</span>
@@ -105,9 +105,11 @@ export function VoicesPage({ initialSongId, onSaved }: { initialSongId?: string;
                   {item.model_name}{item.version ? ` · RVC v${item.version}` : ''} · {item.index_name ? text.withIndex : text.withoutIndex}
                 </span>
               </span>
-              <SecondaryButton disabled={busy} onClick={() => { chooseLastRvcVoice(item.id); setTab('apply'); }}><Wand2 size={14} />{text.applyVoice}</SecondaryButton>
+              <SecondaryButton disabled={busy} className="shrink-0" title={text.applyVoice} onClick={() => { chooseLastRvcVoice(item.id); setTab('apply'); }}>
+                <Wand2 size={14} aria-hidden /><span className="max-sm:sr-only">{text.applyVoice}</span>
+              </SecondaryButton>
               <button type="button" disabled={busy} onClick={() => setRemoving(item)} aria-label={`${labels.remove}: ${voiceName(item)}`} title={labels.remove}
-                className="inline-flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50 dark:text-zinc-400">
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-rose-500/10 hover:text-rose-600 disabled:opacity-50 dark:text-zinc-400">
                 <Trash2 size={16} aria-hidden />
               </button>
             </li>)}
