@@ -258,6 +258,22 @@ pub fn exited_on_exception(code: Option<i32>) -> bool {
     code.is_some_and(|code| (code as u32) >= 0xC000_0000)
 }
 
+/// The status a process exits with when Smart App Control or an App Control for Business policy refuses one of its
+/// files, `STATUS_SYSTEM_INTEGRITY_POLICY_VIOLATION`; starting a refused program fails with Windows error 4551.
+const APP_CONTROL_STATUS: u32 = 0xC0E9_0002;
+const APP_CONTROL_ERROR: i32 = 4551;
+
+/// What a person reads when Windows refused to run the engine.
+pub const APP_CONTROL_BLOCKED: &str = "Windows blocked the engine: Smart App Control or the computer's App Control \
+policy does not let programs without a code signature run. Turn Smart App Control off in Windows Security, App & browser \
+control, or ask the administrator to allow the studio's folder";
+
+/// Whether Windows' application control stopped the process or refused to start it.
+pub fn blocked_by_app_control(code: Option<i32>, start_error: Option<&std::io::Error>) -> bool {
+    code.is_some_and(|code| code as u32 == APP_CONTROL_STATUS)
+        || start_error.is_some_and(|error| error.raw_os_error() == Some(APP_CONTROL_ERROR))
+}
+
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "faulting module {}, exception 0x{}, offset 0x{}", self.module, self.exception, self.offset)
@@ -370,6 +386,13 @@ fn job() -> isize {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn app_control_refusals_are_told_apart_from_crashes() {
+        assert!(super::blocked_by_app_control(Some(0xC0E9_0002u32 as i32), None));
+        assert!(super::blocked_by_app_control(None, Some(&std::io::Error::from_raw_os_error(4551))));
+        assert!(!super::blocked_by_app_control(Some(0xC000_0005u32 as i32), None));
+    }
+
     use super::*;
 
     #[test]

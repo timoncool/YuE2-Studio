@@ -38,7 +38,10 @@ pub(super) async fn start(
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .context("Start HOT-Step")?;
+        .map_err(|error| match music_core::process::blocked_by_app_control(None, Some(&error)) {
+            true => anyhow::anyhow!("{}", music_core::process::APP_CONTROL_BLOCKED),
+            false => anyhow::Error::new(error).context("Start HOT-Step"),
+        })?;
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(30))
@@ -48,6 +51,9 @@ pub(super) async fn start(
     loop {
         ensure!(!stop.load(Ordering::SeqCst), "Stopped.");
         if let Some(status) = child.try_wait()? {
+            if music_core::process::blocked_by_app_control(status.code(), None) {
+                anyhow::bail!("HOT-Step exited while starting ({status}): {}", music_core::process::APP_CONTROL_BLOCKED);
+            }
             anyhow::bail!("HOT-Step exited while starting ({status}).");
         }
         if let Ok(reply) = http

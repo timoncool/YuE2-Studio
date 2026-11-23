@@ -668,6 +668,10 @@ impl YueServerSupervisor {
             }
             if let Some(child) = self.child.as_mut() {
                 if let Some(status) = child.try_wait().context("inspect starting yue-server")? {
+                    if music_core::process::blocked_by_app_control(status.code(), None) {
+                        note_in_log(music_core::process::APP_CONTROL_BLOCKED);
+                        bail!("yue-server exited during startup with status {status}; {}", music_core::process::APP_CONTROL_BLOCKED);
+                    }
                     // a crash says nothing of where: Windows' record of it names the module
                     let fault = music_core::process::exited_on_exception(status.code()).then(|| music_core::process::fault_of(child.id(), Duration::from_secs(5))).flatten();
                     if let Some(diagnostic) = illegal_instruction_diagnostic(status.code(), fault.as_ref()) {
