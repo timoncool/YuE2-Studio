@@ -1887,7 +1887,7 @@ it('submits a MuLaCover library original and restores it for a new take', async 
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
   const picker = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Original song"]');
-  expect(picker?.value).toBe('original-track');
+  expect(picker?.value).toBe('No longer in the library');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({
     music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'original-track',

@@ -92,7 +92,7 @@ export function Vevo2SingingFields({ value, onChange, controlClassName }: Props)
       <LibrarySongPicker label={strings.melody} value={value.melody_song_id ?? ''} placeholder={strings.none} none={strings.none}
         controlClassName={controlClassName} onChange={id => onChange({ ...value, melody_song_id: id || undefined })} />
       {loaded && !songs.length &&
-        <p className="text-xs text-zinc-500">{strings.empty}</p>}
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">{strings.empty}</p>}
     </div>
   );
 }

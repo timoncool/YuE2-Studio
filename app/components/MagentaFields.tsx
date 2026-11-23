@@ -39,6 +39,6 @@ export function MagentaFields({ value, onChange, tracks, controlClassName }: {
   return <div className="grid gap-1 text-xs text-zinc-700 dark:text-zinc-300">
     <LibrarySongPicker label={label} value={reference} placeholder={textMode} none={textMode} missing={unavailable} showLabel={false}
       controlClassName={controlClassName ?? ''} onChange={id => onChange(id ? { reference_song_id: id } : {})} />
-    {reference && !missing && <span className="text-zinc-500">{audioMode}</span>}
+    {reference && !missing && <span className="text-zinc-500 dark:text-zinc-400">{audioMode}</span>}
   </div>;
 }

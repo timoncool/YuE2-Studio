@@ -49,7 +49,7 @@ export function SoulXSingerFields({ conversion, value, onChange, controlClassNam
   function metadata(label: string, field: 'reference_metadata' | 'target_metadata') {
     return <div className="grid">
       <FieldLabel hidden>{label}</FieldLabel>
-      <SecondaryButton className="justify-start" aria-label={label} onClick={() => files.current[field]?.click()}>
+      <SecondaryButton className="justify-start" aria-label={`${label}: ${value[field] ? attached : formCardStrings[language].chooseJson}`} onClick={() => files.current[field]?.click()}>
         <FileJson size={14} aria-hidden />{value[field] ? attached : formCardStrings[language].chooseJson}
       </SecondaryButton>
       <input ref={input => { files.current[field] = input; }} type="file" accept=".json,application/json" className="hidden" aria-label={label}
@@ -78,11 +78,11 @@ export function SoulXSingerFields({ conversion, value, onChange, controlClassNam
     {conversion ? recording(sourceLabel, 'source_song_id') : <>
       <div className="grid content-start">
         <FieldLabel hidden>{control}</FieldLabel>
-        <CatalogSegments label={control} value={value.control ?? 'score'}
+        <CatalogSegments fill label={control} value={value.control ?? 'score'}
           options={[{ value: 'score', label: score }, { value: 'melody', label: melody }]}
           onChange={mode => onChange(current => ({ ...current, control: mode }))} />
       </div>
-      <p className="text-xs text-zinc-500">{explanation}</p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{explanation}</p>
       {metadata(refJson, 'reference_metadata')}
       {metadata(targetJson, 'target_metadata')}
     </>}

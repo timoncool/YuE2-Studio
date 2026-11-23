@@ -2249,8 +2249,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   return entries.length > 0 && <div key={group} role="group" aria-label={group} className="mb-1 last:mb-0">
                     <p aria-hidden className="sticky -top-2 z-10 bg-white px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">{group}</p>
                     {entries.map(option => <PickerOption key={option.value} value={option.value} selected={option.value === modelChoice}
-                      name={option.label} hint={modelHints[option.value.replace(/^(audio|hotstep):/, '')]}
-                      side={option.ready === false ? musicStrings.needsDownload : option.experimental ? musicStrings.experimental : undefined}
+                      name={option.label} hint={[modelHints[option.value.replace(/^(audio|hotstep):/, '')], option.experimental && musicStrings.experimental].filter(Boolean).join(' · ') || undefined}
+                      side={option.ready === false ? musicStrings.needsDownload : undefined}
                       mark={option.value === modelChoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
                       onPick={() => { chooseModelFamily(option.value); close(); }} />)}
                   </div>;
@@ -2314,7 +2314,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
                       </select>
                     )}
-                    {!onMusicEngineChange && native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
+                    {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
                     {native.profile && !native.ready && !nativeSets && !native.profile.installable &&
                       <p role="status" className="text-xs">{nativeStrings.unavailable}</p>}
                     {hotstepHeart && native.profile?.installable && !native.ready &&
@@ -2476,7 +2476,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} hasSampler={false} />}
               {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} />}
-              {(nativeEngine && !packedYue && abc.trim() || mulaCover && mulaCoverDraft.abc.trim()) && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
+              {(nativeEngine && !packedYue && abc.trim() || mulaCover && mulaCoverDraft.abc.trim()) && <p role="status" className="text-xs text-zinc-500 dark:text-zinc-400">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings} fold="native-settings" foldedByDefault>
                   {(heartMuLa || stableAudio) && <div className="mb-3">
