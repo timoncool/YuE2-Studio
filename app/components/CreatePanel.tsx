@@ -872,6 +872,34 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       setAcePlanning(null);
     }
   };
+  const [aceListening, setAceListening] = useState<'describe' | 'codes' | null>(null);
+  // the engine listens to the source song: its caption, lyrics and metadata, or the audio codes a render can follow
+  const listenAce = async (what: 'describe' | 'codes') => {
+    if (!native.profile || !aceTask.source || aceListening) return;
+    setAceListening(what);
+    setError(null);
+    try {
+      const response = await fetch(apiUrl('/v1/ace/understand'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ song_id: aceTask.source, profile: native.profile.id }),
+      });
+      const body = await response.json().catch(() => null) as { request?: Record<string, unknown>; error?: string } | null;
+      if (!response.ok || !body?.request) throw new Error(body?.error || String(response.status));
+      const heard = body.request;
+      if (what === 'codes') {
+        if (typeof heard.audio_codes === 'string') setAceStudio(current => ({ ...current, audio_codes: heard.audio_codes as string }));
+        return;
+      }
+      setAceUndo({ mode: 'format', style, lyrics, draft: aceStudio, duration: native.settings.duration_seconds });
+      if (typeof heard.caption === 'string' && heard.caption.trim()) setStyle(heard.caption.trim());
+      if (typeof heard.lyrics === 'string' && heard.lyrics.trim()) setLyrics(heard.lyrics.trim());
+      if (typeof heard.duration === 'number' && heard.duration > 0) native.set('duration_seconds', String(Math.round(heard.duration)));
+      setAceStudio(current => ({ ...current, ...restoreAceStudio({ bpm: typeof heard.bpm === 'number' && heard.bpm > 0 ? heard.bpm : undefined, keyscale: heard.keyscale, timesignature: heard.timesignature, vocal_language: heard.vocal_language }) }));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setAceListening(null);
+    }
+  };
   const [engineAction, setEngineAction] = useState(false);
   // the form scrolls above the Create button: a refusal at its foot is brought into view, or a click seems to do nothing
   const errorBox = useRef<HTMLDivElement>(null);
@@ -2289,7 +2317,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {magenta && <MagentaFields value={magentaOptions} onChange={setMagentaOptions} tracks={magentaTracks} controlClassName={CONTROL} />}
               {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
-              {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
+              {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} profileReady={native.ready} dit={aceDit || native.profile?.roles?.dit}
+                onPickDit={file => setAceStudio(current => ({ ...current, synth_model: file }))} listening={aceListening} onListen={what => void listenAce(what)}
+                card={(title, body, actions) => <Card title={title} actions={actions} fold="ace-source">{body}</Card>} />}
               {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(aceDit || native.profile?.roles?.dit)} task={aceTask.task}
                 planning={acePlanning} ready={native.ready} canFormat={Boolean(style.trim() || lyrics.trim())} onPlan={(mode, idea) => void planAce(mode, idea)}
                 undo={acePlanning ? null : aceUndo?.mode ?? null}

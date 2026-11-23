@@ -570,10 +570,10 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   chooseSet('balanced');
   await flush();
   type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
-  select('ACE-Step task', 'cover');
-  expect(create().disabled).toBe(true);
-  select('Source song', 'origin');
-  type(control('Cover strength'), '0.65');
+  expect(buttonNamed('aceTask_cover')).toBeUndefined();
+  select('aceSource', 'origin');
+  expect(buttonNamed('aceTask_cover')!.getAttribute('aria-pressed')).toBe('true');
+  type(field('input[type="range"][aria-label="aceCoverStrength"]') as HTMLInputElement, '0.65');
   click(create());
   expect(sent[0]).toMatchObject({
     music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
@@ -590,13 +590,14 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   } as Song;
   act(() => root.render(panel({ musicEngine: 'acestep-cpp', initialData: { song: imported, timestamp: 1 } })));
   await flush();
-  expect(host.querySelector<HTMLSelectElement>('select[aria-label="ACE-Step task"]')!.value).toBe('repaint');
-  expect(control('Repaint start (seconds)').value).toBe('2');
-  expect(control('Repaint end (seconds)').value).toBe('4');
-  expect(field('input[aria-label="Cover strength"]')).toBeNull();
-  type(control('Repaint end (seconds)'), '1');
+  expect(buttonNamed('aceTask_repaint')!.getAttribute('aria-pressed')).toBe('true');
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="aceReference"]')!.value).toBe('voice');
+  expect(control('aceRepaintStart').value).toBe('2');
+  expect(control('aceRepaintEnd').value).toBe('4');
+  expect(field('input[aria-label="aceCoverStrength"]')).toBeNull();
+  type(control('aceRepaintEnd'), '1');
   expect(create().disabled).toBe(true);
-  type(control('Repaint end (seconds)'), '4');
+  type(control('aceRepaintEnd'), '4');
   click(create());
   expect(sent[1]).toMatchObject({ seed: 22, ace: {
     task_type: 'repaint', repainting_start: 2, repainting_end: 4, source_song_id: 'origin',

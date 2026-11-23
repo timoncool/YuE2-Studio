@@ -45,10 +45,10 @@ export const DIT_DEFAULTS: Record<DitKind, { steps: number; guidance: number; sh
   merge: { steps: 60, guidance: 5, shift: 1, solver: 'euler', scheduler: 'linear' },
 };
 
-const CONTROL =
+export const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-hidden transition-colors focus:border-pink-500 disabled:opacity-50 dark:border-white/10 dark:bg-black/25 dark:text-white';
-const LABEL = 'mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400';
-const CHOICE = (on: boolean) => `rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${on
+export const LABEL = 'mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400';
+export const CHOICE = (on: boolean) => `rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${on
   ? 'border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-300' : 'border-zinc-200 text-zinc-600 hover:border-pink-300 dark:border-white/10 dark:text-zinc-300'}`;
 
 const numberOrUndefined = (value: unknown): number | undefined => {
@@ -160,7 +160,7 @@ export function aceGenderLine(draft: AceStudioDraft): string {
   return draft.gender === 'male' ? 'Male vocals' : draft.gender === 'female' ? 'Female vocals' : '';
 }
 
-const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({ label, hint, children }) => (
+export const Field: React.FC<{ label: string; hint?: string; children: React.ReactNode }> = ({ label, hint, children }) => (
   <label className="block">
     <span className={LABEL}>{label}</span>
     {children}
@@ -181,7 +181,7 @@ const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; l
   </div>
 );
 
-const SliderRow: React.FC<{
+export const SliderRow: React.FC<{
   label: string; value: string; fallback: number; min: number; max: number; step: number; suffix?: string;
   onChange: (value: string) => void; disabled?: boolean;
 }> = ({ label, value, fallback, min, max, step, suffix, onChange, disabled }) => {
