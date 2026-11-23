@@ -14,22 +14,18 @@ it('shows transposed jianpu key changes independently of capo and ukulele shapes
     const abc = 'X:1\nM:4/4\nL:1/4\nK:C\n"C"C D E G | [K:D] "D"D E F A |';
     act(() => root.render(<SongbookDialog abc={abc} title="Key change" onClose={() => {}} />));
     const sheet = document.querySelector<HTMLDialogElement>('dialog[aria-label="Songbook"]')!;
-    const controls = (prefix: string) => [...sheet.querySelectorAll('label')]
-      .find(label => label.textContent?.startsWith(prefix))!.querySelector('select')!;
-    const choose = (prefix: string, value: string) => act(() => {
-      const select = controls(prefix);
-      select.value = value;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const step = (label: string, times: number) => {
+      for (let count = 0; count < times; count += 1) act(() => sheet.querySelector<HTMLButtonElement>(`button[aria-label="${label}: +1"]`)!.click());
+    };
     const keyLabels = () => [...sheet.querySelectorAll('.songbook-cell > span')]
       .map(label => label.textContent).filter(value => value?.startsWith('Key'));
     expect(keyLabels()).toEqual([]);
-    act(() => sheet.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    act(() => sheet.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
     expect(keyLabels()).toEqual(['Key D']);
-    choose('Transpose', '2');
+    step('Transpose (semitones)', 2);
     expect(keyLabels()).toEqual(['Key E']);
-    choose('Capo fret', '2');
-    choose('Chord shapes', 'ukulele');
+    step('Capo fret', 2);
+    act(() => sheet.querySelector<HTMLButtonElement>('[role="radiogroup"][aria-label="Chord shapes"] [data-value="ukulele"]')!.click());
     expect(keyLabels()).toEqual(['Key E']);
     expect(sheet.querySelector('h3')?.textContent).toBe('Ukulele');
     expect(sheet.querySelector('figure svg[aria-label^="C:"]')?.getAttribute('aria-label')?.split(' ').slice(1)).toHaveLength(4);
@@ -51,15 +47,11 @@ it('shows the printable songbook and updates chord shapes when the capo changes'
       title="My song" onClose={close} />));
     const sheet = document.querySelector<HTMLDialogElement>('dialog[aria-label="Songbook"]')!;
     expect(sheet.open).toBe(true);
-    expect(sheet.querySelector('h2')?.textContent).toBe('My song');
+    expect(sheet.querySelector('h2')?.textContent).toBe('Songbook');
+    expect(sheet.querySelector('article h2')?.textContent).toBe('My song');
     expect(sheet.querySelector('strong')?.textContent).toBe('D');
     expect(sheet.textContent).toContain('Hel-');
-    const capo = Array.from(sheet.querySelectorAll('label'))
-      .find(label => label.textContent?.startsWith('Capo fret'))!.querySelector('select')!;
-    act(() => {
-      capo.value = '2';
-      capo.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    for (let count = 0; count < 2; count += 1) act(() => sheet.querySelector<HTMLButtonElement>('button[aria-label="Capo fret: +1"]')!.click());
     expect(sheet.querySelector('strong')?.textContent).toBe('C');
     expect(sheet.querySelector('figcaption')?.textContent).toBe('C');
     const printButton = Array.from(sheet.querySelectorAll('button')).find(button => button.textContent === 'Print A4')!;

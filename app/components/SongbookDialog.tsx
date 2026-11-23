@@ -7,9 +7,11 @@ import { buildSongbook, chordName, layoutByPhrases, placeLyricSyllables } from '
 import { estimateLyricSyllables } from '../services/songbookSyllables';
 import type { Language } from '../i18n/translations';
 import { songbookStrings } from '../i18n/songbook';
+import { Stepper } from './kit/Stepper';
+import { CatalogSegments } from './kit/Catalog';
+import { SecondaryButton } from './kit/Buttons';
 import './songbook.css';
 
-const control = 'rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 dark:border-white/20 dark:bg-zinc-800 dark:text-zinc-100';
 
 function NumberedNote({ number, duration }: { number: string; duration?: number }) {
   if (duration === undefined) return <span>{number}</span>;
@@ -100,36 +102,31 @@ export function SongbookDialog({ abc, title, lyrics, onClose }: {
   return createPortal(
     <dialog ref={dialog} className="studio-songbook m-auto w-[min(92vw,56rem)] rounded-xl bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/60 dark:bg-zinc-900 dark:text-white"
       aria-label={text.title} onCancel={event => { event.preventDefault(); onClose(); }}>
-      <div className="songbook-controls sticky top-0 flex flex-wrap items-end gap-3 border-b border-zinc-200 bg-white p-4 dark:border-white/20 dark:bg-zinc-900">
-        <label className="grid gap-1 text-xs">{text.transpose}
-          <select className={control} value={transpose} onChange={event => setTranspose(Number(event.target.value))}>
-            {Array.from({ length: 25 }, (_, index) => index - 12).map(value =>
-              <option key={value} value={value}>{value > 0 ? `+${value}` : value}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1 text-xs">{text.capo}
-          <select className={control} value={capo} onChange={event => setCapo(Number(event.target.value))}>
-            {Array.from({ length: 13 }, (_, index) => <option key={index}>{index}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1 text-xs">{text.instrument}
-          <select className={control} value={instrument} onChange={event => setInstrument(event.target.value as ChordInstrument)}>
-            <option value="guitar">{text.guitar}</option><option value="ukulele">{text.ukulele}</option>
-          </select>
-        </label>
-        {lyrics?.trim() && <label className="grid gap-1 text-xs">{text.lyricLanguage}
-          <select className={control} value={lyricLanguage} onChange={event => setLyricLanguage(event.target.value as Language)}>
-            <option value="en">English</option><option value="pt">Português</option>
-            <option value="ru">Русский</option><option value="zh">中文</option>
-            <option value="ja">日本語</option><option value="ko">한국어</option>
-          </select>
-        </label>}
-        <label className="flex items-center gap-1 self-center text-sm">
-          <input type="checkbox" checked={numbered} onChange={event => setNumbered(event.target.checked)} /> {text.numbered}
-        </label>
-        <button type="button" className={`${control} ml-auto inline-flex items-center gap-1`} disabled={!sheet?.lines.length}
-          onClick={() => window.print()}><Printer size={15} />{text.print}</button>
-        <button type="button" aria-label={text.close} className={control} onClick={onClose}><X size={17} /></button>
+      <div className="songbook-controls sticky top-0 space-y-3 border-b border-zinc-200 bg-white p-4 dark:border-white/20 dark:bg-zinc-900">
+        <div className="flex items-center gap-2">
+          <h2 className="min-w-0 flex-1 truncate text-base font-bold">{text.title}</h2>
+          <SecondaryButton disabled={!sheet?.lines.length} onClick={() => window.print()}><Printer size={15} aria-hidden />{text.print}</SecondaryButton>
+          <button type="button" aria-label={text.close} title={text.close} onClick={onClose}
+            className="inline-flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"><X size={17} aria-hidden /></button>
+        </div>
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3 text-xs">
+          <div className="grid gap-1"><span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.transpose}</span>
+            <Stepper value={transpose} min={-12} max={12} label={text.transpose} format={value => value > 0 ? `+${value}` : String(value)} onChange={setTranspose} /></div>
+          <div className="grid gap-1"><span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.capo}</span>
+            <Stepper value={capo} min={0} max={12} label={text.capo} onChange={setCapo} /></div>
+          <div className="grid gap-1"><span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.instrument}</span>
+            <CatalogSegments<ChordInstrument> label={text.instrument} value={instrument} onChange={setInstrument}
+              options={[{ value: 'guitar', label: text.guitar }, { value: 'ukulele', label: text.ukulele }]} /></div>
+          {lyrics?.trim() && <div className="grid gap-1"><span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.lyricLanguage}</span>
+            <CatalogSegments<Language> label={text.lyricLanguage} value={lyricLanguage} onChange={setLyricLanguage}
+              options={[{ value: 'en', label: 'EN' }, { value: 'pt', label: 'PT' }, { value: 'ru', label: 'RU' }, { value: 'zh', label: '中文' }, { value: 'ja', label: '日本語' }, { value: 'ko', label: '한국어' }]} /></div>}
+          <button type="button" role="switch" aria-checked={numbered} onClick={() => setNumbered(value => !value)} className="flex min-h-9 items-center gap-2 text-sm">
+            <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${numbered ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}>
+              <span className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-xs transition-all ${numbered ? 'left-[18px]' : 'left-[2px]'}`} />
+            </span>
+            {text.numbered}
+          </button>
+        </div>
       </div>
       <article className="songbook-paper max-h-[70vh] overflow-auto p-6">
         <h2 className="mb-1 text-xl font-bold">{pageTitle}</h2>
