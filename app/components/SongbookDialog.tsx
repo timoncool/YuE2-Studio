@@ -75,7 +75,8 @@ export function SongbookDialog({ abc, title, lyrics, onClose }: {
       let approximate = false;
       if (lyrics?.trim()) {
         approximate = placeLyricSyllables(lines, estimateLyricSyllables(lyrics, lyricLanguage));
-        const phrased = approximate ? null : layoutByPhrases(lines, lyrics, line => estimateLyricSyllables(line, lyricLanguage));
+        const worded = lines.some(line => line.some(cell => cell.lyrics.some(Boolean)));
+        const phrased = approximate || worded ? null : layoutByPhrases(lines, lyrics, line => estimateLyricSyllables(line, lyricLanguage));
         if (phrased) {
           lines = phrased;
           approximate = true;
