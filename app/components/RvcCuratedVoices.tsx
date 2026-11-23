@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { Play } from 'lucide-react';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { WorkProgress } from './WorkProgress';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
 import { apiUrl } from '../services/apiBase';
@@ -45,7 +48,6 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
 }) {
   const { language } = useI18n();
   const labels = rvcVoiceStrings[language];
-  const [open, setOpen] = useState(false);
   const [playingSample, setPlayingSample] = useState<string>();
   const [sampleError, setSampleError] = useState(false);
   const [catalog, setCatalog] = useState<CatalogVoice[] | null>(null);
@@ -67,13 +69,12 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
   }
 
   useEffect(() => {
-    if (!open) return;
     const controller = new AbortController();
     void fetch(URL, { signal: controller.signal }).then(responseJson<CatalogVoice[]>)
       .then(items => { if (!controller.signal.aborted) setCatalog(items); })
       .catch((failure: Error) => { if (!controller.signal.aborted) setError(failure.message); });
     return () => controller.abort();
-  }, [open, request]);
+  }, [request]);
 
   useEffect(() => {
     if (!installing) return;
@@ -148,137 +149,97 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
     sample_rate_hz: labels.sampleRate,
   };
 
+  const styles = [...new Set((catalog ?? []).flatMap(voice => voice.metadata?.vocal_style ? [voice.metadata.vocal_style] : []))]
+    .sort((a, b) => a.localeCompare(b, language));
+  const samples = (catalog ?? []).some(voice => voice.sample_audio_url);
   return (
-    <details className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-white/10"
-      onToggle={event => {
-        setOpen(event.currentTarget.open);
-        if (!event.currentTarget.open) setPlayingSample(undefined);
-      }}>
-      <summary className="cursor-pointer text-sm font-semibold">{labels.curated}</summary>
-      {open && (
-        <div className="mt-2">
-          <button type="button" className="mb-2 text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
-            disabled={refreshing || Boolean(installing)} onClick={() => void refresh()}>
-            {refreshing ? labels.refreshing : labels.refresh}
-          </button>
-          {refreshed && <p role="status">{labels.refreshed}</p>}
-          {!catalog && !error && <p role="status">{labels.loading}</p>}
-          {catalog?.length === 0 && <p>{labels.empty}</p>}
-          {error && <p role="alert" className="break-words text-rose-600 dark:text-rose-300">{error}</p>}
-          {activeStage && (
-            <div className="mb-2 space-y-1">
-              <p role="status">{activeStage}</p>
-              {progress && progress.total_bytes > 0 && (
-                <progress aria-label={activeStage} className="w-full accent-pink-500"
-                  value={progress.downloaded_bytes} max={progress.total_bytes} />
-              )}
-            </div>
-          )}
-          {!installing && installedName && <p role="status">{labels.installDone.replace('{voice}', installedName)}</p>}
-          {!catalog && error && (
-            <button type="button" className="text-pink-600 underline dark:text-pink-300"
-              onClick={() => { setError(undefined); setRequest(value => value + 1); }}>{labels.retry}</button>
-          )}
-          {catalog && catalog.length > 0 && (
-            <>
-              <div className="mb-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="block space-y-1 sm:col-span-2 lg:col-span-4">
-                  <span>{labels.search}</span>
-                  <input type="search" value={search} onChange={event => { setSearch(event.target.value); setVisibleCount(PAGE_SIZE); }}
-                    className="w-full rounded border border-zinc-200 px-2 py-1 dark:border-white/10" />
-                </label>
-                {metadataFields.map(field => {
-                  const options = [...new Set(catalog.flatMap(voice => {
-                    const value = voice.metadata?.[field];
-                    return value == null || value === '' ? [] : [String(value)];
-                  }))].sort((a, b) => a.localeCompare(b, language, { numeric: true }));
-                  return (
-                    <label key={field} className="block space-y-1">
-                      <span>{filterLabels[field]}</span>
-                      <select value={filters[field] ?? ''} disabled={options.length === 0}
-                        className="w-full rounded border border-zinc-200 px-2 py-1 dark:border-white/10"
-                        onChange={event => setFilter(field, event.target.value)}>
-                        <option value="">{labels.all}</option>
-                        {options.map(value => <option key={value} value={value}>{field === 'sample_rate_hz' ? `${value} Hz` : value}</option>)}
-                      </select>
-                    </label>
-                  );
-                })}
-                <label className="block space-y-1">
-                  <span>{labels.retrieval}</span>
-                  <select value={filters.index ?? ''} className="w-full rounded border border-zinc-200 px-2 py-1 dark:border-white/10"
-                    onChange={event => setFilter('index', event.target.value)}>
-                    <option value="">{labels.all}</option>
-                    <option value="present">{labels.withIndex}</option>
-                    <option value="absent">{labels.withoutIndex}</option>
-                  </select>
-                </label>
-              </div>
-              <label className="mb-2 flex items-center gap-1">
-                <input type="checkbox" checked={!!filters.sample}
-                  onChange={event => {
-                    setFilters(current => ({ ...current, sample: event.target.checked ? 'present' : undefined }));
-                    setVisibleCount(PAGE_SIZE);
-                  }} />
+    <div className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{labels.curated}</h3>
+        <SecondaryButton disabled={refreshing || Boolean(installing)} onClick={() => void refresh()}>
+          {refreshing ? labels.refreshing : labels.refresh}
+        </SecondaryButton>
+      </div>
+      {refreshed && <p role="status" className="mt-1">{labels.refreshed}</p>}
+      {!catalog && !error && <p role="status" className="mt-2">{labels.loading}</p>}
+      {catalog?.length === 0 && <p className="mt-2">{labels.empty}</p>}
+      {error && <p role="alert" className="mt-2 break-words text-rose-600 dark:text-rose-300">{error}</p>}
+      {!installing && installedName && <p role="status" className="mt-2">{labels.installDone.replace('{voice}', installedName)}</p>}
+      {!catalog && error && (
+        <SecondaryButton className="mt-2" onClick={() => { setError(undefined); setRequest(value => value + 1); }}>{labels.retry}</SecondaryButton>
+      )}
+      {catalog && catalog.length > 0 && (
+        <>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <label className="block min-w-48 flex-1 space-y-1">
+              <span>{labels.search}</span>
+              <input type="search" value={search} onChange={event => { setSearch(event.target.value); setVisibleCount(PAGE_SIZE); }}
+                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-black/30" />
+            </label>
+            {styles.length > 1 && (
+              <label className="block space-y-1">
+                <span>{labels.vocalStyle}</span>
+                <select value={filters.vocal_style ?? ''} onChange={event => setFilter('vocal_style', event.target.value)}
+                  className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-black/30">
+                  <option value="">{labels.all}</option>
+                  {styles.map(value => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+            )}
+            {samples && (
+              <label className="flex items-center gap-1.5 pb-2">
+                <input type="checkbox" checked={!!filters.sample} onChange={event => {
+                  setFilters(current => ({ ...current, sample: event.target.checked ? 'present' : undefined }));
+                  setVisibleCount(PAGE_SIZE);
+                }} />
                 {labels.withSample}
               </label>
-              {filterActive && (
-                <button type="button" className="mb-2 text-pink-600 underline dark:text-pink-300"
-                  onClick={() => { setSearch(''); setFilters({}); setVisibleCount(PAGE_SIZE); }}>{labels.clear}</button>
-              )}
-              <p role="status" className="mb-1 text-zinc-600 dark:text-zinc-300">
-                {matches.length === 0 ? labels.noMatch : labels.resultCount
-                  .replace('{visible}', visible.length.toLocaleString(language))
-                  .replace('{total}', matches.length.toLocaleString(language))}
-              </p>
-              <ul className="max-h-80 divide-y divide-zinc-200 overflow-auto dark:divide-white/10">
-              {visible.map(voice => {
-                const installedId = voice.installed_id && installedIds.has(voice.installed_id) ? voice.installed_id : null;
-                const size = (voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0))) / 1_000_000;
-                return (
-                  <li key={voice.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold">{voice.name}</p>
-                      <p className="mt-1 text-zinc-600 dark:text-zinc-300">
-                        <a href={voice.source_url} target="_blank" rel="noreferrer" className="underline">{voice.source_repo}</a>
-                        {' · '}{voice.license ?? labels.licenseUnknown}{' · '}
-                        {sizeFormat.format(size)}
+            )}
+          </div>
+          <p role="status" className="mt-2 text-zinc-500 dark:text-zinc-400">
+            {matches.length === 0 ? labels.noMatch : labels.resultCount
+              .replace('{visible}', visible.length.toLocaleString(language))
+              .replace('{total}', matches.length.toLocaleString(language))}
+            {filterActive && <button type="button" className="ml-2 font-medium hover:text-pink-600" onClick={() => { setSearch(''); setFilters({}); setVisibleCount(PAGE_SIZE); }}>{labels.clear}</button>}
+          </p>
+          <ul className="mt-1 max-h-[28rem] divide-y divide-zinc-200 overflow-auto dark:divide-white/10">
+            {visible.map(voice => {
+              const installedId = voice.installed_id && installedIds.has(voice.installed_id) ? voice.installed_id : null;
+              const size = (voice.download_bytes ?? ((voice.weights?.size ?? 0) + (voice.index?.size ?? 0))) / 1_000_000;
+              const percent = installing === voice.id && progress && progress.total_bytes > 0
+                ? Math.min(100, Math.floor(100 * progress.downloaded_bytes / progress.total_bytes)) : null;
+              return (
+                <li key={voice.id} className="py-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-white">{voice.name}</p>
+                      <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
+                        {voice.metadata?.vocal_style ? `${voice.metadata.vocal_style} · ` : ''}{voice.license ?? labels.licenseUnknown}
+                        {' · '}{sizeFormat.format(size)}{' · '}
+                        <a href={voice.source_url} target="_blank" rel="noreferrer" className="hover:text-pink-600">{voice.source_repo}</a>
                       </p>
                     </div>
-                    <div className="min-w-0">
-                      {voice.sample_audio_url ? (
-                        playingSample === voice.id && !sampleError ? (
-                          <SourceDemo key={voice.id} url={apiUrl(voice.sample_audio_url)} name={voice.name}
-                            onError={() => setSampleError(true)} />
-                        ) : (
-                          <>
-                            <button type="button" className="text-pink-600 underline dark:text-pink-300"
-                              aria-label={`${labels.playSample} ${voice.name}`}
-                              onClick={() => { setSampleError(false); setPlayingSample(voice.id); }}>{labels.playSample}</button>
-                            {playingSample === voice.id && sampleError && <p role="alert">{labels.sampleError}</p>}
-                          </>
-                        )
-                      ) : <span className="text-zinc-600 dark:text-zinc-300">{labels.sampleUnavailable}</span>}
-                    </div>
-                    <button type="button" disabled={disabled || refreshing || Boolean(installing)}
-                      aria-label={`${installedId ? labels.selectInstalled : labels.install} ${voice.name}`}
-                      onClick={() => installedId ? onChoose(installedId) : void install(voice.id)}
-                      className="rounded-lg border border-zinc-200 px-3 py-2 enabled:hover:border-pink-500 disabled:opacity-50 dark:border-white/10">
-                      {installedId ? labels.selectInstalled : installing === voice.id ? labels.installing : labels.install}
-                    </button>
-                  </li>
-                );
-              })}
-              </ul>
-              {visible.length < matches.length && (
-                <button type="button" className="mt-2 text-pink-600 underline dark:text-pink-300"
-                  onClick={() => setVisibleCount(count => count + PAGE_SIZE)}>{labels.showMore}</button>
-              )}
-            </>
+                    {voice.sample_audio_url && (playingSample === voice.id && !sampleError
+                      ? <SourceDemo key={voice.id} url={apiUrl(voice.sample_audio_url)} name={voice.name} onError={() => setSampleError(true)} />
+                      : <SecondaryButton aria-label={`${labels.playSample} ${voice.name}`}
+                          onClick={() => { setSampleError(false); setPlayingSample(voice.id); }}><Play size={12} />{labels.playSample}</SecondaryButton>)}
+                    {installedId
+                      ? <SecondaryButton disabled={disabled} aria-label={`${labels.selectInstalled} ${voice.name}`} onClick={() => onChoose(installedId)}>{labels.selectInstalled}</SecondaryButton>
+                      : installing !== voice.id && <PrimaryButton className="px-3 py-1.5 text-xs" disabled={disabled || refreshing || Boolean(installing)}
+                          aria-label={`${labels.install} ${voice.name}`} onClick={() => void install(voice.id)}>{labels.install}</PrimaryButton>}
+                  </div>
+                  {playingSample === voice.id && sampleError && <p role="alert" className="mt-1">{labels.sampleError}</p>}
+                  {installing === voice.id && <WorkProgress label={activeStage ?? labels.installing} percent={percent} />}
+                </li>
+              );
+            })}
+          </ul>
+          {visible.length < matches.length && (
+            <SecondaryButton className="mt-2" onClick={() => setVisibleCount(count => count + PAGE_SIZE)}>{labels.showMore}</SecondaryButton>
           )}
-        </div>
+        </>
       )}
-    </details>
+    </div>
   );
 }
 
