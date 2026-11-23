@@ -137,7 +137,7 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
         available.length > 0 && (
           <PickerPill look="add" label={t('adaptersAdd')} showLabel={false} status={<Plus size={13} aria-hidden />} value={t('adaptersAdd')}>
             {close => <>
-              {available.map(adapter => <PickerOption key={adapter.id} value={adapter.id} selected={false} disabled={adapter.training_base_matches === false}
+              {available.map(adapter => <PickerOption action key={adapter.id} value={adapter.id} selected={false} disabled={adapter.training_base_matches === false}
                 name={localized(adapter.name, language)}
                 hint={adapter.origin.training_base ? `${t('trainingBase')} · ${adapter.origin.training_base.id}` : undefined}
                 side={<span className="flex items-center gap-1.5">

@@ -285,7 +285,7 @@ it('snapshots the last voice only when an automatic RVC take is enabled', async 
 
   click(buttonNamed('RVC take')!);
   click(buttonNamed('Add a voice')!);
-  click([...document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(item => item.textContent?.includes('Warm singer'))!);
+  click([...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(item => item.textContent?.includes('Warm singer'))!);
   expect(host.textContent).toContain('Warm singer');
   const pitch = host.querySelector<HTMLInputElement>('input[type="range"][aria-label="Pitch, semitones"]')!;
   act(() => {

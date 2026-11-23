@@ -3424,7 +3424,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               </div>
               : rvcVoices && <PickerPill look="add" label={voicesText.addVoice} showLabel={false} status={<Plus size={13} aria-hidden />} value={voicesText.addVoice}>
                 {close => <>
-                  {rvcVoices.map(voice => <PickerOption key={voice.id} value={voice.id} selected={false} name={voiceName(voice)}
+                  {rvcVoices.map(voice => <PickerOption action key={voice.id} value={voice.id} selected={false} name={voiceName(voice)}
                     hint={`${voice.model_name} · ${voice.index_name ? voicesText.withIndex : voicesText.withoutIndex}`}
                     onPick={() => { close(); chooseLastRvcVoice(voice.id); setRvcAfter(true); }} />)}
                   <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
