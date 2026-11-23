@@ -84,6 +84,9 @@ pub(crate) struct Catalogue {
     pub published: String,
     pub files: BTreeMap<String, FileEntry>,
     pub sets: BTreeMap<String, Vec<ModelSet>>,
+    /// The native engine builds by platform, checked by `native_music_runtime` when they are read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engines: Option<serde_json::Value>,
     /// The RVC voice catalogue, checked by `rvc_catalog` when it is read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voices: Option<serde_json::Value>,
@@ -175,6 +178,8 @@ fn parse(json: &[u8]) -> Result<Catalogue> {
         sets: BTreeMap<String, Vec<serde_json::Value>>,
         #[serde(default)]
         voices: Option<serde_json::Value>,
+        #[serde(default)]
+        engines: Option<serde_json::Value>,
     }
     let raw: Raw = serde_json::from_slice(json).context("read the component catalogue")?;
     ensure!(raw.product == PRODUCT, "the component catalogue is for {}, not {PRODUCT}", raw.product);
@@ -221,7 +226,7 @@ fn parse(json: &[u8]) -> Result<Catalogue> {
         }
         sets.insert(engine, usable);
     }
-    Ok(Catalogue { product: raw.product, sequence: raw.sequence, published: raw.published, files, sets, voices: raw.voices, skipped })
+    Ok(Catalogue { product: raw.product, sequence: raw.sequence, published: raw.published, files, sets, engines: raw.engines, voices: raw.voices, skipped })
 }
 
 /// The signed copy built into this binary.
@@ -380,6 +385,12 @@ pub(crate) fn voices() -> Option<String> {
 /// The RVC voice catalogue built into this binary, as JSON.
 pub(crate) fn built_in_voices() -> String {
     built_in().catalogue.voices.as_ref().map(serde_json::Value::to_string).unwrap_or_default()
+}
+
+
+/// The native engine builds of the catalogue in use, as JSON, with its sequence.
+pub(crate) fn engines() -> Option<(u64, String)> {
+    both().into_iter().find_map(|loaded| loaded.catalogue.engines.as_ref().map(|engines| (loaded.catalogue.sequence, engines.to_string())))
 }
 
 pub(crate) fn file(id: &str) -> Option<FileEntry> {

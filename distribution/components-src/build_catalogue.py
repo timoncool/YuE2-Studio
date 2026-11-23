@@ -40,8 +40,22 @@ def main():
     files = {}
     sets = {}
     voices = None
+    engines = None
     for table in sorted(HERE.glob("*.json")):
         data = json.loads(table.read_text(encoding="utf-8"))
+        if "engines" in data:
+            if engines is not None:
+                fail(f"{table.name}: the engine builds are defined twice")
+            engines = data["engines"]
+            for build in engines:
+                where = f"{table.name}: engine {build.get('engine')} {build.get('platform')} {build.get('revision', '')[:12]}"
+                if not build.get("url", "").startswith("https://") or MOVING.search(build["url"]):
+                    fail(f"{where}: the archive address is not a pinned HTTPS release")
+                hashes = [build.get("sha256", ""), *build.get("required", {}).values()]
+                if not all(re.fullmatch(r"[0-9a-f]{64}", sha) for sha in hashes):
+                    fail(f"{where}: an archive or file has no SHA-256")
+                if build.get("executable") not in build.get("required", {}):
+                    fail(f"{where}: the executable is not among its required files")
         if "voices" in data:
             if voices is not None:
                 fail(f"{table.name}: the RVC voices are defined twice")
@@ -99,6 +113,8 @@ def main():
     previous = json.loads(published.read_text(encoding="utf-8")) if published.exists() else {"sequence": 0}
     catalogue = {"product": PRODUCT, "sequence": previous["sequence"], "published": previous.get("published", ""),
                  "files": files, "sets": sets}
+    if engines is not None:
+        catalogue["engines"] = engines
     if voices is not None:
         catalogue["voices"] = voices
     target.parent.mkdir(parents=True, exist_ok=True)

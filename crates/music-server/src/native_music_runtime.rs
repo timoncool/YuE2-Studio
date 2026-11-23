@@ -17,7 +17,6 @@ use crate::{
     install_record,
 };
 
-const DATA: &str = include_str!("native_music_runtime_assets.json");
 
 #[derive(Deserialize)]
 struct Pin<'a> {
@@ -42,33 +41,50 @@ struct Runtime {
     asset: Asset,
 }
 
+/// The engine builds of the component catalogue in use (`distribution/components-src/engines.json`), read once per
+/// catalogue.
 fn runtimes() -> &'static [Runtime] {
-    static RUNTIMES: OnceLock<Vec<Runtime>> = OnceLock::new();
-    RUNTIMES.get_or_init(|| {
-        let pins: Vec<Pin<'_>> =
-            serde_json::from_str(DATA).expect("valid native music runtime pins");
-        pins.into_iter()
-            .map(|pin| Runtime {
-                asset: Asset {
-                    id: pin.engine,
-                    label: match pin.engine {
-                        "acestep-cpp" => "ACE-Step runtime",
-                        _ => "MiniMax runtime",
-                    },
-                    kind: AssetKind::Runtime,
-                    url: pin.url,
-                    relative_path: pin.archive,
-                    bytes: pin.bytes,
-                    unzip_into: Some(pin.directory),
-                    marker: pin.executable,
-                    pick: &[],
-                    vram_gb: None,
-                    note: "Native music engine",
+    static MADE: std::sync::Mutex<Option<(u64, &'static [Runtime])>> = std::sync::Mutex::new(None);
+    let Some((sequence, json)) = crate::components::engines() else { return &[] };
+    let mut made = MADE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((seen, runtimes)) = *made {
+        if seen == sequence {
+            return runtimes;
+        }
+    }
+    let json: &'static str = Box::leak(json.into_boxed_str());
+    let pins: Vec<Pin<'static>> = match serde_json::from_str(json) {
+        Ok(pins) => pins,
+        Err(error) => {
+            crate::studio_log!("[ERROR] the engine builds of component catalogue {sequence} were not read: {error}");
+            Vec::new()
+        }
+    };
+    let runtimes: Vec<Runtime> = pins
+        .into_iter()
+        .map(|pin| Runtime {
+            asset: Asset {
+                id: pin.engine,
+                label: match pin.engine {
+                    "acestep-cpp" => "ACE-Step runtime",
+                    _ => "MiniMax runtime",
                 },
-                pin,
-            })
-            .collect()
-    })
+                kind: AssetKind::Runtime,
+                url: pin.url,
+                relative_path: pin.archive,
+                bytes: pin.bytes,
+                unzip_into: Some(pin.directory),
+                marker: pin.executable,
+                pick: &[],
+                vram_gb: None,
+                note: "Native music engine",
+            },
+            pin,
+        })
+        .collect();
+    let runtimes: &'static [Runtime] = Box::leak(runtimes.into_boxed_slice());
+    *made = Some((sequence, runtimes));
+    runtimes
 }
 
 fn host_runtimes(engine: &str) -> impl Iterator<Item = &'static Runtime> + '_ {
