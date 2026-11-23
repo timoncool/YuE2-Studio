@@ -6,6 +6,7 @@ export const musicSourceStrings = {
     catalogError: 'Could not load OpenRouter music models.', refresh: 'Refresh models',
     keyMissing: 'Add an OpenRouter API key to generate music.', openCloudSettings: 'Open cloud settings',
     openResources: 'Install local models',
+    groupLocal: 'On your graphics card', groupCloud: 'In the cloud · OpenRouter', findModel: 'Find a model', noModels: 'No model by that name',
   },
   ru: {
     updateModel: 'Обновить', transferStages: { verifying: 'Проверка…', downloading: 'Скачивание…', activating: 'Активация…' },
@@ -14,6 +15,7 @@ export const musicSourceStrings = {
     catalogError: 'Не удалось загрузить музыкальные модели OpenRouter.', refresh: 'Обновить список моделей',
     keyMissing: 'Добавьте API-ключ OpenRouter для генерации музыки.', openCloudSettings: 'Открыть настройки облака',
     openResources: 'Установить локальные модели',
+    groupLocal: 'На вашей видеокарте', groupCloud: 'В облаке · OpenRouter', findModel: 'Найти модель', noModels: 'Модели с таким названием нет',
   },
   zh: {
     updateModel: '更新', transferStages: { verifying: '正在验证…', downloading: '正在下载…', activating: '正在启用…' },
@@ -22,6 +24,7 @@ export const musicSourceStrings = {
     catalogError: '无法加载 OpenRouter 音乐模型。', refresh: '刷新模型列表',
     keyMissing: '请添加 OpenRouter API 密钥以生成音乐。', openCloudSettings: '打开云端设置',
     openResources: '安装本地模型',
+    groupLocal: '在你的显卡上', groupCloud: '云端 · OpenRouter', findModel: '查找模型', noModels: '没有这个名称的模型',
   },
   ja: {
     updateModel: '更新', transferStages: { verifying: '検証中…', downloading: 'ダウンロード中…', activating: '有効化中…' },
@@ -30,6 +33,7 @@ export const musicSourceStrings = {
     catalogError: 'OpenRouter の音楽モデルを読み込めませんでした。', refresh: 'モデル一覧を更新',
     keyMissing: '音楽を生成するには OpenRouter の API キーを追加してください。', openCloudSettings: 'クラウド設定を開く',
     openResources: 'ローカルモデルをインストール',
+    groupLocal: 'お使いのグラフィックカードで', groupCloud: 'クラウド · OpenRouter', findModel: 'モデルを探す', noModels: 'その名前のモデルはありません',
   },
   ko: {
     updateModel: '업데이트', transferStages: { verifying: '검증 중…', downloading: '다운로드 중…', activating: '활성화 중…' },
@@ -38,6 +42,7 @@ export const musicSourceStrings = {
     catalogError: 'OpenRouter 음악 모델을 불러오지 못했습니다.', refresh: '모델 목록 새로고침',
     keyMissing: '음악을 생성하려면 OpenRouter API 키를 추가하세요.', openCloudSettings: '클라우드 설정 열기',
     openResources: '로컬 모델 설치',
+    groupLocal: '내 그래픽카드에서', groupCloud: '클라우드 · OpenRouter', findModel: '모델 찾기', noModels: '그런 이름의 모델이 없습니다',
   },
   pt: {
     updateModel: 'Atualizar', transferStages: { verifying: 'Verificando…', downloading: 'Baixando…', activating: 'Ativando…' },
@@ -46,6 +51,7 @@ export const musicSourceStrings = {
     catalogError: 'Não foi possível carregar os modelos musicais do OpenRouter.', refresh: 'Atualizar modelos',
     keyMissing: 'Adicione uma chave de API do OpenRouter para gerar música.', openCloudSettings: 'Abrir configurações da nuvem',
     openResources: 'Instalar modelos locais',
+    groupLocal: 'Na sua placa de vídeo', groupCloud: 'Na nuvem · OpenRouter', findModel: 'Encontrar um modelo', noModels: 'Nenhum modelo com esse nome',
   },
 };
 

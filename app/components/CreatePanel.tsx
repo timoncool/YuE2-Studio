@@ -74,6 +74,11 @@ import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
 import { useMusicPair, type PairSource } from '../services/musicPair';
 import { musicPairStrings } from '../i18n/musicPair';
+import { engineErrorText } from '../i18n/engineErrors';
+import { ErrorNote } from './kit/ErrorNote';
+import Combobox from './kit/Combobox';
+import { SecondaryButton } from './kit/Buttons';
+import { WorkProgress } from './WorkProgress';
 import { audioCppMiniMax, isMusicEngine, isProfileMusicEngine, miniMaxOutputFormat, profileMusicEngines, nativeGenerationSettings, useNativeMusicProfiles } from '../services/nativeMusicProfiles';
 import { generationPauseStrings } from '../i18n/generationPause';
 import { afterGenerationPause, formatGenerationCountdown, generationPauseMs, type GenerationPauseMode } from '../services/generationPause';
@@ -131,6 +136,7 @@ type SetupStatus = SetupChoice & {
   engine_paused?: boolean;
   selection_matches_engine?: boolean | null;
   engine_error?: string | null;
+  engine_error_code?: string | null;
   effective_max_batch?: number;
   hardware?: { gpuName?: string; totalVramGb?: number; recommended?: string };
 };
@@ -985,7 +991,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const unavailableTitle = enginePaused ? engineControl.paused : !setup ? t('modelLoading') : !setup.ready ? t('profileRequired')
     : setup.engine_error ? t('localGenerationUnavailable') : t('engineStartingTitle');
   const unavailableHint = enginePaused ? engineControl.paused : !setup ? t('modelLoading') : !setup.ready ? t('downloadProfileFirst')
-    : setup.engine_error || (setup.selection_matches_engine === false ? t('switchProfileHint') : t('engineStartingHint'));
+    : (setup.engine_error ? engineErrorText(setup.engine_error_code, language) ?? setup.engine_error : null) || (setup.selection_matches_engine === false ? t('switchProfileHint') : t('engineStartingHint'));
   const changeEnginePause = async () => {
     setEngineAction(true);
     setError(null);
@@ -2128,23 +2134,24 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
 
           {onMusicEngineChange && (
             <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs font-medium">
+              <div className="flex items-center gap-2 text-xs font-medium">
                 <span className="shrink-0">{musicStrings.modelFamily}</span>
-                <select className={CONTROL} value={modelChoice} onChange={event => chooseModelFamily(event.target.value)}>
-                  {linkedMusicFamilies.map(family => <option key={family.id} value={family.id}>{family.name}</option>)}
-                  {native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
-                    pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
-                    <option key={profile.id} value={`hotstep:${profile.id}`}>{profile.label.split(' · ')[0]}</option>)}
-                  {native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
-                    pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id))).map(profile =>
-                    <option key={profile.id} value={`audio:${profile.id}`}>{profile.label.split(' · ')[0]}</option>)}
-                  {nativeEngine === 'hotstep' && modelChoice === 'hotstep' && <option value="hotstep">HOT-Step</option>}
-                  {audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice) &&
-                    <option value={modelChoice}>audio.cpp</option>}
-                  <option value="openrouter">OpenRouter</option>
-                  {musicModels.map(model => <option key={model.id} value={`cloud:${model.id}`}>{model.name || model.id} · OpenRouter</option>)}
-                </select>
-              </label>
+                <Combobox className="min-w-0 flex-1" inputClassName={CONTROL} label={musicStrings.modelFamily} value={modelChoice}
+                  onChange={chooseModelFamily} placeholder={musicStrings.findModel} noResults={musicStrings.noModels} options={[
+                    ...linkedMusicFamilies.map(family => ({ value: family.id, label: family.name, group: musicStrings.groupLocal })),
+                    ...native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
+                      pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id)))
+                      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
+                    ...native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
+                      pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id)))
+                      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
+                    ...(nativeEngine === 'hotstep' && modelChoice === 'hotstep' ? [{ value: 'hotstep', label: 'HOT-Step', group: musicStrings.groupLocal }] : []),
+                    ...(audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice)
+                      ? [{ value: modelChoice, label: 'audio.cpp', group: musicStrings.groupLocal }] : []),
+                    { value: 'openrouter', label: 'OpenRouter', group: musicStrings.groupCloud },
+                    ...musicModels.map(model => ({ value: `cloud:${model.id}`, label: model.name || model.id, group: musicStrings.groupCloud })),
+                  ]} />
+              </div>
               {linkedFamily && linkedFamily.pairs.length > 1 && (
                 <details className="text-xs">
                   <summary className="cursor-pointer font-medium text-zinc-500 dark:text-zinc-400">{t('advanced')}</summary>
@@ -2165,38 +2172,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
           )}
-          {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.sending || pair.error || (pair.status && pair.status.stage !== 'idle'
-            && !(pair.status.stage === 'needs_install' && (native.profile?.installable || yue)))) && (
-            <div className="space-y-1 text-xs">
-              <p role="status">
-                {pair.sending ? pairText.checking_files : pair.status?.load_on_create && pair.status.stage === 'ready'
-                  ? pairText.loadOnCreate : pair.status ? pairText[pair.status.stage] : ''}
-                {pair.busy && pair.status ? ` · ${Math.floor(pair.status.elapsed_ms / 1000)} s` : ''}
-                {pair.status?.missing_bytes != null
-                  ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(pair.status.missing_bytes / 2 ** 20)} MiB` : ''}
-              </p>
-              {(['active', 'requested'] as const).map(field => {
-                const source = field === 'requested' && pair.sending ? pairSource : pair.status?.[field];
-                const same = field === 'requested' && !pair.sending && JSON.stringify(source) === JSON.stringify(pair.status?.active);
-                const model = source && 'model' in source ? source.model : null;
-                const set = model ? native.profiles.find(profile => profile.id === model) : undefined;
-                const named = set?.labels?.[language] ?? set?.label?.split(' · ')[0] ?? model;
-                return source && !same && <p key={field}>{pairText[field]} · {
-                  [source.kind === 'local' ? 'YuE2' : 'engine' in source ? profileMusicEngines[source.engine as keyof typeof profileMusicEngines] ?? source.engine
-                    : source.kind === 'openrouter' ? 'OpenRouter' : 'audio.cpp',
-                    named].filter(Boolean).join(' · ')
-                }</p>;
-              })}
-              {(pair.error || pair.status?.error) && <p role="alert">{pair.error ?? pair.status?.error}</p>}
+          {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.error || (pair.matching && pair.status
+            && (pair.busy || pair.status.stage === 'error' || (pair.status.stage === 'needs_install' && !native.profile?.installable && !yue)))) && (
+            <div className="space-y-2 text-xs">
+              {pair.busy && pair.status && <WorkProgress label={pairText[pair.status.stage]} percent={null} elapsedMs={pair.status.elapsed_ms} />}
+              {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && (
+                <ErrorNote text={engineErrorText(pair.status?.error_code, language) ?? pairText.error}
+                  detail={pair.error ?? pair.status?.error}
+                  hint={<span className="inline-flex flex-wrap gap-1.5">
+                    {pairSource && <SecondaryButton disabled={pair.sending} onClick={pair.select}>{pairText.retry}</SecondaryButton>}
+                    {pair.status?.active && <SecondaryButton disabled={pair.sending} onClick={returnToActivePair}>{pairText.back}</SecondaryButton>}
+                  </span>} />
+              )}
               {waitingJobId && onCancelJob && (
-                <button type="button" className="mr-2 inline-flex min-h-6 items-center text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
-                  disabled={cancellingPairJob || pair.sending} onClick={() => void cancelPairJob(waitingJobId)}>{pairText.cancelSong}</button>
-              )}
-              {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && pairSource && (
-                <button type="button" className="mr-2 inline-flex min-h-6 items-center text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={pair.select}>{pairText.retry}</button>
-              )}
-              {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && pair.status?.active && (
-                <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={returnToActivePair}>{pairText.back}</button>
+                <SecondaryButton disabled={cancellingPairJob || pair.sending} onClick={() => void cancelPairJob(waitingJobId)}>{pairText.cancelSong}</SecondaryButton>
               )}
             </div>
           )}

@@ -6670,18 +6670,29 @@ fn engine_failure_code(error: &str) -> String {
         let fault = rest.split_once("; ").map(|(_, fault)| format!("; {fault}")).unwrap_or_default();
         return format!("exited during startup {exit}{fault}");
     }
-    let kinds = [
-        ("did not pass GET /health", "no answer before the startup timeout"),
-        ("CUDA backend", "CUDA backend missing"),
-        ("runtime libraries could not be installed", "runtime libraries not installed"),
-        ("has no device", "device not present"),
-        ("runs neither CUDA build", "CUDA not supported by the card or driver"),
-        ("still answering on the engine port", "engine port busy"),
-        ("runtime was not found", "engine runtime not found"),
-        ("no model set is selected", "no model set selected"),
-        ("graphics card chosen in Settings", "chosen card not present"),
-    ];
-    kinds.iter().find(|(marker, _)| error.contains(marker)).map(|(_, kind)| kind.to_string()).unwrap_or_else(|| "other".into())
+    ENGINE_FAILURES.iter().find(|(marker, ..)| error.contains(marker)).map(|(_, kind, _)| kind.to_string()).unwrap_or_else(|| "other".into())
+}
+
+/// The marker in an engine's startup error, the hub's name for that kind of failure and the code the window
+/// translates into words and an action.
+const ENGINE_FAILURES: [(&str, &str, &str); 9] = [
+    ("did not pass GET /health", "no answer before the startup timeout", "engine_no_answer"),
+    ("CUDA backend", "CUDA backend missing", "cuda_backend_missing"),
+    ("runtime libraries could not be installed", "runtime libraries not installed", "runtime_libraries_failed"),
+    ("has no device", "device not present", "device_missing"),
+    ("runs neither CUDA build", "CUDA not supported by the card or driver", "cuda_unsupported"),
+    ("still answering on the engine port", "engine port busy", "engine_port_busy"),
+    ("runtime was not found", "engine runtime not found", "engine_runtime_missing"),
+    ("no model set is selected", "no model set selected", "model_set_not_selected"),
+    ("graphics card chosen in Settings", "chosen card not present", "chosen_card_missing"),
+];
+
+/// The window's code for an engine that did not start: one of `ENGINE_ERROR_CODES`.
+pub(crate) fn engine_error_code(error: &str) -> &'static str {
+    if error.contains("exited during startup with status") {
+        return "engine_exited";
+    }
+    ENGINE_FAILURES.iter().find(|(marker, ..)| error.contains(marker)).map_or("engine_failed", |(.., code)| code)
 }
 
 async fn start_engine_again(state: &AppState) -> Result<(), String> {
@@ -7985,7 +7996,9 @@ async fn compose_setup_status(state: &AppState, manager_status: model_manager::M
         };
         fields.insert("engine_ready".into(), Value::Bool(engine_ready));
         fields.insert("selection_matches_engine".into(), serde_json::json!(matches_selection));
-        fields.insert("engine_error".into(), serde_json::to_value(state.engine_start_error.read().await.clone()).unwrap_or(Value::Null));
+        let engine_error = state.engine_start_error.read().await.clone();
+        fields.insert("engine_error_code".into(), serde_json::json!(engine_error.as_deref().map(engine_error_code)));
+        fields.insert("engine_error".into(), serde_json::to_value(engine_error).unwrap_or(Value::Null));
         // a card is there, yet the engine ended up on the processor: Auto went down its devices one by one
         let fell = *state.active_device.read().await == Some(music_engine::yue_server::ComputeBackend::Cpu)
             && state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Auto

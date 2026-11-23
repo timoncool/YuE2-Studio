@@ -48,6 +48,7 @@ pub(super) struct Status {
     waiting_job_id: Option<String>,
     missing_bytes: Option<u64>,
     error: Option<String>,
+    error_code: Option<&'static str>,
     // Ready confirms the pair can accept a request. These engines can defer
     // loading their generation weights until Create.
     load_on_create: bool,
@@ -247,11 +248,12 @@ async fn prepare(state: AppState, revision: u64, source: MusicSource) {
         return;
     }
     let result = match outcome {
-        Ok(Preparation::Missing(bytes, reason)) => {
+        Ok(Preparation::Missing(bytes, code, reason)) => {
             pair.update(revision, |status| {
                 status.stage = Stage::NeedsInstall;
                 status.missing_bytes = bytes;
                 status.error = Some(reason);
+                status.error_code = Some(code);
             });
             return;
         }
@@ -265,15 +267,31 @@ async fn prepare(state: AppState, revision: u64, source: MusicSource) {
             status.load_on_create = load_on_create;
         }
         Err(error) => {
+            let text = format!("{error:#}");
             status.stage = Stage::Error;
-            status.error = Some(format!("{error:#}"));
+            status.error_code = Some(error_code(&text));
+            status.error = Some(text);
         }
     });
     drop(lease);
 }
 
+/// The window's code for a pair that could not be prepared: the OpenRouter choices checked here, else what the
+/// engine's startup failed on.
+fn error_code(text: &str) -> &'static str {
+    if text.contains("Select an OpenRouter music model") {
+        "openrouter_model_missing"
+    } else if text.contains("Configure the OpenRouter API key") {
+        "openrouter_key_missing"
+    } else if text.starts_with("Unknown ") {
+        "unknown_model"
+    } else {
+        crate::engine_error_code(text)
+    }
+}
+
 enum Preparation {
-    Missing(Option<u64>, String),
+    Missing(Option<u64>, &'static str, String),
     Lazy,
     YuE2,
     Ace(ace::Launch),
@@ -281,7 +299,7 @@ enum Preparation {
 }
 
 async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<Preparation> {
-    let missing = |bytes, why: String| Ok(Preparation::Missing(bytes, why));
+    let missing = |bytes, code, why: String| Ok(Preparation::Missing(bytes, code, why));
     let root = update_data_root(state);
     match source {
         MusicSource::Local => {
@@ -290,6 +308,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             if !status.ready {
                 return missing(
                     Some(status.download_pending),
+                    "yue2_model_set_missing",
                     "Install the selected YuE2 model set.".into(),
                 );
             }
@@ -302,6 +321,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
                 if !status.installed {
                     return missing(
                         Some(status.missing_bytes),
+                        "yue2_hip_missing",
                         "Install the YuE2 HIP component in Engine Settings.".into(),
                     );
                 }
@@ -323,6 +343,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
                                 })
                                 .sum(),
                         ),
+                        "yue2_runtime_missing",
                         "Install the missing YuE2 runtime libraries.".into(),
                     );
                 }
@@ -349,6 +370,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             if !install.engine_installed() || !profile.ready {
                 return missing(
                     None,
+                    "ace_files_missing",
                     format!(
                         "Install the ACE-Step engine and the missing profile files: {}",
                         profile.missing.join(", ")
@@ -367,6 +389,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             if !install.engine_installed() || !profile.ready {
                 return missing(
                     None,
+                    "minimax_files_missing",
                     format!(
                         "Install the MiniMax engine and the missing profile files: {}",
                         profile.missing.join(", ")
@@ -384,7 +407,7 @@ async fn check_files(state: &AppState, source: &MusicSource) -> anyhow::Result<P
             return catalogue_result(&catalogue["models"], model);
         }
         MusicSource::Signed { .. } => {
-            return missing(None, crate::SIGNED_PACKAGES_GONE.into());
+            return missing(None, "signed_package_gone", crate::SIGNED_PACKAGES_GONE.into());
         }
         MusicSource::Native { engine, .. } => {
             anyhow::bail!("Unknown native music engine {engine}.")
@@ -407,6 +430,7 @@ fn catalogue_result(catalogue: &Value, model: &str) -> anyhow::Result<Preparatio
     }
     Ok(Preparation::Missing(
         item["missing_bytes"].as_u64(),
+        "model_files_missing",
         "Install the engine and model files for this choice.".into(),
     ))
 }
@@ -489,6 +513,50 @@ async fn start(state: &AppState, revision: u64, preparation: Preparation) -> any
             }
             Ok(true)
         }
-        Preparation::Missing(_, _) => unreachable!("Missing files are handled before startup"),
+        Preparation::Missing(..) => unreachable!("Missing files are handled before startup"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every code the window can be sent: from a pair that could not be prepared or an engine that did not start.
+    const CODES: [&str; 21] = [
+        "engine_no_answer", "cuda_backend_missing", "runtime_libraries_failed", "device_missing", "cuda_unsupported",
+        "engine_port_busy", "engine_runtime_missing", "model_set_not_selected", "chosen_card_missing", "engine_exited",
+        "engine_failed", "yue2_model_set_missing", "yue2_hip_missing", "yue2_runtime_missing", "ace_files_missing",
+        "minimax_files_missing", "model_files_missing", "signed_package_gone", "openrouter_model_missing",
+        "openrouter_key_missing", "unknown_model",
+    ];
+
+    #[test]
+    fn every_code_has_a_translation_in_every_language() {
+        let dictionary = include_str!("../../../app/i18n/engineErrors.ts");
+        let missing: Vec<_> = CODES
+            .iter()
+            .filter_map(|code| {
+                let found = dictionary.matches(&format!("\n  {code}:")).count();
+                (found != 6).then(|| format!("{code}: {found} of 6"))
+            })
+            .collect();
+        assert!(missing.is_empty(), "without a translation: {missing:?}");
+    }
+
+    #[test]
+    fn startup_failures_and_pair_checks_get_codes_the_window_knows() {
+        for (_, _, code) in crate::ENGINE_FAILURES {
+            assert!(CODES.contains(&code), "{code}");
+        }
+        let cases = [
+            ("the local engine runtime was not found: yue-server.exe was not found below D:\\x", "engine_runtime_missing"),
+            ("the local engine runtime was not found: the engine's CUDA backend C:\\x\\ggml-cuda.dll is missing", "cuda_backend_missing"),
+            ("yue-server exited during startup with status exit code: 3", "engine_exited"),
+            ("Select an OpenRouter music model.", "openrouter_model_missing"),
+            ("Configure the OpenRouter API key.", "openrouter_key_missing"),
+            ("Unknown ACE-Step profile", "unknown_model"),
+            ("something nobody foresaw", "engine_failed"),
+        ];
+        for (text, code) in cases {
+            assert_eq!(super::error_code(text), code, "{text}");
+        }
     }
 }

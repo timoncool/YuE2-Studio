@@ -16,6 +16,7 @@ export interface PairStatus {
   waiting_job_id?: string | null;
   missing_bytes?: number | null;
   error?: string | null;
+  error_code?: string | null;
   load_on_create?: boolean;
 }
 

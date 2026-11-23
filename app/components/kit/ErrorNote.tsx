@@ -8,14 +8,14 @@ import { ProblemReportDialog } from '../ProblemReportDialog';
 
 /** An error that stays until it is closed: what failed and why (the studio's own words), what to do (a hint where
  * the cause is known, else the diagnostics and a report), and the whole text to copy into a report. */
-export function ErrorNote({ text, hint, onClose }: { text: string; hint?: ReactNode; onClose?: () => void }) {
+export function ErrorNote({ text, detail, hint, onClose }: { text: string; detail?: string | null; hint?: ReactNode; onClose?: () => void }) {
   const { t, language } = useI18n();
   const words = errorNoteStrings[language as keyof typeof errorNoteStrings] ?? errorNoteStrings.en;
   const facts = useSetupStatus<ReportFacts>().data;
   const [copied, setCopied] = useState(false);
   const [reporting, setReporting] = useState(false);
   const copy = () => {
-    navigator.clipboard.writeText(text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, (e: unknown) => console.error('[ERROR] copy failed:', e));
+    navigator.clipboard.writeText(detail ? `${text}\n\n${detail}` : text).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }, (e: unknown) => console.error('[ERROR] copy failed:', e));
   };
   const btn = 'inline-flex min-h-6 items-center gap-1 px-2 py-0.5 rounded border border-[var(--color-warn)]/40 text-[11px] hover:bg-[var(--color-warn)]/10';
   return (
@@ -25,6 +25,7 @@ export function ErrorNote({ text, hint, onClose }: { text: string; hint?: ReactN
         <p className="min-w-0 flex-1 break-words whitespace-pre-wrap text-[var(--color-text)]">{text}</p>
         {onClose && <button type="button" onClick={onClose} aria-label={words.close} title={words.close} className="-m-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-[var(--color-muted)] hover:text-[var(--color-text)]"><X size={13} /></button>}
       </div>
+      {detail && detail !== text && <p className="mt-1 ml-6 mono text-[10.5px] text-[var(--color-muted)] break-words">{detail}</p>}
       <div className="mt-1.5 ml-6 flex flex-wrap items-center gap-1.5 text-[var(--color-muted)]">
         {hint ? <span className="mr-1">{hint}</span> : <span className="mr-1">{words.whatToDo}</span>}
         <button type="button" onClick={copy} className={btn}>{copied ? <Check size={11} /> : <Copy size={11} />}{copied ? words.copied : words.copy}</button>
