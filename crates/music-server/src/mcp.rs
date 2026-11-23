@@ -1906,6 +1906,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/ace/understand".into(), args.clone()),
             },
             Tool {
+                name: "song_prompt_check",
+                description: "Check a MiniMax Music3 caption and lyrics before song_create: the prompt length counted by the engine's tokenizer against its 5000 token limit (exact false when the engine is not running and the count is an estimate), lyrics lines whose words follow a section tag on the same line and are never sung, and a caption that does not say who sings.",
+                schema: || object(json!({ "caption": { "type": "string" }, "lyrics": { "type": "string" }, "instrumental": { "type": "boolean" } }), &["caption", "lyrics"]),
+                call: |args| post("/v1/music/prompt-check".into(), args.clone()),
+            },
+            Tool {
                 name: "ace_dits_list",
                 description: "Every ACE-Step DiT of the component catalogue (turbo, SFT, base, XL, merges, Regrind, each in its quantisations): file, bytes, whether it is on disk and its download. A song renders with one of them when create_music carries ace.synth_model; the base DiTs are the ones the lego, extract and complete tasks need.",
                 schema: || object(json!({}), &[]),
@@ -4362,6 +4368,7 @@ mod tests {
             "recording_describe_style",
             "ace_plan",
             "ace_understand",
+            "song_prompt_check",
             // A temporary download is staged without changing the library.
             "song_export_zip",
             // the journal itself

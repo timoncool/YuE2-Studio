@@ -10,6 +10,7 @@ import { ptExitMeanings } from './ptExtra';
 type ErrorTexts = Record<string, string>;
 
 const EN: ErrorTexts = {
+  prompt_too_long: 'The caption and lyrics are {tokens} tokens, over the model\'s limit of {limit}: shorten the caption or the lyrics by {over} tokens.',
   training_on_card: 'A LoRA is training on the graphics card; make songs once it finishes or is stopped.',
   lost_vram: 'The graphics card ran out of memory on this song and the engine restarted, so the song was lost. Choose a smaller model set in Settings → Models or a shorter song, and close whatever else uses the card; a card below the smallest set cannot make songs.',
   lost_vram_retried: 'The graphics card ran out of memory on this song, and again when it was made with a {n} KV cache. Choose a smaller model set or a shorter song, and close whatever else uses the card.',
@@ -42,6 +43,7 @@ const EN: ErrorTexts = {
 };
 
 const RU: ErrorTexts = {
+  prompt_too_long: 'Описание и текст — {tokens} токенов, больше предела модели ({limit}): сократите описание или текст на {over} токенов.',
   training_on_card: 'На видеокарте идёт обучение LoRA: песни можно делать, когда оно закончится или будет остановлено.',
   lost_vram: 'На этой песне у видеокарты кончилась память, движок перезапустился, и песня потеряна. Выберите набор моделей поменьше в Настройках → Модели или песню короче и закройте всё, что ещё занимает видеокарту; на карте слабее самого маленького набора песни не делаются.',
   lost_vram_retried: 'Видеокарте не хватило памяти на этой песне и при повторе с KV-кэшем {n}. Выберите набор моделей меньше или песню короче и закройте то, что ещё занимает карту.',
@@ -74,6 +76,7 @@ const RU: ErrorTexts = {
 };
 
 const ZH: ErrorTexts = {
+  prompt_too_long: '描述和歌词共 {tokens} 个 token，超过模型上限 {limit}：请把描述或歌词缩短 {over} 个 token。',
   training_on_card: '显卡正在训练 LoRA，训练结束或停止后再生成歌曲。',
   lost_vram: '生成这首歌时显卡显存耗尽，引擎已重启，这首歌丢失了。请在“设置 → 模型”中选择更小的模型组合或更短的歌曲，并关闭其他占用显卡的程序；显卡低于最小组合时无法生成歌曲。',
   lost_vram_retried: '生成这首歌时显卡显存耗尽，用 {n} 的 KV 缓存重做时又一次耗尽。请选择更小的模型组合或更短的歌曲，并关闭其他占用显卡的程序。',
@@ -106,6 +109,7 @@ const ZH: ErrorTexts = {
 };
 
 const JA: ErrorTexts = {
+  prompt_too_long: '説明と歌詞は {tokens} トークンで、モデルの上限 {limit} を超えています：説明か歌詞を {over} トークン短くしてください。',
   training_on_card: 'グラフィックカードで LoRA の学習中です。終わるか止めてから曲を作ってください。',
   lost_vram: 'この曲でグラフィックカードのメモリが足りなくなり、エンジンが再起動したため曲は失われました。「設定 → モデル」で小さいモデルセットか短い曲を選び、カードを使っている他のものを閉じてください。最小のセットに満たないカードでは曲を作れません。',
   lost_vram_retried: 'この曲でグラフィックカードのメモリが足りなくなり、KV キャッシュ {n} で作り直したときも足りませんでした。小さいモデルセットか短い曲を選び、カードを使っている他のものを閉じてください。',
@@ -138,6 +142,7 @@ const JA: ErrorTexts = {
 };
 
 const KO: ErrorTexts = {
+  prompt_too_long: '설명과 가사가 {tokens} 토큰으로 모델 한도 {limit}을(를) 넘습니다: 설명이나 가사를 {over} 토큰 줄이세요.',
   training_on_card: '그래픽카드에서 LoRA 학습 중입니다. 학습이 끝나거나 멈춘 뒤 곡을 만드세요.',
   lost_vram: '이 곡에서 그래픽카드 메모리가 부족해 엔진이 다시 시작되었고 곡을 잃었습니다. "설정 → 모델"에서 더 작은 모델 세트나 더 짧은 곡을 고르고, 카드를 쓰는 다른 것을 닫으세요. 가장 작은 세트보다 약한 카드로는 곡을 만들 수 없습니다.',
   lost_vram_retried: '이 곡에서 그래픽카드 메모리가 부족했고, KV 캐시 {n}으로 다시 만들 때도 부족했습니다. 더 작은 모델 세트나 더 짧은 곡을 고르고, 카드를 쓰는 다른 것을 닫으세요.',
@@ -170,6 +175,7 @@ const KO: ErrorTexts = {
 };
 
 const PT: ErrorTexts = {
+  prompt_too_long: 'A descrição e a letra têm {tokens} tokens, acima do limite do modelo ({limit}): encurte a descrição ou a letra em {over} tokens.',
   training_on_card: 'Há uma LoRA a treinar na placa gráfica; fazer músicas quando terminar ou for parada.',
   lost_vram: 'A placa gráfica ficou sem memória nesta música e o motor reiniciou, por isso a música perdeu-se. Escolher um conjunto de modelos mais pequeno em Definições → Modelos ou uma música mais curta, e fechar o que mais estiver a usar a placa; uma placa abaixo do conjunto mais pequeno não consegue fazer músicas.',
   lost_vram_retried: 'A placa gráfica ficou sem memória nesta música, e de novo quando foi feita com uma cache KV de {n}. Escolher um conjunto de modelos mais pequeno ou uma música mais curta, e fechar o que mais estiver a usar a placa.',

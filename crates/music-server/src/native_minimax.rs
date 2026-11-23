@@ -294,6 +294,11 @@ impl Client {
             .context("MiniMax server did not return its model buckets")
     }
 
+    /// The prompt length of a caption and lyrics, counted by the engine's own tokenizer.
+    pub(crate) async fn tokenize(&self, caption: &str, lyrics: &str) -> Result<u64> {
+        self.0.tokenize(caption, lyrics).await
+    }
+
     pub(crate) async fn profiles(&self) -> Result<Vec<ProfileStatus>> {
         let props = self.props().await?;
         Ok(profiles()
@@ -682,6 +687,13 @@ impl Runtime {
         let client = current.client.clone();
         *running = Some(current);
         Ok(client)
+    }
+
+    /// The client of the engine already running and answering, without starting one.
+    pub(crate) async fn running_client(&self) -> Option<Client> {
+        let mut running = self.running.lock().await;
+        let current = running.as_mut()?;
+        (matches!(current.child.try_wait(), Ok(None)) && current.client.0.health().await).then(|| current.client.clone())
     }
 
     /// Only checks the loopback listener of our own child.

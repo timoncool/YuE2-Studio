@@ -15,6 +15,8 @@ use serde_json::{json, Map, Value};
 pub enum SongError {
     /// A reason with no kind of its own: shown as it is.
     Raw(String),
+    /// MiniMax Music3's caption and lyrics over the prompt budget the engine enforces.
+    PromptTooLong { tokens: u64, limit: u64 },
     TrainingOnCard,
     /// Lost with an engine that restarted: the card's memory ran out.
     LostVram,
@@ -116,6 +118,7 @@ impl SongError {
     pub fn code(&self) -> Option<&'static str> {
         Some(match self {
             SongError::Raw(_) => return None,
+            SongError::PromptTooLong { .. } => "prompt_too_long",
             SongError::TrainingOnCard => "training_on_card",
             SongError::LostVram => "lost_vram",
             SongError::LostVramRetried(_) => "lost_vram_retried",
@@ -161,6 +164,11 @@ impl SongError {
             | SongError::EngineRefused(detail) => put("detail", json!(detail)),
             SongError::LostAtLine(line) | SongError::EngineFatal(line) | SongError::NotAudio(line) => put("line", json!(line)),
             SongError::AdapterMissing(name) => put("name", json!(name)),
+            SongError::PromptTooLong { tokens, limit } => {
+                put("tokens", json!(tokens));
+                put("limit", json!(limit));
+                put("over", json!(tokens.saturating_sub(*limit)));
+            }
             SongError::LostExited { exit, line } => {
                 put("exit", json!(exit));
                 put("meaning", json!(exit_meaning_key(exit)));
@@ -242,6 +250,11 @@ impl fmt::Display for SongError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SongError::Raw(text) => f.write_str(text),
+            SongError::PromptTooLong { tokens, limit } => write!(
+                f,
+                "The caption and lyrics are {tokens} tokens, over the model's limit of {limit}: shorten the caption or the lyrics by {} tokens.",
+                tokens.saturating_sub(*limit)
+            ),
             SongError::TrainingOnCard => f.write_str("a training run has the card; songs can be made once it finishes or is stopped"),
             SongError::LostVram => f.write_str("The graphics card ran out of memory on this song and the engine restarted, so the song was lost. Choose a smaller model set in the model manager or a shorter song, and close whatever else uses the card; a card below the smallest set cannot make songs."),
             SongError::LostVramRetried(max_seq) => write!(f, "The graphics card ran out of memory on this song, and again when it was made with a {max_seq} KV cache. Choose a smaller model set or a shorter song, and close whatever else uses the card."),
@@ -307,6 +320,7 @@ mod tests {
     fn one_of_each() -> Vec<SongError> {
         let all = vec![
             SongError::Raw("x".into()),
+            SongError::PromptTooLong { tokens: 5100, limit: 5000 },
             SongError::TrainingOnCard,
             SongError::LostVram,
             SongError::LostVramRetried(16384),
@@ -339,6 +353,7 @@ mod tests {
         for error in &all {
             match error {
                 SongError::Raw(_)
+                | SongError::PromptTooLong { .. }
                 | SongError::TrainingOnCard
                 | SongError::LostVram
                 | SongError::LostVramRetried(_)

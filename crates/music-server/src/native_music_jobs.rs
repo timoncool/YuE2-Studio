@@ -1,6 +1,35 @@
 use super::*;
 use tokio::sync::{mpsc, oneshot};
 
+#[derive(Deserialize)]
+pub(super) struct PromptCheckRequest {
+    #[serde(default)]
+    caption: String,
+    #[serde(default)]
+    lyrics: String,
+    #[serde(default)]
+    instrumental: bool,
+}
+
+/// What MiniMax Music3 would do with a caption and lyrics before it is asked to sing them: the lyrics lines whose
+/// words it drops, a song that never names its singer's gender, and the prompt against the 5000-token budget. A
+/// running engine counts the tokens itself; without one the count is an estimate and says so.
+pub(super) async fn check_prompt(
+    State(state): State<AppState>,
+    Json(request): Json<PromptCheckRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let (tokens, exact) = match state.minimax.running_client().await {
+        Some(client) => (
+            client.tokenize(&request.caption, &request.lyrics).await
+                .map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?,
+            true,
+        ),
+        None => (prompt_check::estimate_tokens(&request.caption, &request.lyrics), false),
+    };
+    let found = prompt_check::check(&request.caption, &request.lyrics, request.instrumental, tokens, exact);
+    Ok(Json(serde_json::to_value(found).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?))
+}
+
 type CancelReply = oneshot::Sender<Result<(), String>>;
 pub(super) type CancelSender = mpsc::Sender<CancelReply>;
 
@@ -299,6 +328,16 @@ async fn submit(
         lm_seed: request.lm_seed,
         sampling: request.minimax.clone().unwrap_or_default(),
     };
+    if replay.is_none() {
+        match client.tokenize(&request.style, &request.lyrics).await {
+            Ok(tokens) if tokens > prompt_check::MAX_PROMPT_TOKENS => {
+                return (StatusCode::BAD_REQUEST, Json(failed_request_job(request.clone(), engine.into(), prompt_check::too_long_message(tokens))));
+            }
+            Ok(_) => {}
+            // the engine enforces the same budget at submit; only the message a person can act on is lost
+            Err(error) => studio_log!("[ERROR] the MiniMax prompt length was not counted before submitting: {error:#}"),
+        }
+    }
     let submitted = match &replay {
         Some(replay) => client.submit_replay(&profile, replay.body.clone()).await,
         None => client.submit(&profile, &input).await,

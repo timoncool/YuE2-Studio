@@ -52,6 +52,7 @@ mod music_pair;
 mod native_ace_jobs;
 mod assistant;
 mod song_tokenizer;
+mod prompt_check;
 mod assistant_runtime;
 mod audio_facts;
 mod backing_harmony;
@@ -1980,6 +1981,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/score/sections", post(match_score_sections))
         .route("/v1/score/from-midi", post(score::api::from_midi))
         .route("/v1/song/tokenize", post(song_tokenizer::tokenize))
+        .route("/v1/music/prompt-check", post(native_music_jobs::check_prompt))
         .route("/v1/score/mark", post(score::api::mark))
         .route("/v1/training/prepare/train-after", post(prepare::set_train_after))
         .route("/v1/training/listen/install", post(install_listen_pack))
@@ -13687,6 +13689,13 @@ impl EngineClient {
 
     async fn props(&self) -> anyhow::Result<Value> {
         self.json_response(self.http.get(self.url("/props")).send().await?).await
+    }
+
+    /// The prompt length of a caption and lyrics, counted by the engine's own tokenizer.
+    async fn tokenize(&self, caption: &str, lyrics: &str) -> anyhow::Result<u64> {
+        let body = serde_json::json!({ "caption": caption, "lyrics": lyrics });
+        let answer: Value = self.json_response(self.http.post(self.url("/tokenize")).json(&body).send().await?).await?;
+        answer.get("tokens").and_then(Value::as_u64).ok_or_else(|| anyhow::anyhow!("the engine's /tokenize answered without a count"))
     }
 
     async fn submit(&self, request: Value) -> anyhow::Result<EngineSubmitResponse> {

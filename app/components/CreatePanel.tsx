@@ -53,6 +53,8 @@ import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
 import { AceDitSwitcher } from './AceDitSwitcher';
 import { scriptLanguage } from '../services/lyricsLanguage';
+import { joinCaption, splitCaption, usePromptCheck } from '../services/minimaxCaption';
+import { minimaxCaptionStrings } from '../i18n/minimaxCaption';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
@@ -529,6 +531,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const aceDit = typeof aceStudio.synth_model === 'string' ? aceStudio.synth_model : '';
   useEffect(() => keepAceStudio(aceStudio), [aceStudio]);
   const miniMaxEngine = nativeEngine === 'minimaxmusic-cpp';
+  const mmText = minimaxCaptionStrings[language];
+  // MiniMax Music3 Studio's three caption panes, joined into the one style the engine takes
+  const [mmPanes, setMmPanes] = useState(() => splitCaption(''));
   const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
   const native = useNativeMusicProfiles(nativeEngine, Boolean(onMusicEngineChange));
   const installedNativeAdapters = native.profile?.native_adapters ?? [];
@@ -735,6 +740,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const styleHintsId = React.useId();
   const magentaReady = magentaReference ? magentaTracks.some(track => track.id === magentaReference) : Boolean(style.trim());
   const [lyrics, setLyrics] = useState(() => keptText(draft, 'lyrics'));
+  useEffect(() => {
+    if (style !== joinCaption(mmPanes.globalMetadata, mmPanes.vocalDetails, mmPanes.arrangement)) setMmPanes(splitCaption(style));
+  }, [style]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMmPane = (key: 'globalMetadata' | 'vocalDetails' | 'arrangement', value: string) => {
+    const next = { ...mmPanes, [key]: value };
+    setMmPanes(next);
+    setStyle(joinCaption(next.globalMetadata, next.vocalDetails, next.arrangement));
+  };
+  const promptQuery = usePromptCheck(style, lyrics, false, miniMaxEngine);
+  const promptCheck = miniMaxEngine ? promptQuery.data : undefined;
+  const overBudget = promptCheck?.issues.some(issue => issue.code === 'prompt_too_long') === true;
   const [abc, setAbc] = useState(() => keptText(draft, 'abc'));
   const [cot, setCot] = useState<YueCot | ''>(() =>
     draft.cot === 'off' || draft.cot === 'melody' || draft.cot === 'full' ? draft.cot : '');
@@ -2292,15 +2308,38 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       </div>
                     )}
               </Card>}
-              <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : tt('styleCardTitle')}>
+              <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : miniMaxEngine ? mmText.captionStructured : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
-                {!vevo2 && !soulx && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
+                {miniMaxEngine ? <>
+                  <p className="mb-2 text-[11px] leading-4 text-zinc-500">{mmText.captionStructuredHint}</p>
+                  <div className="space-y-2">
+                    {([['globalMetadata', mmText.globalMetadata, mmText.globalMetadataPlaceholder], ['vocalDetails', mmText.vocalDetails, mmText.vocalDetailsPlaceholder],
+                      ['arrangement', mmText.arrangementSection, mmText.arrangementPlaceholder]] as const).map(([key, label, placeholder]) => (
+                      <label key={key} className="block">
+                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</span>
+                        <AutoTextarea className={CONTROL} value={mmPanes[key]} onChange={event => setMmPane(key, event.target.value)} placeholder={placeholder} aria-label={label} />
+                      </label>
+                    ))}
+                  </div>
+                </> : !vevo2 && !soulx && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && !soulx && <Card title={t('lyrics')}>
+              {miDasheng ? <MiDashengFields value={scene} onChange={setScene} /> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && !soulx && <Card title={t('lyrics')}
+                actions={miniMaxEngine ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${overBudget ? 'bg-rose-500/10 text-rose-600 dark:text-rose-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}
+                  title={promptQuery.error ? `${mmText.promptBudget} — ${promptQuery.error.message}` : promptCheck?.exact === false ? `${mmText.promptBudget} — ${mmText.promptBudgetEstimated}` : mmText.promptBudget}>
+                  {mmText.promptBudgetShort} {promptQuery.error ? '!' : promptCheck ? `${promptCheck.exact ? '' : '≈'}${promptCheck.tokens} / ${promptCheck.limit}` : '…'}
+                </span> : undefined}>
                 <AutoTextarea className={CONTROL} value={lyrics} onChange={event => setLyrics(event.target.value)}
                   aria-label={t('lyrics')} />
+                {overBudget && <p role="alert" className="mt-1 text-[11px] leading-4 text-rose-600 dark:text-rose-300">{mmText.promptTooLong}</p>}
+                {promptCheck?.issues.filter(issue => issue.code !== 'prompt_too_long').map(issue => (
+                  <p key={`${issue.code}-${issue.line ?? 0}`} className="mt-1 text-[11px] leading-4 text-amber-700 dark:text-amber-300">
+                    {issue.code === 'words_on_tag_line'
+                      ? mmText.lyricsWordsOnTagLine.replace('{line}', String(issue.line)).replace('{text}', () => issue.text ?? '')
+                      : mmText.captionVocalGenderMissing}
+                  </p>
+                ))}
               </Card>}
               {packedYue && <Card title={tt('scoreCardTitle')}>
                 <label className="mb-2 flex items-center gap-2 text-xs">

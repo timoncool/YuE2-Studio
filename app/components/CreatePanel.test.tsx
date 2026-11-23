@@ -692,7 +692,7 @@ it('restores native MiniMax DiT and LM LoRA scales only in the MiniMax request',
   };
   const create = () => buttonNamed('create') as HTMLButtonElement;
   await show('minimaxmusic-cpp');
-  type(field('textarea[aria-label="styleCardTitle"]')!, 'warm piano');
+  type(field('textarea[aria-label="Global metadata"]')!, 'warm piano');
   type(field('textarea[aria-label="lyrics"]')!, 'short verse');
   click(buttonNamed('adaptersAdd')!);
   click(buttonNamed('MiniMax tune')!);
@@ -1010,7 +1010,7 @@ it('keeps focus, the song draft and pair settings when switching the MiniMax Mus
   choose(engine, 'minimaxmusic-cpp');
   await flush();
   chooseSet('quality-q8');
-  type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
+  type(field('textarea[aria-label="Global metadata"]')!, 'acoustic folk');
   type(field('textarea[aria-label="lyrics"]')!, 'Morning light');
   type(labeled('Seed').querySelector('input')!, '11');
   choose(engine, 'audio.cpp');
