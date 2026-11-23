@@ -4,7 +4,8 @@ import { ArrowRight, Check, Download, Loader2, RotateCw, X } from 'lucide-react'
 import { useI18n } from '../context/I18nContext';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 import { poll } from '../services/poll';
-import { SELF_READ } from '../services/studioQueries';
+import { useQuery } from '@tanstack/react-query';
+import { queryClient, SELF_READ } from '../services/studioQueries';
 import type { TranslationKey } from '../i18n/translations';
 
 type Row = { id: string; part: string; ids: string[]; name: string; from: string | null; to: string; bytes: number; download: number; reason_code: string; reason: string };
@@ -42,6 +43,12 @@ async function answer(response: Response): Promise<UpdateAnswer> {
 }
 
 export const readUpdatePlan = () => fetch('/setup/update', { headers: SELF_READ }).then(answer);
+
+/** How many parts the update would download or replace: the number on the sidebar's Models and engines. */
+export function useUpdateCount(): number {
+  const plan = useQuery({ queryKey: ['update-plan'], queryFn: readUpdatePlan, refetchInterval: 10 * 60_000 }, queryClient).data?.plan;
+  return plan ? plan.updated.length + plan.added.length : 0;
+}
 
 /** The update screen's plan: three groups, the totals and one button that downloads it all and then removes what is
  * no longer needed. `onDone` follows a finished update; `onLater` is given where the screen can be put off. */

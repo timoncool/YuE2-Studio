@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useUpdateCount } from './UpdateScreen';
+import { useUnseenNews } from '../services/newsSeen';
+import { sidebarBadgeStrings } from '../i18n/sidebarBadges';
 import { useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
 import { Cpu, Disc, Layers, Library, Mic, Moon, Newspaper, ScrollText, Search, SlidersHorizontal, Sun } from 'lucide-react';
 import { enginePageStrings } from '../i18n/enginePage';
@@ -17,6 +20,8 @@ interface SidebarProps {
   user?: { username: string; isAdmin?: boolean; avatar_url?: string } | null;
   onOpenSettings?: () => void;
   onOpenEngines?: () => void;
+  /** The update screen, where one button downloads everything the update needs. */
+  onOpenUpdates?: () => void;
   isOpen?: boolean;
   onToggle?: () => void;
   /** The journal: whether it is open. */
@@ -96,12 +101,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   user,
   onOpenSettings,
   onOpenEngines,
+  onOpenUpdates,
   isOpen = true,
   onToggle,
   journalOpen = false,
   onToggleJournal,
 }) => {
   const { t, language } = useI18n();
+  const updates = useUpdateCount();
+  const unseenNews = useUnseenNews(language);
   const portable = useSetupStatus<{ portable?: boolean }>().data?.portable;
 
   return (
@@ -142,8 +150,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <NavItem icon={<Layers size={20} />} label={t('adaptersNav')} active={currentView === 'adapters'} onClick={() => onNavigate('adapters')} isExpanded={isOpen} />
           <NavItem icon={<Mic size={20} />} label={voicesPageStrings[language].nav} active={currentView === 'voices'} onClick={() => onNavigate('voices')} isExpanded={isOpen} />
           <NavItem icon={<SlidersHorizontal size={20} />} label={t('studioTools')} active={currentView === 'tools'} onClick={() => onNavigate('tools')} isExpanded={isOpen} />
-          {onOpenEngines && <NavItem icon={<Cpu size={20} />} label={enginePageStrings[language][0]} active={false} onClick={onOpenEngines} isExpanded={isOpen} />}
-          <NavItem icon={<Newspaper size={20} />} label={t('news')} active={currentView === 'news'} onClick={() => onNavigate('news')} isExpanded={isOpen} />
+          {onOpenEngines && <NavItem icon={<Cpu size={20} />} label={enginePageStrings[language][0]} active={false}
+            onClick={updates > 0 && onOpenUpdates ? onOpenUpdates : onOpenEngines} isExpanded={isOpen} badge={updates} badgeLabel={sidebarBadgeStrings[language].updates(updates)} />}
+          <NavItem icon={<Newspaper size={20} />} label={t('news')} active={currentView === 'news'} onClick={() => onNavigate('news')} isExpanded={isOpen}
+            badge={unseenNews} badgeLabel={sidebarBadgeStrings[language].news(unseenNews)} />
           {onToggleJournal && <NavItem icon={<ScrollText size={20} />} label={t('journal')} active={journalOpen} opens={journalOpen} onClick={onToggleJournal} isExpanded={isOpen} />}
 
           <div className="mt-auto flex flex-col gap-2">
@@ -179,12 +189,19 @@ interface NavItemProps {
   isExpanded?: boolean;
   /** For an item that opens a panel rather than a page: whether it is open. */
   opens?: boolean;
+  /** What waits there: updates to download, news not read yet. */
+  badge?: number;
+  badgeLabel?: string;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, isExpanded, opens }) => (
-  <button type="button" onClick={onClick} aria-expanded={opens} className={`group relative flex w-full shrink-0 items-center gap-3 overflow-hidden rounded-xl transition-all duration-200 ${isExpanded ? 'justify-start px-3 py-1.5' : 'aspect-square justify-center'} ${active ? 'bg-zinc-100 text-black dark:bg-white/10 dark:text-white' : 'text-zinc-500 hover:bg-zinc-100 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'}`} title={label}>
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, isExpanded, opens, badge, badgeLabel }) => (
+  <button type="button" onClick={onClick} aria-expanded={opens} aria-label={badge ? `${label} · ${badgeLabel ?? badge}` : undefined} className={`group relative flex w-full shrink-0 items-center gap-3 overflow-hidden rounded-xl transition-all duration-200 ${isExpanded ? 'justify-start px-3 py-1.5' : 'aspect-square justify-center'} ${active ? 'bg-zinc-100 text-black dark:bg-white/10 dark:text-white' : 'text-zinc-500 hover:bg-zinc-100 hover:text-black dark:hover:bg-white/5 dark:hover:text-white'}`} title={label}>
     {active && <span className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-pink-500" />}
-    <span className="shrink-0">{icon}</span>
-    {isExpanded && <span className="truncate text-sm font-medium">{label}</span>}
+    <span className="relative shrink-0">
+      {icon}
+      {Boolean(badge) && !isExpanded && <span aria-hidden className="absolute -right-1.5 -top-1.5 grid min-w-4 place-items-center rounded-full bg-pink-600 px-1 text-[10px] leading-4 font-bold text-white">{badge! > 9 ? '9+' : badge}</span>}
+    </span>
+    {isExpanded && <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">{label}</span>}
+    {Boolean(badge) && isExpanded && <span aria-hidden className="shrink-0 rounded-full bg-pink-600 px-1.5 text-[11px] leading-5 font-bold text-white">+{badge! > 99 ? '99' : badge}</span>}
   </button>
 );

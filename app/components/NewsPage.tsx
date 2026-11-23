@@ -6,6 +6,7 @@ import newsData from '../data/news.json';
 import { hubStateChanged, useHubState } from '../services/studioQueries';
 import { hubMediaUrl, hubText, reportLinkClick, reportNotice, type HubButton, type HubItem } from '../services/studioHub';
 import { openExternal } from '../services/externalLinks';
+import { markNewsSeen } from '../services/newsSeen';
 import changelogData from '../data/changelog.json';
 
 type TabId = 'news' | 'changelog';
@@ -237,6 +238,8 @@ export const NewsPage: React.FC<{ onOpen?: (target: NonNullable<HubButton['targe
   const allNews = [...hubNews.filter((n) => !bundledIds.has(n.id.slice(4))), ...(newsData as NewsItem[])]
     .sort((a, b) => b.date.localeCompare(a.date));
   const activeNews = allNews.filter(n => !dismissedNews.has(n.id));
+  const shownIds = allNews.map(n => n.id).join(',');
+  useEffect(() => { if (shownIds) markNewsSeen(shownIds.split(',')); }, [shownIds]);
   const dismissed = allNews.filter(n => dismissedNews.has(n.id));
 
   // the hub's news count as its notices do: seen once a launch, clicks by button or link, closes

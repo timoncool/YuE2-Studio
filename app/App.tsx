@@ -1802,6 +1802,10 @@ function AppContent() {
             setShowSettingsModal(true);
             if (isMobile) setShowLeftSidebar(false);
           }}
+          onOpenUpdates={() => {
+            setUpdateShown(true);
+            if (isMobile) setShowLeftSidebar(false);
+          }}
           isOpen={showLeftSidebar}
           onToggle={() => setShowLeftSidebar(!showLeftSidebar)}
           journalOpen={journalOpen}
