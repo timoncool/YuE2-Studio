@@ -391,7 +391,8 @@ export const EngineSettings: React.FC = () => {
       )}
 
       <details className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
-        <summary className="min-h-6 cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('engineBinLabel')}</summary>
+        <summary className="min-h-6 cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-100">{t('engineBinLabel')}
+          {options.engine_bin && <span className="ml-1.5 font-mono text-xs font-normal text-pink-600 dark:text-pink-300">· {options.engine_bin.split(/[\\/]/).pop()}</span>}</summary>
         <input
           type="text"
           value={options.engine_bin ?? ''}
