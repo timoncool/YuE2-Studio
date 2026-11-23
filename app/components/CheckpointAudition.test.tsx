@@ -80,12 +80,10 @@ it('opens a newly created training playlist and plays the media for the selected
     await act(async () => finishPlaylists!(Response.json([playlist])));
     await flush();
     expect(window.location.pathname).toBe(`/playlist/${playlistId}`);
-    const step = host.querySelector<HTMLSelectElement>('select[aria-label="B"]')!;
-    expect(step.value).toBe('take-1');
-    await act(async () => {
-      step.value = 'take-2';
-      step.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    const step = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="B"]')!;
+    expect(step.value).toBe('2. Step 1');
+    await act(async () => step.click());
+    await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.startsWith('3. Step 2'))!.click());
     const controls = host.querySelector('[role="tablist"]')?.parentElement;
     const playButton = controls?.querySelector<HTMLButtonElement>('button[aria-label="play"]');
     expect(playButton).toBeDefined();

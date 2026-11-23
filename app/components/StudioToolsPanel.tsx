@@ -485,7 +485,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
             <FieldLabel hidden>{page.recogniseWay}</FieldLabel>
             <CatalogSegments<'karaoke' | 'openrouter'> fill label={page.recogniseWay} value={asrWay} onChange={setChosenWay}
               options={[{ value: 'karaoke', label: page.wayLocal }, { value: 'openrouter', label: page.wayCloud }]} />
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t(asrWay === 'karaoke' ? 'transcribeWayKaraokeHint' : 'transcribeWayOpenRouterHint')}</p>
+            <p className="mt-1.5 text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{t(asrWay === 'karaoke' ? 'transcribeWayKaraokeHint' : 'transcribeWayOpenRouterHint')}</p>
           </div>
           {asrWay === 'openrouter' && cloudReady && asrModels.length > 0 && (
             <label className="grid text-xs">
@@ -500,7 +500,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
           {asrWay === 'karaoke' ? (
             <CatalogSegments<'song' | 'file'> fill label={page.source} value={asrSource} onChange={setAsrSource}
               options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
-          ) : <p className="text-xs text-zinc-500 dark:text-zinc-400">{page.cloudFileOnly}</p>}
+          ) : <p className="text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{page.cloudFileOnly}</p>}
         </div>
           {!fromSong && (
             <div>
@@ -563,8 +563,8 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
           ? 'bg-pink-500/10 text-zinc-950 dark:text-white' : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5'}`}>
         <span className={`mt-0.5 shrink-0 ${entry.id === current.id && !listOnly ? 'text-pink-500' : 'text-zinc-400'}`} aria-hidden>{entry.icon}</span>
         <span className="min-w-0">
-          <span className="block text-sm font-semibold">{entry.title}</span>
-          <span className="block text-xs text-zinc-500 dark:text-zinc-400">{entry.hint}</span>
+          <span className={`block text-sm ${entry.id === current.id && !listOnly ? 'font-semibold' : 'font-medium'}`}>{entry.title}</span>
+          <span className="block text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{entry.hint}</span>
         </span>
       </button>
     </li>
@@ -575,10 +575,10 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
       <div className="mx-auto grid max-w-6xl gap-6 px-5 py-6 md:grid-cols-[17rem_1fr] md:px-8">
         <nav aria-label={page.title} className={`${listOnly ? '' : 'max-md:hidden'} md:sticky md:top-0 md:self-start`}>
           <h1 className="px-2.5 text-2xl font-bold text-zinc-950 dark:text-white">{page.title}</h1>
-          <p className="mt-1 px-2.5 text-xs text-zinc-500 dark:text-zinc-400">{page.intro}</p>
+          <p className="mt-1 px-2.5 text-sm text-zinc-600 dark:text-zinc-400">{page.intro}</p>
           {(['track', 'new'] as const).map(group => (
             <div key={group} className="mt-5">
-              <h2 className="px-2.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{group === 'track' ? page.withTrack : page.createNew}</h2>
+              <h2 className="mb-1.5 px-2.5 text-xs font-semibold uppercase tracking-[0.04em] text-zinc-600 dark:text-zinc-400">{group === 'track' ? page.withTrack : page.createNew}</h2>
               <ul className="mt-1 space-y-0.5">{tools.filter(entry => entry.group === group).map(navItem)}</ul>
             </div>
           ))}

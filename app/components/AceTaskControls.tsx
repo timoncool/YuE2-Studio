@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { LibrarySongPicker } from './LibrarySongPicker';
 import { Ear, ListChecks, Loader2, Pause, Play, Upload } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { apiUrl } from '../services/apiBase';
@@ -164,11 +165,10 @@ export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit,
 
   const songOptions = (chosen: string, choose: (id: string) => void, empty: string, target: 'source' | 'reference') => (
     <div className="flex items-center gap-1.5">
-      <select value={chosen} onChange={event => choose(event.target.value)} className={CONTROL} aria-label={target === 'source' ? tt('aceSource') : tt('aceReference')}>
-        <option value="">{empty}</option>
-        {chosen && !songs.some(song => song.id === chosen) && <option value={chosen} disabled>{chosen}</option>}
-        {songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-      </select>
+      <div className="min-w-0 flex-1">
+        <LibrarySongPicker label={target === 'source' ? tt('aceSource') : tt('aceReference')} value={chosen} placeholder={empty} none={empty}
+          showLabel={false} controlClassName={CONTROL} onChange={id => choose(id)} />
+      </div>
       {chosen && (
         <button type="button" onClick={() => togglePreview(chosen)} className={ICON} title={tt('acePreview')} aria-label={tt('acePreview')}>
           {playing === chosen ? <Pause size={14} /> : <Play size={14} />}

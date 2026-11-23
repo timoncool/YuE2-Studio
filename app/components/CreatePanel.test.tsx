@@ -121,6 +121,10 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
   element.dispatchEvent(new Event('input', { bubbles: true }));
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+const pickSong = (label: string, title: string) => {
+  click(host.querySelector(`input[role="combobox"][aria-label="${label}"]`)!);
+  click([...document.querySelectorAll('[role="option"]')].find(option => option.querySelector('.font-semibold')?.textContent === title)!);
+};
 const modelPill = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
 const pickModel = (name: string) => {
   click(modelPill());
@@ -173,8 +177,7 @@ it('sends the chosen library backing with the same score and words', async () =>
   act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
   await flush();
   click(buttonNamed('chordBed')!);
-  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
-  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  pickSong('Sing over a library backing track', 'Instrumental recording');
   click(buttonNamed('create')!);
   expect(sent[0]).toMatchObject({ backing_song_id: 'backing', abc, lyrics: 'one line' });
   expect(sent[0].cover_of).toBeUndefined();
@@ -198,8 +201,7 @@ it('applies a measured backing tempo only when confirmed', async () => {
   act(() => root.render(panel({ request: { id: 1, kind: 'score', abc: 'X:1\nK:C\nC|', lyrics: 'one line' } })));
   await flush();
   click(buttonNamed('chordBed')!);
-  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
-  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  pickSong('Sing over a library backing track', 'Instrumental recording');
   const bpm = field('input[inputmode="numeric"]')!;
   const previous = bpm.value;
   click(buttonNamed('Measure backing tempo')!);
@@ -218,8 +220,7 @@ it('offers backing harmony without changing the current score or key', async () 
   act(() => root.render(panel({ request: { id: 1, kind: 'score', abc, lyrics: 'one line' } })));
   await flush();
   click(buttonNamed('chordBed')!);
-  const select = host.querySelector<HTMLSelectElement>('select[aria-label="Sing over a library backing track"]')!;
-  act(() => { select.value = 'backing'; select.dispatchEvent(new Event('change', { bubbles: true })); });
+  pickSong('Sing over a library backing track', 'Instrumental recording');
   const key = [...host.querySelectorAll('select')].find(box => [...box.options].some(option => option.value === 'F#m'))!;
   expect(key.value).toBe('C');
   click(buttonNamed('Analyze backing harmony')!);
@@ -607,11 +608,7 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   vi.mocked(fetch).mockImplementation(async url => String(url).endsWith('/acestep-cpp/profiles')
     ? Response.json({ engine: 'acestep-cpp', engine_installed: true, profiles: [{ id: 'balanced', label: 'Balanced', ready: true, missing: [], total_bytes: 1 }] })
     : Response.json([]));
-  const select = (label: string, value: string) => act(() => {
-    const input = host.querySelector<HTMLSelectElement>(`select[aria-label="${label}"]`)!;
-    input.value = value;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const select = (label: string, value: string) => pickSong(label, librarySongs.find(song => song.id === value)?.title ?? value);
   const control = (name: string) => field(`input[aria-label="${name}"]`) as HTMLInputElement;
   const create = () => buttonNamed('create') as HTMLButtonElement;
   act(() => root.render(panel({ musicEngine: 'acestep-cpp' })));
@@ -640,7 +637,7 @@ it('creates native ACE covers and restores a migrated repaint with its source, r
   act(() => root.render(panel({ musicEngine: 'acestep-cpp', initialData: { song: imported, timestamp: 1 } })));
   await flush();
   expect(buttonNamed('aceTask_repaint')!.getAttribute('aria-pressed')).toBe('true');
-  expect(host.querySelector<HTMLSelectElement>('select[aria-label="aceReference"]')!.value).toBe('voice');
+  expect(host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="aceReference"]')!.value).toBe('Reference track');
   expect(control('aceRepaintStart').value).toBe('2');
   expect(control('aceRepaintEnd').value).toBe('4');
   expect(field('input[aria-label="aceCoverStrength"]')).toBeNull();

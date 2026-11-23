@@ -51,6 +51,7 @@ import { styleAdvice } from '../i18n/styleAdvice';
 import { songWritingStrings } from '../i18n/songWriting';
 import { MagentaFields, magentaModel, magentaTitle, restoreMagentaOptions } from './MagentaFields';
 import { formCardStrings } from '../i18n/formCards';
+import { LibrarySongPicker } from './LibrarySongPicker';
 import { MiDashengFields, miDashengModel, miDashengPromptReady, restoreMiDashengPrompt } from './MiDashengFields';
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
@@ -3063,12 +3064,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                   <div className="mt-2 rounded-lg border border-zinc-100 p-2 dark:border-white/5">
                     <p className="mb-2 text-[11px] leading-4 text-zinc-500">{tt('chordBedHint')}</p>
                     {musicEngine === 'local' && mode !== 'cover' && (
-                      <Field label={backingLabel}>
-                        <select aria-label={backingLabel} value={backingSongId} onChange={event => setBackingSongId(event.target.value)} className={CONTROL}>
-                          <option value="">—</option>
-                          {backingTracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-                        </select>
-                      </Field>
+                      <LibrarySongPicker label={backingLabel} value={backingSongId} placeholder={formCardStrings[language].noBacking} none={formCardStrings[language].noBacking}
+                        controlClassName={CONTROL} onChange={id => setBackingSongId(id)} />
                     )}
                     {musicEngine === 'local' && mode !== 'cover' && backingSongId && (
                       <div key={backingSongId}>

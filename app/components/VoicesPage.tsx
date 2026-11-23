@@ -8,7 +8,8 @@ import { chooseLastRvcVoice, clearLastRvcVoice, useLastRvcVoice } from '../servi
 import { SELF_READ, useLibrarySongs } from '../services/studioQueries';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import Combobox from './kit/Combobox';
-import { PickerOption, PickerPill } from './kit/PickerPill';
+import { FieldLabel } from './kit/FieldLabel';
+import { LibrarySongPicker } from './LibrarySongPicker';
 import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 import { RvcApplyVoice } from './RvcApplyVoice';
@@ -214,24 +215,17 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
   return (
     <div className={`${CARD} space-y-3`}>
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1 text-xs">
-          <span className="font-semibold text-zinc-600 dark:text-zinc-300">{text.track}</span>
-          {library.isSuccess && songs.length === 0 ? <p className="text-zinc-500">{text.noTracks}</p>
-            : <Combobox label={text.track} value={songId} placeholder={text.chooseTrack} onChange={setSongId}
-              inputClassName="min-h-9 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-sm font-semibold text-zinc-900 placeholder:font-normal placeholder:text-zinc-500 focus:border-pink-500 focus:outline-none dark:border-white/10 dark:bg-black/25 dark:text-white max-md:min-h-11"
-              options={songs.map(entry => ({ value: entry.id, label: entry.title || '—', hint: entry.style?.slice(0, 80) }))} />}
+        <div className="grid content-start text-xs">
+          {library.isSuccess && songs.length === 0 ? <><FieldLabel>{text.track}</FieldLabel><p className="text-zinc-500 dark:text-zinc-400">{text.noTracks}</p></>
+            : <LibrarySongPicker label={text.track} value={songId} placeholder={text.chooseTrack} controlClassName={CONTROL} onChange={setSongId} />}
         </div>
-        <div className="space-y-1 text-xs">
-          <span className="font-semibold text-zinc-600 dark:text-zinc-300">{labels.voice}</span>
-          <PickerPill label={labels.voice} showLabel={false} value={voice ? voiceName(voice) : labels.none}>
-            {close => <>
-              {voices.map(item => <PickerOption key={item.id} value={item.id} selected={item.id === voice?.id} name={voiceName(item)}
-                hint={`${item.model_name} · ${item.index_name ? text.withIndex : text.withoutIndex}`}
-                onPick={() => { chooseLastRvcVoice(item.id); close(); }} />)}
-              <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
-              <PickerOption action selected={false} name={`＋ ${text.addVoice}`} hint={text.openCatalog} onPick={() => { close(); onOpenCatalog(); }} />
-            </>}
-          </PickerPill>
+        <div className="grid content-start text-xs">
+          <FieldLabel hidden>{labels.voice}</FieldLabel>
+          <Combobox label={labels.voice} value={voice?.id ?? ''} placeholder={labels.none} onChange={id => chooseLastRvcVoice(id)}
+            inputClassName={`${CONTROL} font-semibold placeholder:font-normal`}
+            options={voices.map(item => ({ value: item.id, label: voiceName(item), cover: null,
+              hint: `${item.model_name} · ${item.index_name ? text.withIndex : text.withoutIndex}` }))} />
+          <button type="button" onClick={onOpenCatalog} className="mt-1.5 justify-self-start text-xs font-semibold text-pink-600 hover:underline dark:text-pink-300">＋ {text.addVoice}</button>
         </div>
       </div>
       {stemsError && <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{stemsError}</p>}

@@ -8,7 +8,7 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 import { AudioWaveform } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
-import { FieldLabel } from './kit/FieldLabel';
+import { FieldHint, FieldLabel } from './kit/FieldLabel';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
 
@@ -97,12 +97,12 @@ export function SoundEffectsTool({ control, busy, onGenerate }: {
     footer={status && <>{page.model}: {status.name} · <a href={status.license_url} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-pink-600 hover:underline">{page.license} ↗</a></>}>
     <label className="grid text-xs">
       <FieldLabel>{page.sfxPrompt}</FieldLabel>
-      <span className="mb-1 text-zinc-500 dark:text-zinc-400">{page.sfxPromptHint}</span>
+      <FieldHint>{page.sfxPromptHint}</FieldHint>
       <textarea rows={3} value={description} className={control} onChange={event => setDescription(event.target.value)} />
     </label>
     <label className="grid text-xs">
       <FieldLabel>{page.duration}</FieldLabel>
-      {limit && <span className="mb-1 text-zinc-500 dark:text-zinc-400">{page.range(new Intl.NumberFormat(language).format(limit.min), new Intl.NumberFormat(language).format(limit.max))}</span>}
+      {limit && <FieldHint>{page.range(new Intl.NumberFormat(language).format(limit.min), new Intl.NumberFormat(language).format(limit.max))}</FieldHint>}
       <input type="number" className={`${control} max-w-32`} value={duration} min={limit?.min} max={limit?.max}
         step={0.1} onChange={event => setDuration(event.target.value)} />
     </label>

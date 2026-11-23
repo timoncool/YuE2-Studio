@@ -9,7 +9,7 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 import { Clapperboard, FileVideo } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
-import { FieldLabel } from './kit/FieldLabel';
+import { FieldHint, FieldLabel } from './kit/FieldLabel';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
 
@@ -130,7 +130,7 @@ export function ControlFoleyTool({ control, busy, onGenerate }: {
     </label>
     <label className="grid text-xs">
       <FieldLabel>{page.foleySeconds}</FieldLabel>
-      {limits && <span className="mb-1 text-zinc-500 dark:text-zinc-400">{page.range(new Intl.NumberFormat(language).format(limits.min), new Intl.NumberFormat(language).format(limits.max))}</span>}
+      {limits && <FieldHint>{page.range(new Intl.NumberFormat(language).format(limits.min), new Intl.NumberFormat(language).format(limits.max))}</FieldHint>}
       <input type="number" className={`${control} max-w-32`} value={duration} min={limits?.min} max={limits?.max}
         step={0.1} onChange={event => setDuration(event.target.value)} />
     </label>

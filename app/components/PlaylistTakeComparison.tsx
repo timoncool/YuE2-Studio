@@ -6,6 +6,8 @@ import { updateLibraryPlaylists } from '../services/studioQueries';
 import type { Playlist, Song } from '../types';
 import { TakeWords } from './TakeWords';
 import { AudioCompare } from './AudioCompare';
+import Combobox from './kit/Combobox';
+import { relativeMoment } from '../services/dates';
 
 export const PlaylistTakeComparison: React.FC<{
   playlist: Playlist;
@@ -49,15 +51,13 @@ export const PlaylistTakeComparison: React.FC<{
   };
 
   const sideSelect = (side: 'A' | 'B', song: Song, other: Song, choose: (id: string) => void) => (
-    <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-      {side}
-      <select aria-label={side} className="min-w-0 flex-1 rounded bg-zinc-800 px-2 py-1" value={song.id}
-        onChange={event => choose(event.target.value)}>
-        {songs.filter(candidate => candidate.id !== other.id).map(candidate => (
-          <option value={candidate.id} key={candidate.id}>{label(candidate)}</option>
-        ))}
-      </select>
-    </label>
+    <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+      <span className="font-semibold" aria-hidden>{side}</span>
+      <Combobox className="min-w-0 flex-1" label={side} value={song.id} onChange={choose}
+        inputClassName="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-900 outline-hidden focus:border-pink-500 dark:border-white/10 dark:bg-black/25 dark:text-white"
+        options={songs.filter(candidate => candidate.id !== other.id).map(candidate => ({ value: candidate.id, label: label(candidate),
+          cover: candidate.coverUrl || null, hint: [candidate.duration, candidate.createdAt && relativeMoment(new Date(candidate.createdAt), language)].filter(Boolean).join(' · ') }))} />
+    </div>
   );
   const toggle = () => {
     if (!open) {

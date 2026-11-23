@@ -9,12 +9,12 @@ const TONES = {
 
 /** The model's state in a tool's header, in words: «Готов», «Нужно скачать · 3,7 ГБ», «Скачивается · 42 %». */
 export function ToolState({ tone, children }: { tone: keyof typeof TONES; children: ReactNode }) {
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${TONES[tone]}`}>{children}</span>;
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${TONES[tone]}`}>{children}</span>;
 }
 
 /** Why the main action waits, under it: «Выберите трек», «Опишите звук». */
 export function ActionReason({ children }: { children: ReactNode }) {
-  return <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{children}</p>;
+  return <p className="mt-1.5 text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{children}</p>;
 }
 
 /**
@@ -35,32 +35,19 @@ export function ToolCard({ icon, title, state, description, children, action, re
 }) {
   const heading = useId();
   return (
-    <section aria-labelledby={heading} className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/3">
-      <header className="flex items-center gap-2">
+    <section aria-labelledby={heading} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5 dark:border-white/10 dark:bg-white/3">
+      <header className="flex items-center gap-2.5">
         <span className="shrink-0 text-pink-500" aria-hidden>{icon}</span>
-        <h3 id={heading} className="min-w-0 flex-1 text-sm font-semibold text-zinc-900 dark:text-white">{title}</h3>
+        <h2 id={heading} className="min-w-0 flex-1 text-xl leading-7 font-semibold text-zinc-950 dark:text-white">{title}</h2>
         {state}
       </header>
-      {description && <p className="text-sm text-zinc-600 dark:text-zinc-300">{description}</p>}
-      {children && <div className="grid gap-3">{children}</div>}
-      {action && <div>{action}</div>}
-      {result}
-      {error}
-      {footer && <p className="border-t border-zinc-200 pt-2 text-xs text-zinc-500 dark:border-white/10 dark:text-zinc-400">{footer}</p>}
+      {description && <p className="mt-1 text-sm leading-[22px] text-zinc-700 dark:text-zinc-300">{description}</p>}
+      {children && <div className="mt-4 grid gap-4">{children}</div>}
+      {action && <div className="mt-5">{action}</div>}
+      {result && <div className="mt-4">{result}</div>}
+      {error && <div className="mt-4">{error}</div>}
+      {footer && <p className="mt-4 border-t border-zinc-200 pt-3 text-xs text-zinc-600 dark:border-white/10 dark:text-zinc-400">{footer}</p>}
     </section>
   );
 }
 
-/** A tool that only opens its own window: one line, not a form. */
-export function ToolLauncher({ icon, title, description, children }: { icon: ReactNode; title: string; description: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-      <span className="shrink-0 text-pink-500" aria-hidden>{icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</p>
-        <p className="text-xs text-zinc-600 dark:text-zinc-300">{description}</p>
-      </div>
-      <div className="flex shrink-0 flex-col items-end">{children}</div>
-    </div>
-  );
-}
