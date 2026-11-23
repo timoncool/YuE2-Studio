@@ -2129,7 +2129,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     {!native.loading && !native.error && nativeSets && native.profiles.length > 0 &&
                       <NativeModelSetPicker key={musicEngine} engine={musicEngine} name={profileMusicEngines[musicEngine]}
                         profiles={native.profiles} selected={native.profile} engineInstalled={native.installed}
-                        onSelect={id => { native.select(id); pair.select(); }} onChanged={refreshNativeChoice} />}
+                        onSelect={id => { native.select(id); pair.select(); }} onChanged={refreshNativeChoice} onReady={pair.select} />}
                     {!native.loading && !native.error && native.profiles.length === 0 && native.installed && <p className="text-xs">{nativeStrings.empty}</p>}
                     {native.originalModels && (
                       <div className="space-y-1 text-xs" role="status">

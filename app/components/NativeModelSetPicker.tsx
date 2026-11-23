@@ -22,7 +22,7 @@ async function answer(response: Response): Promise<Record<string, unknown>> {
  * set's weights, with one bar for both. The main sets are offered with the one this card holds best marked; the
  * variants for particular cards wait under "all variants".
  */
-export function NativeModelSetPicker({ engine, name, profiles, selected, engineInstalled, onSelect, onChanged }: {
+export function NativeModelSetPicker({ engine, name, profiles, selected, engineInstalled, onSelect, onChanged, onReady }: {
   engine: Engine;
   name: string;
   profiles: NativeProfile[];
@@ -30,6 +30,8 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
   engineInstalled: boolean;
   onSelect: (id: string) => void;
   onChanged: () => void;
+  /** The chosen set has every file now: the pair it belongs to can be asked for again. */
+  onReady?: () => void;
 }) {
   const { language } = useI18n();
   const text = nativeModelSetStrings[language];
@@ -40,6 +42,8 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
   const [error, setError] = useState('');
   const changed = useRef(onChanged);
   useEffect(() => { changed.current = onChanged; }, [onChanged]);
+  const readied = useRef(onReady);
+  useEffect(() => { readied.current = onReady; }, [onReady]);
   const runtimeUrl = apiUrl(`/v1/music/native/${engine}/runtime`);
   const installUrl = apiUrl(`/v1/music/native/${engine}/profiles/install`);
   const gb = (bytes: number) => new Intl.NumberFormat(language, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(bytes / 2 ** 30);
@@ -83,6 +87,7 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
         if (row?.ready) {
           setPhase('idle');
           changed.current();
+          readied.current?.();
         } else if (row?.download?.done && row.download.error) {
           setError(row.download.error);
           setPhase('idle');
@@ -105,6 +110,7 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
     if (body.ready === true) {
       setPhase('idle');
       changed.current();
+      readied.current?.();
     }
   }
 
