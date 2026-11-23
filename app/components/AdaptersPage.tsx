@@ -1,13 +1,15 @@
 import { NumberField } from './NumberField';
 import { saveFile } from '../services/saveFile';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, CheckSquare, ChevronDown, Download, ExternalLink, FolderOpen, Heart, Layers, Loader2, Pencil, Search, Square, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckSquare, ChevronDown, Download, ExternalLink, FileUp, FolderOpen, Heart, Layers, Loader2, Pencil, Search, Square, Trash2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { openExternal } from '../services/externalLinks';
 import { ConfirmDialog } from './ConfirmDialog';
 import { TrainingPanel } from './TrainingPanel';
 import { CatalogCard as KitCatalogCard } from './kit/Catalog';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
+import { WorkProgress } from './WorkProgress';
 import {
   AdapterSlot,
   AdapterState,
@@ -43,8 +45,6 @@ const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 disabled:opacity-50 dark:border-white/10 dark:bg-black/30 dark:text-white';
 const OUTLINE =
   'inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:text-zinc-200';
-const PRIMARY =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50';
 const KIND_ORDER = ['trained', 'quality', 'style', 'artist', 'composition', 'sound', 'slider', 'other'];
 
 type Tab = 'installed' | 'catalog' | 'hub' | 'training';
@@ -432,10 +432,10 @@ const HubPanel: React.FC<{ current?: DitFamily | null; downloading: boolean; onS
       </div>
       {!downloading && chosen.length > 0 && (
         <div className="sticky bottom-0 -mx-1 bg-white/90 px-1 py-3 backdrop-blur-sm dark:bg-suno/90">
-          <button type="button" onClick={() => void download()} disabled={starting} className={PRIMARY}>
+          <PrimaryButton onClick={() => void download()} disabled={starting}>
             {starting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             {t('adaptersDownloadSelected')} · {chosen.length} · {megabytes(chosen.reduce((sum, file) => sum + file.bytes, 0))}
-          </button>
+          </PrimaryButton>
         </div>
       )}
     </>
@@ -608,17 +608,9 @@ export function AdaptersPage(): React.ReactElement {
 
         {download && !download.done && (
           <div className={CARD}>
-            <div className="flex items-center justify-between gap-3 text-sm text-zinc-800 dark:text-zinc-200">
-              <span className="inline-flex items-center gap-2"><Loader2 size={14} className="animate-spin text-pink-500" />{t('adaptersDownloading')}</span>
-              <span className="tabular-nums text-xs text-zinc-500">{megabytes(download.downloaded_bytes)} / {megabytes(download.total_bytes)}</span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-white/10">
-              <div
-                className="h-full bg-linear-to-r from-orange-500 to-pink-600"
-                style={{ width: `${Math.min(100, (100 * download.downloaded_bytes) / Math.max(1, download.total_bytes))}%` }}
-              />
-            </div>
-            <button type="button" onClick={() => void cancelAdapterDownload()} className={`${OUTLINE} mt-3`}><X size={13} />{t('adaptersCancel')}</button>
+            <WorkProgress label={`${t('adaptersDownloading')} · ${megabytes(download.downloaded_bytes)} / ${megabytes(download.total_bytes)}`}
+              percent={Math.min(100, Math.floor((100 * download.downloaded_bytes) / Math.max(1, download.total_bytes)))} />
+            <SecondaryButton onClick={() => void cancelAdapterDownload()} className="mt-3"><X size={13} />{t('adaptersCancel')}</SecondaryButton>
           </div>
         )}
         {download?.done && download.error && download.error !== 'cancelled' && (
@@ -640,14 +632,14 @@ export function AdaptersPage(): React.ReactElement {
                   aria-label={t('adaptersImportName')}
                   className={CONTROL}
                 />
-                <button type="button" onClick={() => filePicker.current?.click()} disabled={importing} className={`${PRIMARY} shrink-0`}>
-                  {importing ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
+                <PrimaryButton onClick={() => filePicker.current?.click()} disabled={importing} className="shrink-0">
+                  {importing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
                   {importing ? t('adaptersImporting') : t('adaptersImport')}
-                </button>
-                <button type="button" onClick={() => void importFolder()} disabled={importing} className={`${PRIMARY} shrink-0`} title={t('adaptersFolderHint')}>
+                </PrimaryButton>
+                <SecondaryButton onClick={() => void importFolder()} disabled={importing} className="shrink-0 self-center" title={t('adaptersFolderHint')}>
                   <FolderOpen size={14} />
                   {t('adaptersFolder')}
-                </button>
+                </SecondaryButton>
                 <input
                   ref={filePicker}
                   type="file"
@@ -727,10 +719,10 @@ export function AdaptersPage(): React.ReactElement {
                   {allChosen ? <CheckSquare size={13} /> : <Square size={13} />}
                   {t('adaptersSelectAll')}{missing.length > 0 ? ` · ${missing.length}` : ''}
                 </button>
-                <button type="button" onClick={() => void downloadSelected()} disabled={starting || chosen.length === 0} className={PRIMARY}>
+                <PrimaryButton onClick={() => void downloadSelected()} disabled={starting || chosen.length === 0}>
                   {starting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                   {t('adaptersDownloadSelected')}{chosen.length > 0 ? ` · ${chosen.length} · ${megabytes(chosen.reduce((sum, entry) => sum + entry.bytes, 0))}` : ''}
-                </button>
+                </PrimaryButton>
               </div>
             )}
           </>
