@@ -2165,9 +2165,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       {linkedFamily.pairs.map(pair => <option key={pair.engine} value={pair.engine}>{pair.label}</option>)}
                     </select>
                   </label>
+                  {speedProfile && <div className="mt-2"><CreateSpeedReference profile={speedProfile} id={speedReferenceId} /></div>}
                 </details>
               )}
-              {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
+              {speedProfile && !(linkedFamily && linkedFamily.pairs.length > 1) && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
               {onOpenEngines && !nativeEngine && <button type="button" className="block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
