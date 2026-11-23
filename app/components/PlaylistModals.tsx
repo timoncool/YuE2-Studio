@@ -1,3 +1,4 @@
+import { CollectionOption, NewCollectionOption } from './kit/CollectionOption';
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Plus, Music, GripVertical } from 'lucide-react';
@@ -122,25 +123,9 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
           </button>
         </div>
 
-        {/* Create New Button - Always visible at top */}
-        {kind !== 'album' && <button
-          onClick={onCreateNew}
-          className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors group mb-3 border border-dashed border-zinc-300 dark:border-white/20 hover:border-zinc-400 dark:hover:border-white/40"
-        >
-          <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800/50 rounded-sm flex items-center justify-center text-zinc-600 dark:text-white/70 group-hover:text-zinc-900 dark:group-hover:text-white">
-            <Plus size={20} />
-          </div>
-          <div className="text-left">
-            <div className="font-semibold text-zinc-700 dark:text-white/90 group-hover:text-zinc-900 dark:group-hover:text-white">{t('createNewPlaylist')}</div>
-          </div>
-        </button>}
+        {kind !== 'album' && <NewCollectionOption role="button" label={t('createNewPlaylist')} onPick={onCreateNew} />}
 
-        {kind !== 'playlist' && onCreateNewAlbum && (
-          <button type="button" onClick={onCreateNewAlbum} className="mb-3 flex w-full items-center gap-3 rounded-lg border border-dashed border-zinc-300 p-3 text-left transition-colors hover:bg-zinc-100 dark:border-white/20 dark:hover:bg-white/5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-sm bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-white/70"><Plus size={20} /></div>
-            <span className="font-semibold text-zinc-700 dark:text-white/90">{t('createAlbum')}</span>
-          </button>
-        )}
+        {kind !== 'playlist' && onCreateNewAlbum && <NewCollectionOption role="button" label={t('createAlbum')} onPick={onCreateNewAlbum} />}
         <div className="h-px bg-zinc-100 dark:bg-white/10 my-2"></div>
 
         <div className="space-y-1 max-h-60 overflow-y-auto custom-scrollbar">
@@ -152,8 +137,18 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
             choices.map(playlist => {
               const availability = collectionSongAvailability(playlist, library.data ?? [], bin.data?.songs ?? []);
               return (
-              <button
+              <CollectionOption
                 key={playlist.id}
+                role="button"
+                value={playlist.id}
+                name={playlist.name}
+                cover={playlist.coverUrl}
+                meta={<>
+                  {playlist.kind === 'album' ? t('album') : t('playlist')} · {library.isSuccess ? songCount(availability.active.length) : '…'}
+                  {bin.isSuccess && availability.inBin.length > 0 && <span className="text-amber-600 dark:text-amber-400"> · {t('collectionInBin').replace('{count}', String(availability.inBin.length))}</span>}
+                  {bin.isSuccess && availability.missingIds.length > 0 && <span className="text-amber-600 dark:text-amber-400"> · {t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</span>}
+                </>}
+                trailing={kind === 'album' ? <GripVertical size={17} className="shrink-0 text-zinc-400" aria-label={t('dragAlbumToReorder')} /> : undefined}
                 draggable={kind === 'album' && Boolean(onReorderAlbums) && !savingAlbumOrder}
                 onDragStart={event => {
                   if (kind !== 'album') return;
@@ -178,30 +173,13 @@ export const AddToPlaylistModal: React.FC<AddToPlaylistModalProps> = ({ isOpen, 
                   void onReorderAlbums(from, playlist.id).finally(() => setSavingAlbumOrder(false));
                 }}
                 onDragEnd={() => { setDraggedAlbum(null); setHoverAlbum(null); }}
-                onClick={() => {
+                onPick={() => {
                   if (savingAlbumOrder) return;
                   onSelect(playlist.id);
                   onClose();
                 }}
-                className={`group flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-zinc-100 dark:hover:bg-white/5 ${kind === 'album' ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedAlbum === playlist.id ? 'opacity-40' : ''} ${hoverAlbum === playlist.id && draggedAlbum !== playlist.id ? 'ring-2 ring-pink-500' : ''}`}
-              >
-                <div className="w-10 h-10 bg-zinc-200 dark:bg-zinc-800 rounded-sm flex items-center justify-center text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-white shrink-0 overflow-hidden">
-                  {playlist.coverUrl ? (
-                    <img src={playlist.coverUrl} className="w-full h-full object-cover" alt="" />
-                  ) : (
-                    <Music size={18} />
-                  )}
-                </div>
-                <div className="text-left overflow-hidden">
-                  <div className="font-medium text-zinc-900 dark:text-white truncate">{playlist.name}</div>
-                  <div className="text-xs text-zinc-500">
-                    {playlist.kind === 'album' ? t('album') : t('playlist')} · {library.isSuccess ? songCount(availability.active.length) : '…'}
-                    {bin.isSuccess && availability.inBin.length > 0 && <span className="text-amber-400"> · {t('collectionInBin').replace('{count}', String(availability.inBin.length))}</span>}
-                    {bin.isSuccess && availability.missingIds.length > 0 && <span className="text-amber-400"> · {t('collectionMissing').replace('{count}', String(availability.missingIds.length))}</span>}
-                  </div>
-                </div>
-                {kind === 'album' && <GripVertical size={17} className="ml-auto shrink-0 text-zinc-400" aria-label={t('dragAlbumToReorder')} />}
-              </button>
+                className={`${kind === 'album' ? 'cursor-grab active:cursor-grabbing' : ''} ${draggedAlbum === playlist.id ? 'opacity-40' : ''} ${hoverAlbum === playlist.id && draggedAlbum !== playlist.id ? 'ring-2 ring-pink-500' : ''}`}
+              />
               );
             })
           )}

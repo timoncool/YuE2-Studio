@@ -121,7 +121,7 @@ const type = (element: HTMLTextAreaElement | HTMLInputElement, value: string) =>
   element.dispatchEvent(new Event('input', { bubbles: true }));
 });
 const click = (element: Element) => act(() => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-const modelPill = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="true"]:not([aria-label])')!;
+const modelPill = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
 const pickModel = (name: string) => {
   click(modelPill());
   const option = [...document.querySelectorAll('[role="menuitemradio"]')].find(node => node.querySelector('span span')?.textContent === name);
@@ -129,7 +129,7 @@ const pickModel = (name: string) => {
   click(option!);
 };
 const openModelSettings = () => {
-  const toggle = host.querySelector<HTMLButtonElement>('button[aria-label="Model settings"]');
+  const toggle = host.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]');
   if (toggle && toggle.getAttribute('aria-expanded') !== 'true') click(toggle);
 };
 const engineRadios = () => {
@@ -148,6 +148,7 @@ const chosenSet = () => {
   if (!document.querySelector('input[type="radio"][name$="-set"]')) openModelSettings();
   return document.querySelector<HTMLInputElement>('input[type="radio"][name$="-set"]:checked')?.value ?? '';
 };
+const instrumentalSwitch = () => host.querySelector<HTMLButtonElement>('[role="switch"][aria-label="instrumentalOnly"]');
 const buttonNamed = (text: string) => {
   const buttons = [...document.querySelectorAll('button')];
   return buttons.find(button => button.textContent?.trim() === text) ?? buttons.find(button => !button.hasAttribute('aria-haspopup') && button.textContent?.includes(text));
@@ -271,16 +272,20 @@ it('uses explicit controls for the YuE2 engine and follows the shared paused sta
   expect(buttonNamed('Resume YuE2 engine')).toBeUndefined();
 });
 
-it('snapshots the last voice only when an automatic RVC take is enabled', () => {
+it('snapshots the last voice only when an automatic RVC take is enabled', async () => {
   localStorage.setItem('studio.rvc.voiceId', 'installed-voice');
   localStorage.setItem('studio.rvc.backend', 'audio.cpp');
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => Response.json(url === '/v1/rvc/voices'
+    ? [{ id: 'installed-voice', model_name: 'singer.pth', index_name: null, version: 2, origin: { name: 'Warm singer' } }] : {})));
   act(() => root.render(panel({})));
+  await flush();
   type(field('textarea')!, 'calm folk');
   click(buttonNamed('create')!);
   expect(sent[0].rvc_after).toBeUndefined();
 
-  const option = [...host.querySelectorAll('label')].find(label => label.textContent?.includes('Make an RVC take after generation'));
-  act(() => { option?.querySelector('input')?.click(); });
+  click(buttonNamed('RVC take')!);
+  expect(host.textContent).toContain('Warm singer');
+  click(host.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Make an RVC take after generation"]')!);
   click(buttonNamed('create')!);
   expect(sent[1].rvc_after).toEqual({ voice_id: 'installed-voice', backend: 'audio.cpp' });
 });
@@ -288,11 +293,14 @@ it('snapshots the last voice only when an automatic RVC take is enabled', () => 
 describe('pauses between repeated generations (#261)', () => {
   const renderQueue = (queueBusy: boolean, activeJobCount = 0) =>
     act(() => root.render(panel({ queueBusy, activeJobCount })));
-  const choosePause = (value: string) => act(() => {
-    const select = [...host.querySelectorAll('select')].find(element => element.closest('label')?.textContent?.includes('Pause between generations'))!;
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const openCreateOptions = () => {
+    const toggle = host.querySelector<HTMLButtonElement>('button[aria-label="Creation options"]')!;
+    if (toggle.getAttribute('aria-expanded') !== 'true') click(toggle);
+  };
+  const choosePause = (value: string) => {
+    openCreateOptions();
+    click(document.querySelector<HTMLButtonElement>(`[role="radiogroup"][aria-label="Pause between generations"] [data-value="${value}"]`)!);
+  };
   const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
   beforeEach(async () => {
@@ -300,7 +308,8 @@ describe('pauses between repeated generations (#261)', () => {
     await flush();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
     type(field('textarea')!, 'calm folk');
-    click(buttonNamed('generateForeverSlide')!);
+    openCreateOptions();
+    click(document.querySelector<HTMLButtonElement>('[role="switch"][aria-label="generateForever"]')!);
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -377,7 +386,8 @@ describe('pauses between repeated generations (#261)', () => {
     choosePause('fixed');
     click(buttonNamed('create')!);
     renderQueue(false);
-    click(buttonNamed('generateForeverStop')!);
+    openCreateOptions();
+    click(document.querySelector<HTMLButtonElement>('[role="switch"][aria-label="generateForever"]')!);
     advance(60_000);
     expect(sent).toHaveLength(1);
   });
@@ -1332,7 +1342,7 @@ describe('an instrumental (#217)', () => {
     await flush();
     type(field('textarea')!, 'calm folk, acoustic guitar');
     click(buttonNamed('cotOff')!);
-    const instrumental = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const instrumental = instrumentalSwitch()!;
     click(instrumental);
     click(buttonNamed('createInstrumental')!);
     await flush();
@@ -1359,7 +1369,7 @@ describe('an instrumental (#217)', () => {
     await flush();
     type(field('textarea')!, 'calm folk, acoustic guitar');
     click(buttonNamed('cotOff')!);
-    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    click(instrumentalSwitch()!);
     await flush();
     act(() => { bridgeCommands.get('create_set')!({ fields: { adapters: [] } }); });
     click(buttonNamed('createInstrumental')!);
@@ -1413,7 +1423,7 @@ describe('an instrumental (#217)', () => {
     act(() => root.render(panel({})));
     await flush();
     type(field('textarea[aria-label="styleLabel"], textarea')!, 'calm folk, acoustic guitar');
-    const instrumental = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    const instrumental = instrumentalSwitch();
     click(instrumental!);
     await flush();
     composeScore.mockResolvedValueOnce('X:1\nPLAN-A').mockResolvedValueOnce('X:1\nPLAN-B');
@@ -1431,7 +1441,7 @@ describe('an instrumental (#217)', () => {
     act(() => root.render(panel({})));
     await flush();
     type(field('textarea')!, 'calm folk, acoustic guitar');
-    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    click(instrumentalSwitch()!);
     await flush();
     click(buttonNamed('cotOff')!);
     click(buttonNamed('createInstrumental')!);
@@ -1894,7 +1904,7 @@ describe('Auto max duration', () => {
     act(() => root.render(panel({})));
     await flush();
     type(field('textarea')!, 'calm folk, acoustic guitar');
-    click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    click(instrumentalSwitch()!);
     await flush();
   };
 

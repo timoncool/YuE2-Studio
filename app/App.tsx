@@ -1694,16 +1694,6 @@ function AppContent() {
             </div>
             {sidePanel}
 
-            {/* Mobile Toggle Button */}
-            <div className="md:hidden absolute top-4 right-4 z-20">
-              <button
-                onClick={() => setMobileShowList(!mobileShowList)}
-                className="bg-zinc-800 text-white px-4 py-2 rounded-full shadow-lg border border-white/10 flex items-center gap-2 text-sm font-bold"
-              >
-                {mobileShowList ? t('createSong') : t('viewList')}
-                <List size={16} />
-              </button>
-            </div>
           </div>
         );
     }
@@ -1736,6 +1726,18 @@ function AppContent() {
   return (
     <SongActionsProvider value={songActions}>
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white dark:bg-suno text-zinc-900 dark:text-white font-sans antialiased selection:bg-pink-500/30 transition-colors duration-300">
+      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-zinc-200 bg-white pr-3 dark:border-white/5 dark:bg-suno-sidebar md:hidden">
+        <button type="button" onClick={() => setShowLeftSidebar(true)} aria-label={t('expandSidebar')} title={t('expandSidebar')}
+          className="inline-flex size-11 shrink-0 items-center justify-center text-zinc-600 hover:text-black dark:text-zinc-300 dark:hover:text-white">
+          <Menu size={20} />
+        </button>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-white">{pageTitle}</span>
+        {showingCreate && <button type="button" onClick={() => setMobileShowList(!mobileShowList)}
+          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-zinc-300 px-3 text-xs font-semibold text-zinc-800 dark:border-white/15 dark:text-zinc-100">
+          {mobileShowList ? t('createSong') : t('viewList')}
+          <List size={15} aria-hidden />
+        </button>}
+      </div>
       {migrationOffer && currentView === 'create' && <aside className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-2 text-sm dark:border-white/15">
         <span>{t('legacyLibraryFound')} {Array.from(new Set(legacySources.map(source => source.studio))).join(', ')}</span>
         <button type="button" className="font-semibold underline" onClick={() => {
@@ -1784,15 +1786,7 @@ function AppContent() {
           onToggleJournal={() => setJournalOpen(open => !open)}
         />
 
-        <div className="fixed inset-x-0 top-0 z-30 flex h-11 items-center gap-1 border-b border-zinc-200 bg-white pr-3 dark:border-white/5 dark:bg-suno-sidebar md:hidden">
-          <button type="button" onClick={() => setShowLeftSidebar(true)} aria-label={t('expandSidebar')} title={t('expandSidebar')}
-            className="inline-flex size-11 shrink-0 items-center justify-center text-zinc-600 hover:text-black dark:text-zinc-300 dark:hover:text-white">
-            <Menu size={20} />
-          </button>
-          <span className="min-w-0 truncate text-sm font-semibold text-zinc-900 dark:text-white">{pageTitle}</span>
-        </div>
-
-        <main aria-label={pageTitle} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden max-md:pt-11">
+        <main aria-label={pageTitle} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {createKept && <Activity mode={showingCreate ? 'visible' : 'hidden'}>{renderContent('create')}</Activity>}
           {!(createKept && showingCreate) && renderContent()}
         </main>

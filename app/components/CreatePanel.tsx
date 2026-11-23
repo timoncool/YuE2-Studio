@@ -1,7 +1,8 @@
 import samplingPresets from '../data/yue-sampling.json';
 import { yueSamplingStrings } from '../i18n/yueSampling';
 
-import { readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
+import { chooseLastRvcVoice, readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
+import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useLibrarySongs, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
@@ -13,7 +14,7 @@ import { minTokensCutsTheSongOff } from '../services/samplingLimits';
 import { foldedAfter, keepFolded, keptFolded } from '../services/createFold';
 import {
   AlertTriangle, AudioLines, ChevronDown, CircleAlert, Dices, Ear, Eye, EyeOff, FileMusic, FolderOpen, Loader2,
-  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X, Check, SlidersHorizontal,
+  Grid2x2, Guitar, ListChecks, Music2, Pause, Piano, Play, RotateCcw, Save, Sparkles, Square, Tags, Upload, Wand2, Settings2, X, Check, Download, Mic, ListMusic, Plus,
 } from 'lucide-react';
 import { AudioWaveform } from './AudioWaveform';
 import type { MusicEngine, Playlist, Song, YueCot, YueHarmony, YueOutputFormat, YueRequest, YueSampling } from '../types';
@@ -39,7 +40,6 @@ import { profileLabel as setLabel, setupLabel, type SetupChoice } from '../servi
 import { REQUEST_FILE_ACCEPT, parseRequestFile, requestFileTitle, serializeRequest, type RequestFileFormat } from '../services/requestFile';
 import { AdapterPicker } from './AdapterPicker';
 import { CreatePlaylistModal } from './PlaylistModals';
-import { SlideToEnable } from './SlideToEnable';
 import { fetchAdapters, installCatalogAdapters, startingScales, usesFromSettings, type AdapterUse } from '../services/adapters';
 import { engineParityLabels, planLabels } from '../i18n/engineParity';
 import { midiImportOptions } from '../i18n/midiImportOptions';
@@ -77,6 +77,7 @@ import { musicPairStrings } from '../i18n/musicPair';
 import { engineErrorText } from '../i18n/engineErrors';
 import { ErrorNote } from './kit/ErrorNote';
 import { PickerOption, PickerPill } from './kit/PickerPill';
+import { CollectionOption, NewCollectionOption } from './kit/CollectionOption';
 import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 import { CatalogSegments } from './kit/Catalog';
 import { Hint } from './kit/Hint';
@@ -529,9 +530,23 @@ const LYRIC_LANGUAGES: { code: string; native: string; name: string }[] = [
 ];
 
 export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJob, musicEngine = 'local', onMusicEngineChange, onOpenEngines, isGenerating, activeJobCount = 0, queueBusy = isGenerating || activeJobCount > 0, initialData, request, playlists, onCreatePlaylist, playlistId, onChoosePlaylist }) => {
-  const { t, language } = useI18n();
+  const { t, language, songCount } = useI18n();
   const rvcVoice = useLastRvcVoice();
   const [rvcAfter, setRvcAfter] = useState(false);
+  const rvcText = rvcQuickStrings[language];
+  const [rvcVoices, setRvcVoices] = useState<Voice[] | null>(null);
+  const [rvcVoicesError, setRvcVoicesError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/v1/rvc/voices', { signal: controller.signal }).then(responseJson<Voice[]>)
+      .then(list => {
+        if (!Array.isArray(list)) throw new Error(rvcText.failed);
+        if (!controller.signal.aborted) { setRvcVoices(list); setRvcVoicesError(null); }
+      })
+      .catch((failure: Error) => { if (!controller.signal.aborted) setRvcVoicesError(failure.message); });
+    return () => controller.abort();
+  }, [rvcVoice]);
+  const chosenRvcVoice = rvcVoices?.find(voice => voice.id === rvcVoice);
   const writingText = songWritingStrings[language];
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
@@ -1026,16 +1041,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const effectiveCot: YueCot = cot || (defaults.cot as YueCot) || 'full';
 
   const profileLabel = useMemo(() => setupLabel(t, language, setup), [setup, t, language]);
-  // models people switch between all the time stay in view; the rest sit in the searchable list beside them
-  const mainModels = ['local', 'acestep-cpp', 'minimaxmusic-cpp'];
-  const modelOptions = [
+  const modelOptions: { value: string; label: string; group: string; ready?: boolean }[] = [
     ...linkedMusicFamilies.map(family => ({ value: family.id, label: family.name, group: musicStrings.groupLocal })),
     ...native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
       pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id)))
-      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
+      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready })),
     ...native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
       pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id)))
-      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal })),
+      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready })),
     ...(nativeEngine === 'hotstep' && modelChoice === 'hotstep' ? [{ value: 'hotstep', label: 'HOT-Step', group: musicStrings.groupLocal }] : []),
     ...(audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice)
       ? [{ value: modelChoice, label: 'audio.cpp', group: musicStrings.groupLocal }] : []),
@@ -1045,7 +1058,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       ? [{ value: modelChoice, label: modelChoice.slice('cloud:'.length), group: musicStrings.groupCloud }] : []),
   ];
   const modelReady = yue ? ready : cloud ? Boolean(configured && selectedMusicModel) : native.ready;
-  const modelStateText = modelReady ? nativeModelSetStrings[language].ready : yue ? unavailableTitle : nativeStrings.unavailable;
+  const modelBusy = Boolean(pair.sending || (pair.matching && pair.busy) || native.loading
+    || (yue && !serviceDown && setup?.ready && !ready && !enginePaused && !setup.engine_error));
+  const modelFailed = Boolean(pair.error || (pair.matching && pair.status?.stage === 'error') || native.error || (yue && (serviceDown || setup?.engine_error)));
+  const modelState = modelReady && !modelBusy ? 'ready' : modelFailed ? 'error' : modelBusy ? 'busy' : 'missing';
+  const modelStateText = modelState === 'ready' ? nativeModelSetStrings[language].ready : modelState === 'busy' ? t('engineStartingTitle')
+    : modelState === 'error' ? (yue ? unavailableTitle : pairText.error) : yue ? unavailableTitle : nativeStrings.unavailable;
+  const modelStateMark = modelState === 'ready' ? <Check size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+    : modelState === 'busy' ? <Loader2 size={14} className="shrink-0 animate-spin text-amber-600 dark:text-amber-400" aria-hidden />
+    : modelState === 'error' ? <CircleAlert size={14} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
+    : cloud ? <CircleAlert size={14} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+    : <Download size={14} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />;
+  const nativeQuality = native.profile ? native.profile.labels?.[language] ?? native.profile.labels?.en ?? native.profile.label : undefined;
+  const settingsValue = yue ? profileLabel : nativeSets && nativeQuality ? nativeQuality
+    : linkedFamily?.pairs.find((entry: LinkedMusicPair) => entry.engine === musicEngine)?.label ?? musicStrings.modelSettings;
   const modelHints: Record<string, string> = { ...musicStrings.hintModels, local: musicStrings.hintYue, 'acestep-cpp': musicStrings.hintAce, 'minimaxmusic-cpp': musicStrings.hintMiniMax, openrouter: musicStrings.hintCloud };
   const modelHasSettings = Boolean(linkedFamily && linkedFamily.pairs.length > 1) || yue || (nativeSets && native.profiles.length > 0);
   // the model card stays in the form only while it asks for something: a download, a choice the settings cannot make
@@ -1771,6 +1797,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const choosePlaylist = onChoosePlaylist;
   // a playlist deleted elsewhere is no longer offered or sent
   const chosenPlaylist = playlists.some(entry => entry.id === playlistId) ? playlistId : '';
+  const chosenPlaylistName = playlists.find(entry => entry.id === chosenPlaylist)?.name;
 
   // Without stopping: the request as it was when the button was pressed goes
   // again with new seeds whenever the queue runs low, until switched off. A
@@ -1879,7 +1906,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
 
   const generate = (request: YueRequest) => {
     cancelPause.current?.();
-    const snapshot = rvcAfter && rvcVoice && !instrumental
+    const snapshot = rvcAfter && chosenRvcVoice && !instrumental
       ? { ...request, rvc_after: { voice_id: rvcVoice, backend: readRvcBackend() } }
       : request;
     if (forever) foreverRequest.current = { ...snapshot };
@@ -1891,13 +1918,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   });
   useEffect(() => {
     const snapshot = foreverRequest.current;
-    if (!forever || !yue || !ready || !snapshot || pauseMode !== 'none' || activeJobCount >= 2) return;
+    if (!forever || cloud || !modelReady || !snapshot || pauseMode !== 'none' || activeJobCount >= 2) return;
     repeat(snapshot);
-  }, [forever, activeJobCount, ready, yue, pauseMode]);
+  }, [forever, activeJobCount, modelReady, cloud, pauseMode]);
 
   useEffect(() => {
     const snapshot = foreverRequest.current;
-    if (!forever || !yue || !ready || !snapshot || pauseMode === 'none' || queueBusy) return;
+    if (!forever || cloud || !modelReady || !snapshot || pauseMode === 'none' || queueBusy) return;
     const wait = generationPauseMs(pauseMode, pauseStart, pauseEnd);
     if (wait === null) return;
     const cancel = afterGenerationPause(wait, () => {
@@ -1910,7 +1937,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       if (cancelPause.current === cancel) cancelPause.current = null;
       setPauseSeconds(null);
     };
-  }, [forever, ready, yue, queueBusy, pauseMode, pauseStart, pauseEnd]);
+  }, [forever, modelReady, cloud, queueBusy, pauseMode, pauseStart, pauseEnd]);
 
   /** An instrumental: the score - the form's, or one written now - with its voice moved to the
    *  instrument, and the lyrics' section tags without their words, so nothing is left to sing. */
@@ -2180,35 +2207,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         <div className="space-y-3 p-4 pb-6">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="truncate text-base font-bold">{t('createMusic')}</h1>
+              <h1 className="truncate text-base font-bold max-md:sr-only">{t('createMusic')}</h1>
               <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">{cloud ? musicStrings.groupCloud : musicStrings.groupLocal}</p>
             </div>
             <div className="flex min-w-0 shrink items-center gap-1.5">
-              {onMusicEngineChange ? <>
-                <PickerPill className="max-w-[13rem]" label={musicStrings.modelFamily} showLabel={false} align="right"
-                  status={<span title={modelStateText} className={`h-2 w-2 shrink-0 rounded-full ${modelReady ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-                    <span className="sr-only">{modelStateText}</span></span>}
-                  value={modelOptions.find(option => option.value === modelChoice)?.label ?? modelChoice}>
-                  {close => <>
-                    {[musicStrings.groupLocal, musicStrings.groupCloud].map(group => {
-                      const entries = modelOptions.filter(option => option.group === group);
-                      return entries.length > 0 && <div key={group} className="mb-1 last:mb-0">
-                        <p className="px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">{group}</p>
-                        {entries.map(option => <PickerOption key={option.value} value={option.value} selected={option.value === modelChoice}
-                          name={option.label} hint={modelHints[option.value.replace(/^(audio|hotstep):/, '')]}
-                          mark={option.value === modelChoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
-                          onPick={() => { chooseModelFamily(option.value); close(); }} />)}
-                      </div>;
-                    })}
-                  </>}
-                </PickerPill>
-                {modelHasSettings && <PickerPill label={musicStrings.modelSettings} icon={<SlidersHorizontal size={15} />} align="right">
-                  {() => <div className="space-y-3 p-1">
-                    <p className="px-1 text-xs font-semibold text-zinc-900 dark:text-white">{musicStrings.modelSettings}</p>
-                    {modelSettings}
-                  </div>}
-                </PickerPill>}
-              </> : yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+              {!onMusicEngineChange && yue && <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${ready ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
                 <span className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 {serviceDown ? t('serviceUnavailable') : ready ? t('engineReady') : unavailableTitle}
               </span>}
@@ -2218,6 +2221,29 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               </button>
             </div>
           </div>
+          {onMusicEngineChange && <div className="flex min-w-0 items-center gap-1.5">
+            <PickerPill className="min-w-0 flex-1" label={musicStrings.modelFamily} showLabel={false}
+              status={<>{modelStateMark}<span className="sr-only">{modelStateText}. </span></>}
+              value={modelOptions.find(option => option.value === modelChoice)?.label ?? modelChoice}>
+              {close => <>
+                {[musicStrings.groupLocal, musicStrings.groupCloud].map(group => {
+                  const entries = modelOptions.filter(option => option.group === group);
+                  return entries.length > 0 && <div key={group} role="group" aria-label={group} className="mb-1 last:mb-0">
+                    <p aria-hidden className="sticky -top-2 z-10 bg-white px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">{group}</p>
+                    {entries.map(option => <PickerOption key={option.value} value={option.value} selected={option.value === modelChoice}
+                      name={option.label} hint={modelHints[option.value.replace(/^(audio|hotstep):/, '')]}
+                      side={option.ready === false ? musicStrings.needsDownload : undefined}
+                      mark={option.value === modelChoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
+                      onPick={() => { chooseModelFamily(option.value); close(); }} />)}
+                  </div>;
+                })}
+              </>}
+            </PickerPill>
+            {modelHasSettings && <PickerPill kind="dialog" className="min-w-0 max-w-[45%] shrink" label={musicStrings.modelSettings} showLabel={false} align="right"
+              value={settingsValue}>
+              {() => <div className="space-y-3 p-1">{modelSettings}</div>}
+            </PickerPill>}
+          </div>}
 
           {onMusicEngineChange && !(yue && setup?.engine_error) && (pair.sending || pair.error || (pair.matching && pair.status
             && (pair.busy || pair.status.stage === 'error' || (pair.status.stage === 'needs_install' && !native.profile?.installable && !yue)))) && (
@@ -2861,6 +2887,10 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               </>
             }
           >
+            <div className="mb-3 space-y-1">
+              <Switch checked={instrumental} onChange={value => void switchInstrumental(value)} label={tt('instrumentalOnly')} hint={instrumental ? tt('instrumentalOnlyHint') : undefined} />
+              {instrumentalLoraLoading && <p className="flex items-center gap-1.5 text-[11px] leading-5 text-pink-600 dark:text-pink-300"><Loader2 size={12} className="animate-spin" />{tt('instrumentalLoraLoading')}</p>}
+            </div>
             <div className="mb-2 flex flex-wrap gap-1">
               {SECTION_TAGS.map(tag => (
                 <button key={tag} type="button" onClick={() => insertTag(tag)} className={CHIP}>{tag}</button>
@@ -3349,12 +3379,20 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </p>
           )}
           </>}
-          {rvcVoice && !instrumental && (
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-white/10">
-              <input type="checkbox" checked={rvcAfter} onChange={event => setRvcAfter(event.target.checked)} className="h-4 w-4 accent-pink-500" />
-              {rvcQuickStrings[language].after}
-            </label>
-          )}
+          {!instrumental && <Card title={rvcText.title} icon={<Mic size={13} />} fold="rvc-after" foldedByDefault
+            actions={<span className="text-[11px] text-zinc-500 dark:text-zinc-400">{rvcAfter && chosenRvcVoice ? voiceName(chosenRvcVoice) : rvcText.off}</span>}>
+            <div className="space-y-3">
+              <Switch checked={rvcAfter && Boolean(chosenRvcVoice)} onChange={setRvcAfter} label={rvcText.after} hint={rvcText.afterHint} disabled={!chosenRvcVoice && !rvcVoices?.length} />
+              {rvcVoicesError ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{rvcVoicesError}</p>
+                : rvcVoices && rvcVoices.length === 0 ? <p className="text-xs text-zinc-500 dark:text-zinc-400">{rvcText.noVoices}</p>
+                : rvcVoices && <PickerPill label={rvcText.voice} value={chosenRvcVoice ? voiceName(chosenRvcVoice) : '—'}>
+                  {close => rvcVoices.map(voice => <PickerOption key={voice.id} value={voice.id} selected={voice.id === rvcVoice} name={voiceName(voice)}
+                    hint={voice.origin?.name && voice.origin.name !== voice.model_name ? voice.model_name : undefined}
+                    mark={voice.id === rvcVoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
+                    onPick={() => { chooseLastRvcVoice(voice.id); setRvcAfter(true); close(); }} />)}
+                </PickerPill>}
+            </div>
+          </Card>}
           {error && <div ref={errorBox} role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs leading-5 text-red-700 dark:text-red-200">{error}</div>}
         </div>
       </div>
@@ -3371,87 +3409,71 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
           </div>
         )}
-        <label className="mb-2 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-          <span className="shrink-0">{tt('createIntoPlaylist')}</span>
-          <select value={chosenPlaylist} onChange={event => (event.target.value === NEW_PLAYLIST ? setNewPlaylistOpen(true) : choosePlaylist(event.target.value))} className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-black/20">
-            <option value="">{tt('createIntoNoPlaylist')}</option>
-            {playlists.map(entry => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-            <option value={NEW_PLAYLIST}>{tt('createIntoNewPlaylist')}</option>
-          </select>
-        </label>
         <CreatePlaylistModal
           isOpen={newPlaylistOpen}
           onClose={() => setNewPlaylistOpen(false)}
           onCreate={(name, description) => void onCreatePlaylist(name, description).then(playlist => { if (playlist) choosePlaylist(playlist.id); })}
         />
-        {yue && <>
-        <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-white/10">
-          <input type="checkbox" checked={instrumental} onChange={event => void switchInstrumental(event.target.checked)} className="mt-0.5 h-4 w-4 accent-pink-500" />
-          <span className="min-w-0">
-            <span className="flex items-center gap-1.5 font-semibold text-zinc-900 dark:text-white"><Guitar size={13} />{tt('instrumentalOnly')}</span>
-            {instrumental && <span className="mt-0.5 block leading-5 text-zinc-500 dark:text-zinc-400">{tt('instrumentalOnlyHint')}</span>}
-            {instrumentalLoraLoading && <span className="mt-1 flex items-center gap-1.5 leading-5 text-pink-600 dark:text-pink-300"><Loader2 size={12} className="animate-spin" />{tt('instrumentalLoraLoading')}</span>}
-          </span>
-        </label>
-        {/* songs without end are switched on by a deliberate slide, never by a stray click */}
-        <div className="mb-2">
-          <SlideToEnable
-            on={forever}
-            onChange={enabled => enabled ? setForever(true) : stopForever()}
-            offLabel={tt('generateForeverSlide')}
-            stopLabel={tt('generateForeverStop')}
-            title={tt('generateForeverHint')}
-          />
-          {forever && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <label className="flex items-center gap-2">
-                {pauseText.label}
-                <select value={pauseMode} onChange={event => setPauseMode(event.target.value as GenerationPauseMode)}
-                  className="rounded border border-zinc-200 bg-zinc-50 px-1.5 py-1 dark:border-white/20 dark:bg-zinc-800">
-                  <option value="none">{pauseText.none}</option>
-                  <option value="fixed">{pauseText.fixed}</option>
-                  <option value="random">{pauseText.random}</option>
-                </select>
-              </label>
-              {pauseMode !== 'none' && (
-                <input aria-label={pauseMode === 'fixed' ? pauseText.minutes : pauseText.minimum}
-                  type="number" min="0" step="any" value={pauseStart}
-                  onChange={event => (pauseMode === 'fixed' ? setPauseMinutes : setPauseMinimum)(event.target.value)}
-                  className="w-20 rounded border border-zinc-200 bg-transparent px-1.5 py-1 dark:border-white/20" />
-              )}
-              {pauseMode === 'random' && (
-                <input aria-label={pauseText.maximum} type="number" min="0" step="any" value={pauseEnd}
-                  onChange={event => setPauseMaximum(event.target.value)}
-                  className="w-20 rounded border border-zinc-200 bg-transparent px-1.5 py-1 dark:border-white/20" />
-              )}
-              {pauseMode !== 'none' && <span>{pauseText.unit}</span>}
-              {!validPause && <span role="alert" className="text-red-600 dark:text-red-400">{pauseText.invalid}</span>}
-              {pauseSeconds !== null && !queueBusy && (
-                <div className="flex w-full items-center justify-between gap-2">
-                  <span role="timer" className="tabular-nums">
-                    {pauseText.countdown.replace('{time}', formatGenerationCountdown(pauseSeconds))}
-                  </span>
-                  <button type="button" onClick={stopForever} className="rounded border border-zinc-200 px-2 py-1 dark:border-white/20">
-                    {pauseText.cancel}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        </>}
+        {forever && <div role="status" className="mb-2 flex items-center gap-2 rounded-lg border border-pink-300/50 bg-pink-500/5 px-3 py-1.5 text-xs dark:border-pink-500/25">
+          <Loader2 size={13} className="shrink-0 animate-spin text-pink-500" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-medium">{tt('generateForever')}{pauseSeconds !== null && !queueBusy
+            && <> · <span role="timer" className="tabular-nums">{pauseText.countdown.replace('{time}', formatGenerationCountdown(pauseSeconds))}</span></>}</span>
+          <button type="button" onClick={stopForever} className="shrink-0 rounded-md px-2 py-1 font-semibold text-pink-600 hover:bg-pink-500/10 dark:text-pink-300">
+            {pauseSeconds !== null && !queueBusy ? pauseText.cancel : tt('generateForeverStop')}</button>
+        </div>}
+        <div className="flex items-stretch gap-1.5">
+          <PickerPill look="split" className="order-2 w-[38%] max-w-[11rem] shrink-0" align="right" label={tt('createIntoPlaylist')} showLabel={false}
+            status={<ListMusic size={15} className={`shrink-0 ${chosenPlaylistName ? 'text-pink-500' : ''}`} aria-hidden />}
+            value={chosenPlaylistName ?? tt('createIntoPlaylist')}>
+            {close => <>
+              <NewCollectionOption label={tt('createIntoNewPlaylist')} onPick={() => { close(); setNewPlaylistOpen(true); }} />
+              <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
+              <CollectionOption value="" selected={!chosenPlaylist} name={tt('createIntoNoPlaylist')} meta={t('library')}
+                onPick={() => { choosePlaylist(''); close(); }} />
+              {playlists.map(entry => <CollectionOption key={entry.id} value={entry.id} selected={entry.id === chosenPlaylist} name={entry.name}
+                cover={entry.coverUrl} meta={`${entry.kind === 'album' ? t('album') : t('playlist')} · ${songCount(entry.songIds?.length ?? 0)}`}
+                onPick={() => { choosePlaylist(entry.id); close(); }} />)}
+            </>}
+          </PickerPill>
+        <div className="order-1 flex min-w-0 flex-1 gap-px">
         <button
           type="button"
           onClick={submit}
           disabled={pair.blocked || (cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
             ? packedAceInvalid.length > 0 || !native.ready || (aceEngine && !aceOptions) || mmComponentsPartial || !nativeAdaptersReady || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`flex h-12 min-w-0 flex-1 items-center justify-center gap-2 ${cloud ? 'rounded-xl' : 'rounded-l-xl'} bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50`}
         >
           {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
           {yue && composing && instrumental ? tt('composingScore') : yue && instrumental ? tt('createInstrumental') : t('create')}
           {activeJobCount > 0 && <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{activeJobCount}</span>}
         </button>
+        {!cloud && <PickerPill kind="dialog" look="primary" align="right" label={musicStrings.createOptions} icon={<ChevronDown size={18} aria-hidden />}>
+          {() => <div className="space-y-3 p-1 text-xs">
+            <Switch checked={forever} onChange={enabled => enabled ? setForever(true) : stopForever()} label={tt('generateForever')} hint={tt('generateForeverHint')} />
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{pauseText.label}</p>
+              <CatalogSegments<GenerationPauseMode> label={pauseText.label} value={pauseMode} onChange={setPauseMode}
+                options={[{ value: 'none', label: pauseText.none }, { value: 'fixed', label: pauseText.fixed }, { value: 'random', label: pauseText.random }]} />
+              {pauseMode !== 'none' && <div className="flex flex-wrap items-center gap-2">
+                <input aria-label={pauseMode === 'fixed' ? pauseText.minutes : pauseText.minimum}
+                  type="number" min="0" step="any" value={pauseStart}
+                  onChange={event => (pauseMode === 'fixed' ? setPauseMinutes : setPauseMinimum)(event.target.value)}
+                  className="w-20 rounded-lg border border-zinc-200 bg-transparent px-2 py-1.5 dark:border-white/15" />
+                {pauseMode === 'random' && <>
+                  <span aria-hidden>–</span>
+                  <input aria-label={pauseText.maximum} type="number" min="0" step="any" value={pauseEnd}
+                    onChange={event => setPauseMaximum(event.target.value)}
+                    className="w-20 rounded-lg border border-zinc-200 bg-transparent px-2 py-1.5 dark:border-white/15" />
+                </>}
+                <span>{pauseText.unit}</span>
+                {!validPause && <span role="alert" className="w-full text-rose-600 dark:text-rose-400">{pauseText.invalid}</span>}
+              </div>}
+            </div>
+          </div>}
+        </PickerPill>}
+        </div>
+        </div>
       </footer>
       {yue && editorOpen && (
         <MidiEditor
