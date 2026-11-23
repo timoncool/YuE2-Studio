@@ -4,6 +4,7 @@ import { useI18n } from '../context/I18nContext';
 import { nativeMusicSourceStrings } from '../i18n/musicSource';
 import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 import { WorkProgress } from './WorkProgress';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 
 export interface HeartMuLaOptions {
   temperature?: number;
@@ -91,11 +92,6 @@ type LegacyManagedModel = 'heartmula' | 'stable_audio' | 'stable-audio-3-medium'
 type ModelInstallTarget =
   | { model: LegacyManagedModel; target?: never }
   | { model: string; target: { catalogue: string; installPath: string; label: string } };
-
-const INSTALL =
-  'inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50';
-const CANCEL =
-  'mt-2 inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-zinc-200';
 
 export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target }: ModelInstallTarget & {
   bytes: number;
@@ -189,10 +185,10 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     {busy ? (
       <WorkProgress label={`${installing}${progress ? ` · ${sets.of(gb(progress.done), gb(progress.total))}` : ''}`} percent={percent ?? null} />
     ) : (
-      <button type="button" className={INSTALL} onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</button>
+      <PrimaryButton className="w-full" onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
     )}
-    {busy && canCancel && <button type="button" className={CANCEL} disabled={cancelling}
-      onClick={() => void cancel()}>{t('cancelDownload')}</button>}
+    {busy && canCancel && <SecondaryButton className="mt-2" disabled={cancelling}
+      onClick={() => void cancel()}>{t('cancelDownload')}</SecondaryButton>}
     {error && <p role="alert">{error}</p>}
     {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">{(nativeMusicSourceStrings[language as keyof typeof nativeMusicSourceStrings] ?? nativeMusicSourceStrings.en).modelLicense}</a>}
   </div>;

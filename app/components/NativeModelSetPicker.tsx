@@ -5,15 +5,11 @@ import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 import { apiUrl } from '../services/apiBase';
 import type { NativeProfile, SetDownload } from '../services/nativeMusicProfiles';
 import { WorkProgress } from './WorkProgress';
+import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 
 type Engine = 'acestep-cpp' | 'minimaxmusic-cpp';
 type Runtime = { supported: boolean; installed?: boolean; bytes?: number; download?: SetDownload | null };
 type Phase = 'idle' | 'engine' | 'model';
-
-const PRIMARY =
-  'inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50';
-const OUTLINE =
-  'inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-zinc-200';
 
 async function answer(response: Response): Promise<Record<string, unknown>> {
   const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -177,12 +173,12 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
       ) : busy ? (
         <div>
           <WorkProgress label={`${phase === 'engine' ? text.engineStage : text.modelStage}${download?.total_bytes ? ` · ${text.of(gb(download.downloaded_bytes), gb(download.total_bytes))}` : ''}`} percent={percent} />
-          <button type="button" className={`${OUTLINE} mt-2`} onClick={cancel}>{text.cancel}</button>
+          <SecondaryButton className="mt-2" onClick={cancel}>{text.cancel}</SecondaryButton>
         </div>
       ) : (
-        <button type="button" className={PRIMARY} onClick={() => void begin()}>
+        <PrimaryButton className="w-full" onClick={() => void begin()}>
           {text.download(name, gb(total))}
-        </button>
+        </PrimaryButton>
       ))}
       {error && phase === 'idle' && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{text.failed} {error}</p>}
     </fieldset>
