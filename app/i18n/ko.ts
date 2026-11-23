@@ -2003,6 +2003,8 @@ export const ko = {
     updateDownload: "{size} 내려받기",
     updateFreed: "{size} 확보",
     updateNothing: "이번 릴리스에서 업데이트할 것이 없습니다. 모두 준비되어 있습니다.",
+    updateRowDone: "완료",
+    updateRowQueued: "대기 중",
     updateSettingsEntry: "이번 릴리스에서 바뀐 점",
     updateSettingsHint: "이번 릴리스가 업데이트하고, 추가하고, 더 이상 쓰지 않는 엔진과 모델",
     updateDone: "업데이트 완료: 새 엔진과 모델이 준비되었고 이전 것은 지워졌습니다",

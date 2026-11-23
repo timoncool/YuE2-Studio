@@ -2014,6 +2014,8 @@ export const zh = {
     updateDownload: "下载 {size}",
     updateFreed: "释放 {size}",
     updateNothing: "本次发布无需更新：一切就绪。",
+    updateRowDone: "完成",
+    updateRowQueued: "排队中",
     updateSettingsEntry: "本次发布的变化",
     updateSettingsHint: "本次发布更新、新增和不再需要的引擎与模型",
     updateDone: "更新完成：新的引擎和模型已就位，旧的已移除",

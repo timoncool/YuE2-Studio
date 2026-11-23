@@ -2019,6 +2019,8 @@ export const en = {
     updateDownload: "download {size}",
     updateFreed: "frees {size}",
     updateNothing: "Nothing to update in this release: everything is in place.",
+    updateRowDone: "done",
+    updateRowQueued: "waiting",
     updateSettingsEntry: "What changed in this release",
     updateSettingsHint: "The engines and models this release updates, adds and no longer needs",
     updateDone: "Update done: the new engines and models are in place, the old ones are removed",

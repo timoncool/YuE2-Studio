@@ -2017,6 +2017,8 @@ export const ru = {
     updateDownload: "скачать {size}",
     updateFreed: "освободится {size}",
     updateNothing: "В этом релизе обновлять нечего: всё на месте.",
+    updateRowDone: "готово",
+    updateRowQueued: "в очереди",
     updateSettingsEntry: "Что изменилось в этом релизе",
     updateSettingsHint: "Движки и модели, которые этот релиз обновляет, добавляет и убирает",
     updateDone: "Обновление готово: новые движки и модели на месте, старые убраны",

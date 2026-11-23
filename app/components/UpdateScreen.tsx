@@ -87,7 +87,10 @@ export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => voi
   const plan = state?.plan ?? null;
   const job = state?.job ?? null;
   const reason = (code: string, english: string) => (WHY[code] ? t(WHY[code]) : english);
-  const progress = (row: Row): number | null => (running && row.bytes > 0 ? ((row.bytes - row.download) / row.bytes) * 100 : null);
+  const progress = (row: Row): number | null => (running && row.bytes > 0 && row.download > 0 && row.download < row.bytes
+    ? ((row.bytes - row.download) / row.bytes) * 100 : null);
+  const size = (row: Row) => (row.download === 0 ? t('updateRowDone')
+    : running && row.download === row.bytes ? `${t('updateRowQueued')} · ${bytes(row.download)}` : bytes(row.download));
   // while the download runs, its rows stay on screen as they were when it began
   const updated = running && job ? job.updated : plan?.updated ?? [];
   const added = running && job ? job.added : plan?.added ?? [];
@@ -147,8 +150,8 @@ export const UpdatePlanView: React.FC<{ onDone?: () => void; onLater?: () => voi
       )}
       {!plan && !error && <Loader2 size={18} className="animate-spin text-zinc-400" />}
       {empty && job?.status !== 'done' && <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('updateNothing')}</p>}
-      {group(t('updateUpdated'), updated.map((row) => line(`${row.part}-${row.id}`, row.name, version(row.from, row.to), bytes(row.download), reason(row.reason_code, row.reason), progress(row))))}
-      {group(t('updateAdded'), added.map((row) => line(`${row.part}-${row.id}`, row.name, version(null, row.to), bytes(row.download), reason(row.reason_code, row.reason), progress(row))))}
+      {group(t('updateUpdated'), updated.map((row) => line(`${row.part}-${row.id}`, row.name, version(row.from, row.to), size(row), reason(row.reason_code, row.reason), progress(row))))}
+      {group(t('updateAdded'), added.map((row) => line(`${row.part}-${row.id}`, row.name, version(null, row.to), size(row), reason(row.reason_code, row.reason), progress(row))))}
       {plan && group(t('updateRetired'), plan.retired.map((gone) => line(gone.what, gone.name, null, gone.size > 0 ? `−${bytes(gone.size)}` : '', reason(gone.reason_code, gone.reason), null)))}
       {plan && !empty && (
         <div className="flex flex-wrap items-center gap-3 pt-1">

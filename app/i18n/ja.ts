@@ -2003,6 +2003,8 @@ export const ja = {
   updateDownload: "{size} をダウンロード",
   updateFreed: "{size} を解放",
   updateNothing: "このリリースで更新するものはありません。すべて揃っています。",
+  updateRowDone: "完了",
+  updateRowQueued: "待機中",
   updateSettingsEntry: "このリリースで変わったこと",
   updateSettingsHint: "このリリースで更新・追加・不要になるエンジンとモデル",
   updateDone: "更新完了：新しいエンジンとモデルが揃い、古いものは削除されました",

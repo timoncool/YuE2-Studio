@@ -1897,6 +1897,8 @@ export const pt = {
     updateDownload: 'descarregar {size}',
     updateFreed: 'liberta {size}',
     updateNothing: 'Nada a atualizar nesta versão: está tudo no lugar.',
+    updateRowDone: 'pronto',
+    updateRowQueued: 'na fila',
     updateSettingsEntry: 'O que mudou nesta versão',
     updateSettingsHint: 'Os motores e modelos que esta versão atualiza, acrescenta e deixa de precisar',
     updateDone: 'Atualização concluída: os novos motores e modelos estão no lugar, os antigos foram removidos',

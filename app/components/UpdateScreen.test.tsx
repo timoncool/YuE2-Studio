@@ -19,6 +19,20 @@ afterEach(() => {
 });
 
 describe('UpdatePlanView', () => {
+  it('marks finished rows done and waiting rows queued while the update runs', async () => {
+    const row = (id: string, download: number) => ({ id, part: 'engine', ids: [id], name: id, from: null, to: '1', bytes: 100 * 2 ** 20, download, reason_code: '', reason: '' });
+    const plan = { version: '5.0.1', updated: [], added: [], retired: [], download: 0, freed: 0, show: true };
+    const job = { status: 'running', error: null, updated: [], added: [row('finished', 0), row('current', 50 * 2 ** 20), row('waiting', 100 * 2 ** 20)] };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ plan, job }) })));
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => root.render(<UpdatePlanView />));
+    expect(host.textContent).toContain('updateRowDone');
+    expect(host.textContent).toContain('updateRowQueued · 100 MB');
+    expect(host.textContent).not.toMatch(/\b0 MB/);
+    expect(host.querySelectorAll('.bg-pink-500')).toHaveLength(1);
+  });
 
 
   it('shows the exact recovery archive and local destination from the failed update', async () => {
