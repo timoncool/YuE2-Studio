@@ -843,7 +843,7 @@ it('shows the waiting pair without cancelling the song and keeps the selected Yu
   expect(pairRequests[0]).toMatchObject({ music_source: source, sequence: expect.any(Number), client_id: expect.any(String) });
   expect(host.textContent).toContain('Waiting for the active song');
   expect(host.textContent).toContain('Active pair · YuE2');
-  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · Quality');
+  expect(host.textContent).toContain('Requested pair · MiniMax Music3 · Quality');
   expect(host.textContent).toContain('my-acoustic-lora');
   expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
   expect(cancel).not.toHaveBeenCalled();
@@ -902,7 +902,7 @@ it('shows the engine memory failure and returns to the working pair with the dra
   await flush();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('ran out of GPU memory');
   expect(host.textContent).toContain('Active pair · YuE2');
-  expect(host.textContent).toContain('Requested pair · minimaxmusic-cpp · Minimal');
+  expect(host.textContent).toContain('Requested pair · MiniMax Music3 · Minimal');
   expect((buttonNamed('create') as HTMLButtonElement).disabled).toBe(true);
   expect(cancel).not.toHaveBeenCalled();
   click(buttonNamed('Return to active pair')!);
