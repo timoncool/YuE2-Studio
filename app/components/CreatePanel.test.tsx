@@ -459,7 +459,8 @@ it('keeps settings by native engine and profile and submits the selected pair', 
   click(create());
   expect(sent.at(-1)).toEqual({
     music_source: { kind: 'native', engine: 'acestep-cpp', model: 'balanced' },
-    style: 'folk', lyrics: 'shared words', steps: 8, ace: { guidance_scale: 2.5 },
+    style: 'folk', lyrics: 'shared words', steps: 8,
+    ace: { guidance_scale: 2.5, think: true, shift: 3, solver: 'heun', scheduler: 'linear_quadratic' },
   });
 
   act(() => root.unmount());

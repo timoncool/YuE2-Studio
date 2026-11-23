@@ -210,6 +210,85 @@ async fn submit_inner(
     (StatusCode::ACCEPTED, Json(accepted))
 }
 
+type Refusal = (StatusCode, Json<ApiError>);
+
+/// The native engine of a set, started for a task of its own while no song or training holds the card.
+async fn engine_for(state: &AppState, profile: &str) -> Result<(tokio::sync::OwnedRwLockWriteGuard<()>, ace::AceClient), Refusal> {
+    let lease = state.engine_use.clone().try_write_owned()
+        .map_err(|_| api_error(StatusCode::CONFLICT, "The local music engine is busy.".into()))?;
+    if state.jobs.read().await.values().any(song_in_engine) || state.training.active_run().await.is_some() {
+        return Err(api_error(StatusCode::CONFLICT, "Wait for the active generation or training run to finish.".into()));
+    }
+    let root = studio_data_root().ok_or_else(|| api_error(StatusCode::SERVICE_UNAVAILABLE, "Studio data folder is unavailable.".into()))?;
+    let launch = ace::resolve_installation(&root).launch(profile)
+        .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")))?;
+    state.minimax.stop().await;
+    evict_kept_models(state, "before ACE-Step planning").await;
+    let client = state.ace_runtime.start(launch).await
+        .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")))?;
+    Ok((lease, client))
+}
+
+/// Waits for an engine job that nobody cancels.
+async fn finished(client: &ace::AceClient, job: &str) -> Result<(), Refusal> {
+    let (_keep, mut rx) = mpsc::channel(1);
+    match wait_for_job(client, job, &mut rx).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(api_error(StatusCode::CONFLICT, "ACE-Step stopped the job.".into())),
+        Err(error) => Err(api_error(StatusCode::BAD_GATEWAY, format!("{error:#}"))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct PlanRequest {
+    /// inspire: a one-line idea becomes a caption, lyrics and metadata; format: what is written gets its metadata
+    /// completed and tidied.
+    mode: String,
+    profile: String,
+    request: Value,
+}
+
+/// The engine's language model plans a song without rendering it.
+pub(super) async fn plan(State(state): State<AppState>, Json(input): Json<PlanRequest>) -> Result<Json<Value>, Refusal> {
+    if !matches!(input.mode.as_str(), "inspire" | "format") {
+        return Err(api_error(StatusCode::BAD_REQUEST, "mode is inspire or format".into()));
+    }
+    let mut request = input.request.as_object().cloned()
+        .ok_or_else(|| api_error(StatusCode::BAD_REQUEST, "request must be an object".into()))?;
+    request.insert("lm_mode".into(), Value::from(input.mode));
+    let (_lease, client) = engine_for(&state, &input.profile).await?;
+    let job = client.submit_lm(&[Value::Object(request)]).await
+        .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")))?;
+    finished(&client, &job).await?;
+    let planned = client.lm_result(&job).await.map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
+    Ok(Json(json!({ "plan": planned.into_iter().next() })))
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct UnderstandRequest {
+    song_id: String,
+    profile: String,
+}
+
+/// The engine listens to a library track: its caption, lyrics, metadata and the audio codes that let a render follow
+/// its structure.
+pub(super) async fn understand(State(state): State<AppState>, Json(input): Json<UnderstandRequest>) -> Result<Json<Value>, Refusal> {
+    let library = state.library.clone();
+    let id = input.song_id.clone();
+    let sources = tokio::task::spawn_blocking(move || ace::Sources::from_library(&library, Some(&id), None))
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| api_error(StatusCode::NOT_FOUND, format!("{error:#}")))?;
+    let audio = sources.src_audio.ok_or_else(|| api_error(StatusCode::NOT_FOUND, "The song has no audio.".into()))?;
+    let (_lease, client) = engine_for(&state, &input.profile).await?;
+    let job = client.submit_understand(audio, None).await
+        .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, format!("{error:#}")))?;
+    finished(&client, &job).await?;
+    let (content_type, body) = client.result(&job).await.map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
+    let heard = ace::understood(&content_type, &body).map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))?;
+    Ok(Json(json!({ "request": heard })))
+}
+
 fn engine_request(
     request: &CreateMusicJobRequest,
     options: &AceOptions,

@@ -61,6 +61,7 @@ import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo
 import { NumberField } from './NumberField';
 import { CreateSpeedReference, type CreateSpeedProfile } from './CreateSpeedReference';
 import { AceTaskControls, aceTaskOptions, newAceTask, restoreAceTask } from './AceTaskControls';
+import { AceStudioFields, aceGenderLine, aceStudioFields, ditKind, keepAceStudio, keptAceStudio, restoreAceStudio } from './AceStudioFields';
 import { explainCliFailure } from '../services/cliFailure';
 import { loadNativeOpenRouterCatalog, modelsForCapability, openRouterMusicFields, openRouterMusicParameters, refreshNativeOpenRouterCatalog, type NativeOpenRouterModel, type OpenRouterMusicOptions, type OpenRouterMusicParameter } from '../services/nativeOpenRouter';
 import { miDashengDurationStrings, musicSourceStrings, nativeMusicSourceStrings } from '../i18n/musicSource';
@@ -521,6 +522,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const [aceAdapters, setAceAdapters] = useState<AdapterUse[]>([]);
   const [miniMaxAdapters, setMiniMaxAdapters] = useState<AdapterUse[]>([]);
   const aceEngine = nativeEngine === 'acestep-cpp';
+  const [aceStudio, setAceStudio] = useState(keptAceStudio);
+  useEffect(() => keepAceStudio(aceStudio), [aceStudio]);
   const miniMaxEngine = nativeEngine === 'minimaxmusic-cpp';
   const aceOptions = aceEngine ? aceTaskOptions(aceTask) : undefined;
   const native = useNativeMusicProfiles(nativeEngine, Boolean(onMusicEngineChange));
@@ -1046,6 +1049,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
       if (isProfileMusicEngine(song.ditModel)) {
         if (song.ditModel === 'acestep-cpp') {
           setAceTask(restoreAceTask(settings));
+          setAceStudio(restoreAceStudio(settings));
           const saved = Array.isArray(settings.adapters) ? settings.adapters
             : typeof settings.adapter === 'string' && settings.adapter
               ? [{ name: settings.adapter, scale: settings.adapter_scale }]
@@ -1843,7 +1847,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         music_source: nativeEngine === 'audio.cpp'
           ? { kind: 'audio_cpp', model: native.profile.id }
           : { kind: 'native', engine: nativeEngine, model: native.profile.id },
-        style: miDasheng ? scene.caption || scene.music : (vevo2 || soulx) ? '' : [...new Set(aceTriggers), caption].filter(Boolean).join(', '),
+        style: miDasheng ? scene.caption || scene.music : (vevo2 || soulx) ? '' : [...new Set(aceTriggers), caption].filter(Boolean).join(', ')
+          + (aceEngine && aceGenderLine(aceStudio) && !caption.includes(aceGenderLine(aceStudio)) ? `${caption ? '\n' : ''}${aceGenderLine(aceStudio)}` : ''),
         lyrics: miDasheng ? scene.speech_text.trim() : miniMaxH3 || stableAudio || hotstepSa3 || magenta || soulx ? '' : lyrics.replace(/\r\n?/g, '\n').trim(),
         ...(name.trim() ? { title: name.trim() } : {}),
         ...(chosenPlaylist ? { playlist_id: chosenPlaylist } : {}),
@@ -1865,8 +1870,8 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
         ...(soulx ? { soulx: soulxConversion ? { reference_song_id: soulxInputs.reference_song_id, source_song_id: soulxInputs.source_song_id } : { reference_song_id: soulxInputs.reference_song_id, reference_metadata: soulxInputs.reference_metadata, target_metadata: soulxInputs.target_metadata, control: soulxInputs.control } } : {}),
         ...settings,
         ...(miniMaxAdapterOptions.length ? { minimax: { ...settings.minimax, adapters: miniMaxAdapterOptions } } : {}),
-        ...(aceOptions && (Object.keys(aceOptions).length || aceAdapterOptions.length) ? {
-          ace: { ...settings.ace, ...aceOptions, ...(aceAdapterOptions.length ? { adapters: aceAdapterOptions } : {}) },
+        ...(aceEngine && aceOptions ? {
+          ace: { ...aceStudioFields(aceStudio, ditKind(undefined), aceTask.task), ...settings.ace, ...aceOptions, ...(aceAdapterOptions.length ? { adapters: aceAdapterOptions } : {}) },
         } : {}),
       });
       return;
@@ -2246,6 +2251,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {hotstep && <HotStepCoverFields draft={mulaCoverDraft} onChange={setMulaCoverDraft} ready={native.ready}
                 refresh={native.refresh} controlClassName={CONTROL} />}
               {aceEngine && <AceTaskControls value={aceTask} onChange={setAceTask} control={CONTROL} profileReady={native.ready} />}
+              {aceEngine && <AceStudioFields value={aceStudio} onChange={setAceStudio} kind={ditKind(undefined)} task={aceTask.task}
+                adapters={selectedNativeAdapters.some(adapter => !adapter.disabled)}
+                card={(title, body, actions) => <Card title={title} actions={actions} fold={`ace-${title}`}>{body}</Card>} />}
               {(aceEngine || miniMaxEngine) && native.profile && <AdapterPicker
                 key={nativeEngine} value={selectedNativeAdapters} onChange={aceEngine ? setAceAdapters : setMiniMaxAdapters} iconClass={ICON}
                 nativeLibrary={{ installed: installedNativeAdapters, slots: [
