@@ -396,14 +396,16 @@ const SliderRow: React.FC<{
 };
 
 /** A block of the form; with `fold` its title folds and opens it, and the choice is kept across restarts. */
-const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.ReactNode; fold?: string; children: React.ReactNode }> = ({ title, icon, actions, fold, children }) => {
-  const [folded, setFolded] = useState(() => (fold ? keptFolded().includes(fold) : false));
+const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.ReactNode; fold?: string; foldedByDefault?: boolean; children: React.ReactNode }> = ({ title, icon, actions, fold, foldedByDefault, children }) => {
+  // a card folded by default is kept open by an "!id" entry in the same list, any other card is kept folded by its id
+  const keptState = () => (fold ? (foldedByDefault ? !keptFolded().includes(`!${fold}`) : keptFolded().includes(fold)) : false);
+  const [folded, setFolded] = useState(keptState);
   // React keeps a block's state when the simple mode's block in the same place turns into a studio one
-  useEffect(() => setFolded(fold ? keptFolded().includes(fold) : false), [fold]);
+  useEffect(() => setFolded(keptState()), [fold, foldedByDefault]);
   const toggle = () => {
     if (!fold) return;
     setFolded(current => {
-      keepFolded(foldedAfter(keptFolded(), fold, !current));
+      keepFolded(foldedByDefault ? foldedAfter(keptFolded(), `!${fold}`, current) : foldedAfter(keptFolded(), fold, !current));
       return !current;
     });
   };
@@ -2388,9 +2390,9 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 nativeLibrary={{ installed: installedNativeAdapters, slots: [
                   { id: 'dit', role: 'sound' }, ...(miniMaxEngine ? [{ id: 'lm', role: 'composition' }] : []),
                 ], model: null }}
-                frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="native-lora">{body}</Card>}
+                frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="native-lora" foldedByDefault={!selectedNativeAdapters.some(adapter => !adapter.disabled)}>{body}</Card>}
               />}
-              {miniMaxEngine && native.profile?.ready && <Card title={mmText.componentOverride} fold="minimax-components">
+              {miniMaxEngine && native.profile?.ready && <Card title={mmText.componentOverride} fold="minimax-components" foldedByDefault={Object.keys(mmComponents).length === 0}>
                 <MiniMaxComponents value={mmComponents} onChange={setMmComponents} setFiles={native.profile.roles} />
               </Card>}
               {mulaCover && <MuLaCoverFields value={mulaCoverDraft.original}
@@ -3084,7 +3086,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             onChange={setAdapters}
             onTrigger={applyTrigger}
             iconClass={ICON}
-            frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="lora">{body}</Card>}
+            frame={(title, icon, actions, body) => <Card title={title} icon={icon} actions={actions} fold="lora" foldedByDefault={!adapters.some(adapter => !adapter.disabled)}>{body}</Card>}
           />
 
           <Card

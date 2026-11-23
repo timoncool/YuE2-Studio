@@ -660,6 +660,7 @@ it('keeps compatible native ACE LoRA separate and restores its saved scale', asy
   select('balanced');
   await flush();
   type(field('textarea[aria-label="styleCardTitle"]')!, 'bright folk');
+  click(buttonNamed('adaptersCardTitle')!);
   click(buttonNamed('adaptersAdd')!);
   click(buttonNamed('ACE XL Synthwave')!);
   click(create());
@@ -704,6 +705,7 @@ it('restores native MiniMax DiT and LM LoRA scales only in the MiniMax request',
   await show('minimaxmusic-cpp');
   type(field('textarea[aria-label="Global metadata"]')!, 'warm piano');
   type(field('textarea[aria-label="lyrics"]')!, 'short verse');
+  click(buttonNamed('adaptersCardTitle')!);
   click(buttonNamed('adaptersAdd')!);
   click(buttonNamed('MiniMax tune')!);
   click(create());
