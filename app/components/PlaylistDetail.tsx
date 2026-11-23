@@ -14,6 +14,7 @@ import { PlaylistTakeComparison } from './PlaylistTakeComparison';
 import { preferredTakeStrings } from '../i18n/preferredTake';
 import { PlaylistCover, PlaylistEditModal, PlaylistMenu, playlistLength, playlistSongs, reorderVisibleCollectionSongs } from './PlaylistEditor';
 import type { Playlist } from '../types';
+import { albumPageStrings } from '../i18n/album';
 import type { ToastType } from './Toast';
 
 interface PlaylistDetailProps {
@@ -154,7 +155,7 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
     return (
         <div className={`relative w-full h-full flex flex-col bg-linear-to-b ${bgGradient} overflow-hidden`}>
             {/* Header */}
-            <div className="shrink-0 p-4 md:p-8 pt-12 md:pt-8 flex flex-col md:flex-row gap-4 md:gap-8 items-center md:items-end bg-black/20 backdrop-blur-lg border-b border-white/10">
+            <div className="shrink-0 p-4 md:p-8 pt-14 md:pt-16 flex flex-col md:flex-row gap-4 md:gap-8 items-center md:items-end bg-black/20 backdrop-blur-lg border-b border-white/10">
                 <button
                     type="button"
                     onClick={() => setEditing(playlist)}
@@ -412,12 +413,12 @@ export const PlaylistDetail: React.FC<PlaylistDetailProps> = ({ playlistId, onBa
                         {songs.length === 0 && (
                             <div className="mb-6 flex flex-col items-center gap-2 text-center text-zinc-400">
                                 <ListMusic size={36} className="text-zinc-500" />
-                                <p className="font-medium text-white">{t('playlistEmptyTitle')}</p>
-                                <p className="max-w-md text-sm">{t('playlistEmptyHint')}</p>
+                                <p className="font-medium text-white">{album ? albumPageStrings[language].emptyTitle : t('playlistEmptyTitle')}</p>
+                                <p className="max-w-md text-sm">{album ? albumPageStrings[language].emptyHint : t('playlistEmptyHint')}</p>
                             </div>
                         )}
                         <div className="flex items-center justify-between gap-3">
-                            <h2 id="playlist-add-title" className="text-lg font-bold text-white">{t('findSongsForPlaylist')}</h2>
+                            <h2 id="playlist-add-title" className="text-lg font-bold text-white">{album ? albumPageStrings[language].addTitle : t('findSongsForPlaylist')}</h2>
                             <button
                                 type="button"
                                 onClick={() => setAdding(!showAdd)}
