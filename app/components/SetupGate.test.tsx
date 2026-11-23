@@ -67,31 +67,31 @@ it('opens upgrades from the notification target and reads per-engine readiness w
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(host.querySelector('h3')?.textContent).toBe('Engines and updates');
     const engineCard = (id: string) => host.querySelector(`[data-engine="${id}"]`)?.textContent ?? '';
-    expect(engineCard('local')).toContain('InstalledModels downloaded');
-    expect(engineCard('local')).not.toContain('Active');
-    expect(engineCard('acestep-cpp')).toContain('InstalledActiveModels not downloaded');
+    expect(engineCard('local')).toContain('YuE2Ready');
+    expect(engineCard('local')).not.toContain('In use now');
+    expect(engineCard('acestep-cpp')).toContain('Engine installed, no model downloadedIn use now');
     expect(engineCard('acestep-cpp')).toContain('Managed package · 6e0e414ec113');
     expect(engineCard('acestep-cpp')).toContain('download · d058cd86564a');
-    expect(engineCard('audio.cpp')).toContain('InstalledModels downloaded');
+    expect(engineCard('audio.cpp')).toContain('audio.cppReady');
     expect(engineCard('minimaxmusic-cpp')).toContain('Selected local executable · /external/mm-server');
     expect(engineCard('minimaxmusic-cpp')).toContain('Managed package · managed12345');
     expect(engineCard('hotstep')).toContain('Not installed');
-    expect(host.querySelector('[data-engine="hotstep"] summary')?.textContent).toBe('Models · 1 to download');
+    expect(engineCard('hotstep')).toContain('Models');
     expect(engineCard('hotstep')).toContain('New compatible model');
     expect(host.querySelector('[data-engine="hotstep"]')?.textContent).not.toContain('Invalid install target');
     expect(host.querySelector('[data-engine="rvc"]')).toBeNull();
     await act(async () => host.querySelector<HTMLInputElement>('label:has(input[type="checkbox"]) input')!.click());
     expect(host.querySelector('[data-engine="rvc"]')?.textContent).toContain('Unsupported GPU');
-    expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterNotConfigured');
+    expect(host.querySelector('[data-engine="openrouter"]')).toBeNull();
     openRouterConfigured = true;
     activeEngine = 'minimaxmusic-cpp';
-    const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'refresh')!;
+    const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'Check for updates')!;
     await act(async () => refresh.click());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
-    expect(host.querySelector('[data-engine="openrouter"]')?.textContent).toContain('openRouterConfigured');
-    expect(engineCard('minimaxmusic-cpp')).toContain('InstalledActive');
+    expect(engineCard('minimaxmusic-cpp')).toContain('In use now');
     expect(host.querySelector('[data-engine="minimaxmusic-cpp"] p')?.textContent).not.toContain('managed12345');
-    expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(2);
+    // two reads of the page and one of the YuE2 card's own set picker
+    expect(onlyRead.mock.calls.filter(([url]) => url === '/setup/status')).toHaveLength(3);
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -556,4 +556,28 @@ describe('where each part runs', () => {
     expect(row('HT-Demucs')?.other).toBe('vulkan');
     expect(row('Mel-Band RoFormer')?.other).toBe('vulkan');
   });
+});
+
+it('opens the settings after they were closed and closes them on Escape', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({})));
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const onClose = vi.fn();
+  const render = (isOpen: boolean) => act(async () => root.render(<QueryClientProvider client={client}>
+    <SettingsModal isOpen={isOpen} target="about" onNavigate={vi.fn()} onClose={onClose} theme="light" onToggleTheme={vi.fn()} />
+  </QueryClientProvider>));
+  try {
+    await render(false);
+    await render(true);
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    vi.unstubAllGlobals();
+  }
 });

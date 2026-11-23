@@ -80,6 +80,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showLangInfo]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || savingModels) return;
+      // a confirmation opened over the settings takes this Escape for itself
+      if (document.querySelectorAll('[aria-modal="true"], [role="alertdialog"]').length > 1) return;
+      onClose();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [isOpen, savingModels, onClose]);
+
   if (!isOpen) return null;
 
   const sections: Array<{ id: SectionId; label: string; hint: string; icon: React.ReactNode }> = [
@@ -100,16 +112,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, target, on
   const close = () => {
     if (!savingModels) onClose();
   };
-  useEffect(() => {
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      // a confirmation opened over the settings takes this Escape for itself
-      if (document.querySelectorAll('[aria-modal="true"], [role="alertdialog"]').length > 1) return;
-      close();
-    };
-    document.addEventListener('keydown', escape);
-    return () => document.removeEventListener('keydown', escape);
-  });
   const done = async () => {
     if (savingModels) return;
     setSavingModels(true);

@@ -39,7 +39,9 @@ it('names the component catalogue, refreshes it and offers the native engines fr
     expect(host.textContent).toContain('Could not check for a newer download list: the site did not answer.');
     expect(host.textContent).not.toContain('no answer.');
     expect(host.querySelector('[data-engine="acestep-cpp"]')?.textContent).toContain('d058cd86564a');
-    const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'refresh')!;
+    const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === 'Check for updates')!;
+    expect(host.textContent).toContain('Component catalogue: Download list no. 12');
+    expect(host.textContent).not.toContain('OpenRouter');
     await act(async () => refresh.click());
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     expect(refreshed).toBe(1);

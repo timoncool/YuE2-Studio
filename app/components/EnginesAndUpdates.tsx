@@ -5,7 +5,12 @@ import { useI18n } from '../context/I18nContext';
 import { componentCatalogueStrings, engineCardStrings, enginePageStrings, runtimeSourceStrings, showUnsupportedEngines } from '../i18n/enginePage';
 import { apiUrl } from '../services/apiBase';
 import type { PairStatus } from '../services/musicPair';
-import { SELF_READ, useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
+import { SELF_READ, useSetupStatus } from '../services/studioQueries';
+import { engineCardText } from '../i18n/engineCards';
+import { musicSourceStrings } from '../i18n/musicSource';
+import { useNativeMusicProfiles } from '../services/nativeMusicProfiles';
+import { NativeModelSetPicker } from './NativeModelSetPicker';
+import { YueModelSetPicker } from './YueModelSetPicker';
 import { NativeMusicRuntimeInstall } from './NativeMusicRuntimeInstall';
 import { AudioCppModelInstall } from './HeartMuLaControls';
 import { UpdatePlanView } from './UpdateScreen';
@@ -46,25 +51,31 @@ async function read<T>(path: string, signal: AbortSignal): Promise<T | null> {
 }
 
 /** One engine: its name and state at a glance, what it takes next, and the technical facts folded away. */
-function EngineCard({ id, name, focused, badges, details, detailsLabel, children }: {
+function EngineCard({ id, name, about, focused, status, inUse, details, detailsLabel, children }: {
   id: string;
   name: string;
+  about?: string;
   focused: boolean;
-  badges: ReactNode;
+  status: ReactNode;
+  inUse?: ReactNode;
   details?: ReactNode;
   detailsLabel: string;
   children?: ReactNode;
 }) {
   return (
-    <li data-engine={id} aria-label={name} className={`space-y-2 rounded-2xl border p-4 ${focused ? 'border-pink-500' : 'border-zinc-200 dark:border-white/10'}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <h4 className="mr-1 text-sm font-semibold text-zinc-900 dark:text-white">{name}</h4>
-        {badges}
+    <li data-engine={id} aria-label={name} className={`space-y-3 rounded-2xl border p-4 ${focused ? 'border-pink-500' : 'border-zinc-200 dark:border-white/10'}`}>
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="mr-1 text-sm font-semibold text-zinc-900 dark:text-white">{name}</h4>
+          {status}
+          {inUse}
+        </div>
+        {about && <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{about}</p>}
       </div>
       {children}
       {details && (
         <details className="text-xs text-zinc-500 dark:text-zinc-400">
-          <summary className="cursor-pointer select-none hover:text-pink-600">{detailsLabel}</summary>
+          <summary className="min-h-6 cursor-pointer select-none hover:text-pink-600">{detailsLabel}</summary>
           <div className="mt-1.5 space-y-1 break-all">{details}</div>
         </details>
       )}
@@ -72,9 +83,49 @@ function EngineCard({ id, name, focused, badges, details, detailsLabel, children
   );
 }
 
-export function EnginesAndUpdates({ focus, onNavigate }: {
+
+/** ACE-Step and MiniMax: the same quality choice as in the create form, so the words, sizes and downloads match. */
+function NativeEngineQuality({ engine, name, onChanged }: { engine: 'acestep-cpp' | 'minimaxmusic-cpp'; name: string; onChanged: () => void }) {
+  const native = useNativeMusicProfiles(engine);
+  if (!native.profiles.length) return null;
+  return <NativeModelSetPicker engine={engine} name={name} profiles={native.profiles} selected={native.profile} engineInstalled={native.installed}
+    onSelect={native.select} onChanged={() => { native.refresh(); onChanged(); }} />;
+}
+
+/** audio.cpp and HOT-Step: every model as a row with what it does, its state and its own download. */
+function ModelRows({ engine, catalogue, models, onChanged }: { engine: string; catalogue: string; models: ModelStatus[]; onChanged: () => void }) {
+  const { language } = useI18n();
+  const text = engineCardText[language];
+  const hints = musicSourceStrings[language].hintModels as Record<string, string>;
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{text.models}</p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">{text.modelsHint}</p>
+      <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 dark:divide-white/5 dark:border-white/10">
+        {models.filter(model => model.ready || modelInstallPath(engine, model.install_path)).map(model => {
+          const [title, ...rest] = (model.label ?? model.name ?? model.id).split(' · ');
+          const installPath = modelInstallPath(engine, model.install_path);
+          const meta = [hints[model.id], rest.filter(part => part !== 'HOT-Step').join(' · ')].filter(Boolean).join(' · ');
+          return (
+            <li key={model.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-zinc-900 dark:text-white">{title}</span>
+                {meta && <span className="block text-xs text-zinc-500 dark:text-zinc-400">{meta}</span>}
+              </span>
+              {model.ready ? <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">{text.downloaded}</span>
+                : installPath && <AudioCppModelInstall secondary model={model.id} bytes={model.missing_bytes ?? 0} language={language} onInstalled={onChanged}
+                  target={{ catalogue, installPath, label: title }} />}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+export function EnginesAndUpdates({ focus }: {
   focus?: string;
-  onNavigate: (target: 'models' | 'engine' | 'cloud') => void;
+  onNavigate?: (target: 'models' | 'engine' | 'cloud') => void;
 }) {
   const { language, t } = useI18n();
   const [showUnsupported, setShowUnsupported] = useState(false);
@@ -83,12 +134,12 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
     const target = [...(list.current?.children ?? [])].find(item => item.getAttribute('data-engine') === focus);
     target?.scrollIntoView?.({ block: 'nearest' });
   }, [focus]);
-  const [title, active, installed, missing, checking, unavailable, manageModels, settings] = enginePageStrings[language];
+  const [title, , , , checking, unavailable] = enginePageStrings[language];
   const [managedPackage, localExecutable] = runtimeSourceStrings[language];
   const catalogueText = componentCatalogueStrings[language];
   const card = engineCardStrings[language];
+  const text = engineCardText[language];
   const setup = useSetupStatus<{ ready?: boolean; engine_ready?: boolean }>();
-  const cloud = useOpenRouterSettings<{ configured?: boolean }>();
   const catalogue = useQuery({
     queryKey: ['engine-page'],
     queryFn: async ({ signal }) => {
@@ -127,53 +178,47 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
   const hasUnsupported = data?.rvc?.supported === false
     || (data?.ace?.supported === false && data.profiles[0]?.engine_installed === false)
     || (data?.minimax?.supported === false && data.profiles[1]?.engine_installed === false);
-  const refresh = async () => { await Promise.all([catalogue.refetch(), setup.refetch(), cloud.refetch()]); };
-  const busy = catalogue.isFetching || setup.isFetching || cloud.isFetching || refreshingCatalogue;
-  const installState = (value: boolean | undefined) => value === undefined
-    ? <CatalogBadge tone="muted">{catalogue.isPending ? checking : unavailable}</CatalogBadge>
-    : <CatalogBadge tone={value ? 'good' : 'muted'}>{value ? installed : missing}</CatalogBadge>;
-  const modelsState = (ready: boolean | undefined) => ready === undefined ? null
-    : <CatalogBadge tone={ready ? 'good' : 'muted'}>{ready ? card.modelsReady : card.modelsMissing}</CatalogBadge>;
-  const activeBadge = <CatalogBadge>{active}</CatalogBadge>;
+  const refresh = async () => { await Promise.all([catalogue.refetch(), setup.refetch()]); };
+  const busy = catalogue.isFetching || setup.isFetching || refreshingCatalogue;
+  // one state in words: what the engine can do now, not three badges to add up
+  const state = (installed: boolean | undefined, ready: boolean | undefined, unsupported = false) => unsupported
+    ? <CatalogBadge tone="muted">{card.unsupported}</CatalogBadge>
+    : installed === undefined ? <CatalogBadge tone="muted">{catalogue.isPending ? checking : unavailable}</CatalogBadge>
+    : !installed ? <CatalogBadge tone="muted">{text.notInstalled}</CatalogBadge>
+    : ready === false ? <CatalogBadge tone="muted">{text.noModel}</CatalogBadge>
+    : <CatalogBadge tone="good">{text.ready}</CatalogBadge>;
+  const inUse = <CatalogBadge>{text.inUse}</CatalogBadge>;
   const activePair = data?.pair?.active;
   const activeId = activePair?.kind === 'native' ? activePair.engine : activePair?.kind === 'audio_cpp' ? 'audio.cpp' : activePair?.kind;
   const catalogueProblem = catalogueError || data?.components?.refresh_error;
   return (
     <section aria-label={title} className="space-y-4">
-      {focus === 'updates' && <UpdatePlanView />}
+      <UpdatePlanView />
       <div className="flex flex-wrap items-center gap-3">
         <SecondaryButton disabled={busy} onClick={() => {
           if (!refreshingCatalogue) void refreshCatalogue();
           void refresh();
-        }}><RefreshCw size={14} className={`mr-1.5 inline ${busy ? 'animate-spin' : ''}`} aria-hidden />{t('refresh')}</SecondaryButton>
+        }}><RefreshCw size={14} className={`mr-1.5 inline ${busy ? 'animate-spin' : ''}`} aria-hidden />{text.checkUpdates}</SecondaryButton>
         {hasUnsupported && <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showUnsupported} onChange={event => setShowUnsupported(event.target.checked)} />
           {showUnsupportedEngines[language]}
         </label>}
       </div>
-      {data?.components && <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        {catalogueText.list(data.components.sequence, new Date(data.components.published).toLocaleDateString(language))}
-        {data.components.source === 'built-in' && <> · {catalogueText.builtIn}</>}
-        {data.components.checked_at && <> · {catalogueText.checked(new Date(data.components.checked_at * 1000).toLocaleString(language))}</>}
-      </p>}
       {catalogueProblem && (
         <div role={catalogueError ? 'alert' : 'status'} className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
           <span className="min-w-0 flex-1" title={catalogueProblem}>{card.offline}</span>
           <SecondaryButton disabled={refreshingCatalogue} onClick={() => void refreshCatalogue()}>{card.retry}</SecondaryButton>
         </div>
       )}
-      <ul ref={list} className="grid gap-2" aria-label={title}>
-        <EngineCard id="local" name="YuE2" focused={focus === 'local'} detailsLabel={card.details}
-          badges={<>{installState(data?.local ? Boolean(data.local.executable || setup.data?.engine_ready) : undefined)}
-            {activeId === 'local' && activeBadge}{modelsState(setup.data?.ready)}</>}
+      <ul ref={list} className="grid gap-3" aria-label={title}>
+        <EngineCard id="local" name="YuE2" about={text.about.local} focused={focus === 'local'} detailsLabel={text.versionAndFiles}
+          status={state(data?.local ? Boolean(data.local.executable || setup.data?.engine_ready) : undefined, setup.data?.ready)}
+          inUse={activeId === 'local' ? inUse : undefined}
           details={data?.local?.executable ? <>
-            <p>{data.local.executable}{data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}</p>
+            <p>{localExecutable} · {data.local.executable}{data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}</p>
             {data.local.in_effect?.backend && <p>{data.local.in_effect.backend}</p>}
           </> : undefined}>
-          <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={() => onNavigate('models')}>{manageModels}</SecondaryButton>
-            <SecondaryButton onClick={() => onNavigate('engine')}>{settings}</SecondaryButton>
-          </div>
+          <YueModelSetPicker onChanged={() => void refresh()} />
         </EngineCard>
         {native.map((engine, index) => {
           const profile = data?.profiles[index];
@@ -183,53 +228,34 @@ export function EnginesAndUpdates({ focus, onNavigate }: {
           const installedRevision = runtime?.installed_revision ?? (runtime?.installed ? runtime.revision : undefined);
           const unsupported = runtime?.supported === false && profile?.engine_installed === false;
           if (unsupported && !showUnsupported && focus !== engine.id) return null;
-          const toInstall = (models ?? []).flatMap(model => {
-            const installPath = modelInstallPath(engine.id, model.install_path);
-            return installPath && !model.ready ? [{ model, installPath, label: model.label ?? model.name ?? model.id }] : [];
-          });
           const local = profile?.selected_executable?.source === 'local' ? profile.selected_executable.path : null;
-          return <EngineCard key={engine.id} id={engine.id} name={engine.name} focused={focus === engine.id} detailsLabel={card.details}
-            badges={<>{unsupported ? <CatalogBadge tone="muted">{card.unsupported}</CatalogBadge> : installState(profile?.engine_installed)}
-              {activeId === engine.id && activeBadge}{modelsState(ready)}</>}
+          const sets = engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp';
+          return <EngineCard key={engine.id} id={engine.id} name={engine.name} about={text.about[engine.id]} focused={focus === engine.id} detailsLabel={text.versionAndFiles}
+            status={state(profile?.engine_installed, ready, unsupported)} inUse={activeId === engine.id ? inUse : undefined}
             details={local || installedRevision || (runtime?.revision && runtime.revision !== installedRevision) ? <>
               {local && <p>{localExecutable} · {local}</p>}
               {installedRevision && <p>{managedPackage} · {installedRevision.slice(0, 12)}</p>}
               {runtime?.revision && runtime.revision !== installedRevision && <p>{t('download')} · {runtime.revision.slice(0, 12)}</p>}
             </> : undefined}>
             {unsupported && <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('engineUnavailable')}</p>}
-            {(engine.id === 'acestep-cpp' || engine.id === 'minimaxmusic-cpp') && profile &&
-              runtime?.supported && (!profile.engine_installed || profile.adapter_runtime_update) &&
-              <NativeMusicRuntimeInstall engine={engine.id} update={profile.adapter_runtime_update} onInstalled={refresh} />}
-            {toInstall.length > 0 && (
-              <details open={focus === engine.id} className="text-sm">
-                <summary className="cursor-pointer select-none text-xs font-semibold text-zinc-600 hover:text-pink-600 dark:text-zinc-300">{card.models(toInstall.length)}</summary>
-                <ul className="mt-2 space-y-2">
-                  {toInstall.map(({ model, installPath, label }) => (
-                    <li key={model.id} className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
-                      <p className="mb-2 text-xs font-medium text-zinc-800 dark:text-zinc-100">{label}</p>
-                      <AudioCppModelInstall model={model.id} bytes={model.missing_bytes ?? 0} language={language} onInstalled={refresh}
-                        target={{ catalogue: engine.path, installPath, label }} />
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            {sets && profile && runtime?.supported && profile.engine_installed && profile.adapter_runtime_update &&
+              <NativeMusicRuntimeInstall engine={engine.id} update onInstalled={refresh} />}
+            {sets && !unsupported && <NativeEngineQuality engine={engine.id} name={engine.name} onChanged={() => void refresh()} />}
+            {!sets && models && models.length > 0 && <ModelRows engine={engine.id} catalogue={engine.path} models={models} onChanged={() => void refresh()} />}
           </EngineCard>;
         })}
         {(data?.rvc?.supported !== false || showUnsupported || focus === 'rvc') &&
-          <EngineCard id="rvc" name="RVC" focused={focus === 'rvc'} detailsLabel={card.details}
-            badges={data?.rvc?.supported === false ? <CatalogBadge tone="muted">{card.unsupported}</CatalogBadge> : installState(data?.rvc?.installed)}>
+          <EngineCard id="rvc" name="RVC" about={text.about.rvc} focused={focus === 'rvc'} detailsLabel={text.versionAndFiles}
+            status={state(data?.rvc?.installed, undefined, data?.rvc?.supported === false)}>
             {data?.rvc?.supported === false && data.rvc.reason && <p className="text-xs text-zinc-500 dark:text-zinc-400">{data.rvc.reason}</p>}
             {data?.rvc?.supported && !data.rvc.installed && <RvcNativeRuntime onInstalled={refresh} disabled={false} />}
           </EngineCard>}
-        <EngineCard id="openrouter" name="OpenRouter" focused={focus === 'openrouter'} detailsLabel={card.details}
-          badges={cloud.data
-            ? <CatalogBadge tone={cloud.data.configured ? 'good' : 'muted'}>{t(cloud.data.configured ? 'openRouterConfigured' : 'openRouterNotConfigured')}</CatalogBadge>
-            : <CatalogBadge tone="muted">{cloud.isPending ? checking : unavailable}</CatalogBadge>}>
-          <SecondaryButton onClick={() => onNavigate('cloud')}>{t('providers')}</SecondaryButton>
-        </EngineCard>
       </ul>
-      {focus !== 'updates' && <UpdatePlanView />}
+      {data?.components && <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        {text.catalogue}: {catalogueText.list(data.components.sequence, new Date(data.components.published).toLocaleDateString(language))}
+        {data.components.source === 'built-in' && <> · {catalogueText.builtIn}</>}
+        {data.components.checked_at && <> · {catalogueText.checked(new Date(data.components.checked_at * 1000).toLocaleString(language))}</>}
+      </p>}
     </section>
   );
 }
