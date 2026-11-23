@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { apiUrl } from '../services/apiBase';
 import type { NativeProfile } from '../services/nativeMusicProfiles';
 import { NativeModelSetPicker } from './NativeModelSetPicker';
+import { ConfirmDialog } from './ConfirmDialog';
+import { useI18n } from '../context/I18nContext';
+import { nativeModelSetStrings } from '../i18n/nativeModelSet';
 
 /**
  * YuE2's sets in the same quality card ACE-Step and MiniMax use: the studio's setup holds them (its catalogue, what
@@ -30,6 +33,9 @@ export function YueModelSetPicker({ onChanged, manage = false }: { onChanged: ()
   const [status, setStatus] = useState<Status | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<CatalogProfile | null>(null);
+  const { language } = useI18n();
+  const text = nativeModelSetStrings[language];
 
   const load = useCallback(async () => {
     try {
@@ -103,10 +109,13 @@ export function YueModelSetPicker({ onChanged, manage = false }: { onChanged: ()
         onSelect={id => { setChosen(id); if (profiles.find(entry => entry.id === id)?.ready) void settle(id); }}
         onChanged={() => { void load(); onChanged(); }}
         onReady={() => { if (selectedId) void settle(selectedId); }}
-        onRemove={manage ? id => void remove(catalog.profiles.find(entry => entry.id === id)?.components ?? []) : undefined}
+        onRemove={manage ? id => setRemoving(catalog.profiles.find(entry => entry.id === id) ?? null) : undefined}
         partial={id => partialIds(id).length > 0}
         onDiscardPartial={manage ? id => void remove(partialIds(id)) : undefined} />
       {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {removing && <ConfirmDialog isOpen title={text.removeSet(removing.labels?.[language] ?? removing.label)} confirmLabel={text.remove}
+        message={text.removeSetConfirm(removing.labels?.[language] ?? removing.label)}
+        onConfirm={() => { const set = removing; setRemoving(null); void remove(set.components); }} onCancel={() => setRemoving(null)} />}
     </>
   );
 }

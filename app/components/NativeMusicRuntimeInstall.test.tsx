@@ -31,11 +31,11 @@ it('shows progress across setup, reports failure, and refreshes profiles on retr
     await act(async () => root.render(<I18nProvider>
       <NativeMusicRuntimeInstall engine="acestep-cpp" onInstalled={onInstalled} />
     </I18nProvider>));
-    expect(button().textContent).toContain('1 GiB');
+    expect(button().textContent).toContain('1 GB');
     await act(async () => button().click());
     await poll();
-    expect(button().disabled).toBe(true);
-    expect(button().textContent).toContain('50%');
+    expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('50');
+    expect(button().textContent).toBe('Cancel download');
 
     current.download = { done: true, downloaded_bytes: 512, total_bytes: 1024, error: 'Cannot write the CUDA dependency' };
     await poll();

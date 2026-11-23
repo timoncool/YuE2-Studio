@@ -213,7 +213,7 @@ export function EnginesAndUpdates({ focus }: { focus?: string }) {
           status={state(data?.local ? Boolean(data.local.executable || setup.data?.engine_ready) : undefined, setup.data?.ready)}
           inUse={activeId === 'local' ? inUse : undefined}
           details={data?.local?.executable ? <>
-            <p>{text.facts.executable}: {data.local.executable}{data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}</p>
+            <p>{data.local.executable_source === 'settings' || data.local.executable_source === 'environment' ? text.facts.executable : text.facts.executableFile}: {data.local.executable}{data.local.executable_source === 'environment' && <> · {t('engineBinEnvOverride')}</>}</p>
             {data.local.in_effect?.backend && <p>{text.facts.computesOn}: {data.local.in_effect.backend.toUpperCase()}</p>}
           </> : undefined}>
           <YueModelSetPicker manage onChanged={() => void refresh()} />

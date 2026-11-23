@@ -563,7 +563,7 @@ it('offers the ACE runtime update while the installed fallback remains usable', 
   chooseSet('balanced');
   type(field('textarea[aria-label="styleCardTitle"]')!, 'acoustic folk');
   expect(buttonNamed('create')?.disabled).toBe(false);
-  click(buttonNamed('Update · 1 GiB')!);
+  click(buttonNamed('Update · 1 GB')!);
   expect(install).toHaveBeenCalledOnce();
   expect(buttonNamed('create')?.disabled).toBe(false);
   expect(host.textContent).not.toContain('Refresh models');

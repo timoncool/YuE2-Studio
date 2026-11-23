@@ -37,6 +37,9 @@ it('deletes a downloaded YuE2 set and a half-finished one from Settings', async 
   await flush();
   expect(host.textContent).toContain('partly downloaded');
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Delete the Light set"]')!.click());
+  expect(document.body.textContent).toContain('including ones it shares with other sets');
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('/setup/remove'))).toBe(false);
+  await act(async () => [...document.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === 'Delete')!.click());
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Delete the partial download"]')!.click());
   const removed = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/setup/remove')).map(([, init]) => JSON.parse(String(init?.body)));
   expect(removed).toEqual([{ ids: ['backbone-q4', 'vae'] }, { ids: ['backbone-q8'] }]);
