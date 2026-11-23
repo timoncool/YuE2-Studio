@@ -11,7 +11,6 @@ const PINNED: &[(&str, &str)] = &[
     (crate::audio_cpp_soulx::SVS_URL, crate::audio_cpp_soulx::SVS_SHA),
     (crate::audio_cpp_soulx::SVC_URL, crate::audio_cpp_soulx::SVC_SHA),
     (crate::acpp::SOXR_URL, "1c2177da4871f1713b666f576f83be649980b66d783723d9572a0ffffe67fe26"),
-    ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/RVC-GGUF/rvc-f16.gguf", "09bd8f233e7ae82697826513c94d754c3904e58e30ad503b83437defccf99a72"),
     ("https://developer.download.nvidia.com/compute/cuda/redist/libcufft/windows-x86_64/libcufft-windows-x86_64-12.4.0.43-archive.zip", "69d0ad8dc3a1be66f01a748a8206d0ceaafa56939474663fbe790dc3e91d2009"),
     ("https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", "623f43027d40d44ceadf0043f002bd25cf353e8f13ce90b9a87057019f560661"),
     ("https://files.pythonhosted.org/packages/76/bf/3fea3d1c6262bded26ae00e3106432d63235954965d7785f5051ac146651/nvidia_cufft-12.4.0.43-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", "0e8385013596b112d29c9ce8c63dc575b308d77636c7169104e18714f03961a8"),
@@ -36,8 +35,6 @@ const PINNED: &[(&str, &str)] = &[
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-479cbeb8-xcr0/hotstep-tools-479cbeb8-xcr0-cuda-windows-x64.zip", "892e370c877232edf0bb0228eac3ed54eec8c264d49f2457d3534cca5d2ab0ff"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-tools-479cbeb8-xcr0/ace-caption-479cbeb8-xcr0-windows-x64.zip", "6423f74c630f0e240983748ea16d8670e241bcc834f73d9db9399a45d118b33c"),
     ("https://github.com/timoncool/YuE2-Studio/releases/download/hotstep-trainer-75923e70-cuda12/hotstep-trainer-cuda12-backend-windows-x64.zip", "63bb122cb2634146a578be1635f4456a218679a3b500532a30d0c04d0e54383f"),
-    ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf", "1db9bd58af6995d8caab209c99f5a284212e5bd0654fbfd7e50ce1d5ac140ba9"),
-    ("https://huggingface.co/chenmozhijin/BSRoformer-GGUF/resolve/df802a6773d25ba6ef785ff619daa3e510503168/GaboxR67/MelBandRoformers/melbandroformers/vocals/voc_fv6-Q8_0.gguf", "2cd84c9f24513749b0cb1a6ab3e3be5c5e2f7d0e8533e50512c1f394d2828a73"),
     ("https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/config.json", "16bedd02b18770e43740419b0d5777f231047e96e8987f498e8a1123c39c9852"),
     ("https://huggingface.co/cocktailpeanut/muscriptor-large/resolve/87f4bf981f56f90fb5043153b3f54af3c3053da9/model.safetensors", "ac4eb6ea87dfc26b6ca6b954c6b967ab87ad4c7d08e078b25214f13ed051f397"),
     ("https://huggingface.co/cocktailpeanut/muscriptor-medium/resolve/27246ba68bd4d8f98bdec10a6edf8d7cf42a8826/config.json", "43e13a70fc9ae0af36b7447c06f3eac2282daeb69d79c1ff840ede7fdaa26a3b"),
@@ -271,7 +268,7 @@ mod tests {
         urls.extend(crate::lyrics_sync::assets().into_iter().map(|asset| asset.url));
         urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
         urls.extend(crate::assistant_runtime::assets().into_iter().map(|asset| asset.url));
-        urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
+        urls.extend([crate::separation::model().url, crate::separation::roformer_model().url]);
         urls.extend(crate::separation::RoformerBuild::ALL.into_iter().filter_map(crate::separation::roformer_asset).map(|asset| asset.url));
         urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
         urls.extend(crate::midi::SIZES.iter().flat_map(crate::midi::weight_assets).map(|asset| asset.url));
@@ -290,7 +287,7 @@ mod tests {
         urls.extend(crate::acpp::BUILDS.into_iter().flat_map(crate::acpp::assets).map(|asset| asset.url));
         urls.extend(crate::engine_runtime::assets().iter().map(|asset| asset.url));
         urls.extend(crate::assistant_runtime::assets().into_iter().map(|asset| asset.url));
-        urls.extend([crate::separation::MODEL.url, crate::separation::ROFORMER_MODEL.url]);
+        urls.extend([crate::separation::model().url, crate::separation::roformer_model().url]);
         urls.extend(crate::separation::RoformerBuild::ALL.into_iter().filter_map(crate::separation::roformer_asset).map(|asset| asset.url));
         urls.extend(crate::training::pack().iter().map(|asset| asset.url));
         urls.extend(crate::training::listen_pack().iter().map(|asset| asset.url));

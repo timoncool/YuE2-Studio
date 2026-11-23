@@ -2,20 +2,10 @@ use super::*;
 use serde_json::json;
 use std::path::Path as FsPath;
 
-const MODEL_URL: &str = "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/RVC-GGUF/rvc-f16.gguf";
-const MODEL: downloads::Asset = downloads::Asset {
-    id: "rvc-f16",
-    label: "RVC F16 GGUF",
-    kind: downloads::AssetKind::Model,
-    url: MODEL_URL,
-    relative_path: "models/rvc/rvc-f16.gguf",
-    bytes: 1_260_187_648,
-    unzip_into: None,
-    marker: "",
-    pick: &[],
-    vram_gb: None,
-    note: "Native RVC voice conversion support weights for audio.cpp.",
-};
+fn model() -> &'static downloads::Asset {
+    crate::components::required("rvc-f16")
+}
+
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -45,7 +35,7 @@ pub(super) async fn install(
     state
         .separator
         .downloader()
-        .install_all("rvc-apply", &[&MODEL])
+        .install_all("rvc-apply", &[model()])
         .await
         .map_err(bad_gateway)?;
     Ok(Json(setup_status(&state).await))
@@ -65,7 +55,7 @@ async fn setup_status(state: &AppState) -> Value {
             .iter()
             .map(|asset| asset.bytes)
             .sum::<u64>()
-            + if model_installed { 0 } else { MODEL.bytes }
+            + if model_installed { 0 } else { model().bytes }
     });
     let effective = effective_backend(Backend::Auto, native_ready, audio_ready);
     let burn = crate::rvc_burn::Runtime::discover(state).ready(false);
@@ -112,7 +102,7 @@ async fn selected_build(
 }
 
 fn model_ready(state: &AppState) -> bool {
-    state.separator.downloader().is_installed(&MODEL)
+    state.separator.downloader().is_installed(model())
 }
 
 fn bad_gateway(error: impl std::fmt::Display) -> rvc_voices::ApiFailure {
@@ -260,7 +250,7 @@ pub(super) async fn process_request(
                 },
             )
         })?;
-    let model = state.separator.downloader().path_of(&MODEL);
+    let model = state.separator.downloader().path_of(model());
     let result = tokio::task::spawn_blocking(move || {
         let _burn_lease = burn_lease;
         let stage = tempfile::tempdir_in(&voice_root)?;

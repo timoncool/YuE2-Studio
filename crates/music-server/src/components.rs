@@ -286,6 +286,7 @@ pub(crate) const REQUIRED: &[&str] = &[
     "parakeet-tdt-int8", "parakeet-ultra-int8", "onnxruntime",
     "gemma-4-e4b-q4_0", "gemma-4-12b-q4_0", "gemma-4-12b-q5_k_m", "gemma-4-12b-q6_k", "gemma-4-12b-q8_0",
     "llama-cuda", "llama-cuda-runtime", "llama-cuda12", "llama-cuda12-runtime", "llama-vulkan", "llama-cpu",
+    "htdemucs-6s", "roformer", "apollo", "rvc-f16",
 ];
 
 /// A file this build downloads by id: one of `REQUIRED`.
@@ -556,7 +557,13 @@ mod export {
     use serde_json::{Value, json};
 
     fn entry(asset: &Asset, mirrors: &[&str]) -> Value {
-        let sha = crate::pin_sha::sha256(asset.url).unwrap_or_else(|| panic!("{} has no pinned SHA-256", asset.id));
+        // hashes the studio never pinned, read from the Hugging Face LFS record of the pinned revision
+        const LOOKED_UP: &[(&str, &str)] = &[
+            ("https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/73ce4162f6cce370dd533c6782b772135c1b2a8e/Apollo-GGUF/apollo-orig.gguf", "41ee9eb6c5c265f126c1baaa3aca94d506dd604f4750f6da46d3cec00310df00"),
+        ];
+        let sha = crate::pin_sha::sha256(asset.url)
+            .or_else(|| LOOKED_UP.iter().find(|(url, _)| *url == asset.url).map(|(_, sha)| *sha))
+            .unwrap_or_else(|| panic!("{} has no pinned SHA-256", asset.id));
         let mut entry = json!({
             "label": asset.label,
             "kind": match asset.kind { AssetKind::Model => "model", AssetKind::Runtime => "runtime" },
@@ -594,6 +601,7 @@ mod export {
         crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
             .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
     }
+
 
 
 

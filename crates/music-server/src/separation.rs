@@ -51,41 +51,16 @@ impl Default for SeparationConfig {
 
 
 
-/// The separation model, and where it comes from.
-///
-/// One file, one download, pinned to the revision it was measured at: audio.cpp's own GGUF of HT-Demucs 6s, f16 as
-/// it is published. Like everything else here it is fetched only when the user asks for it.
-pub const MODEL: Asset = Asset {
-    id: "htdemucs-6s",
-    label: "HT-Demucs 6 stems",
-    kind: AssetKind::Model,
-    url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf",
-    relative_path: "models/htdemucs/htdemucs-6stems-f16.gguf",
-    bytes: 54_919_200,
-    unzip_into: None,
-    marker: "",
-    pick: &[],
-    vram_gb: Some(2),
-    note: "Six stems: drums, bass, other, vocals, guitar, piano. MIT-licensed, runs on audio.cpp's server.",
-};
+pub fn model() -> &'static Asset {
+    crate::components::required("htdemucs-6s")
+}
 
 /// The stems Mel-Band RoFormer leaves: the voice, and the mix without it.
 pub const ROFORMER_STEMS: [&str; 2] = ["vocals", "instrumental"];
 
-/// Mel-Band RoFormer voc_fv6 (GaboxR67) in GGUF Q8_0, as Dub Studio separates with it.
-pub const ROFORMER_MODEL: Asset = Asset {
-    id: "roformer",
-    label: "Mel-Band RoFormer voc_fv6 (Q8_0)",
-    kind: AssetKind::Model,
-    url: "https://huggingface.co/chenmozhijin/BSRoformer-GGUF/resolve/df802a6773d25ba6ef785ff619daa3e510503168/GaboxR67/MelBandRoformers/melbandroformers/vocals/voc_fv6-Q8_0.gguf",
-    relative_path: "models/bsroformer/voc_fv6-Q8_0.gguf",
-    bytes: 251_707_744,
-    unzip_into: None,
-    marker: "",
-    pick: &[],
-    vram_gb: Some(2),
-    note: "The vocals and the rest, cleaner than HT-Demucs: Dub Studio's separator, run by BSRoformer.cpp.",
-};
+pub fn roformer_model() -> &'static Asset {
+    crate::components::required("roformer")
+}
 
 /// The builds of BSRoformer.cpp, as Dub Studio names them.
 pub use dub_sep::asset::Build as RoformerBuild;
@@ -175,21 +150,21 @@ impl Separator {
     }
 
     pub fn model_path(&self) -> PathBuf {
-        self.downloader.path_of(&MODEL)
+        self.downloader.path_of(model())
     }
 
     pub fn is_installed(&self) -> bool {
-        self.downloader.is_installed(&MODEL)
+        self.downloader.is_installed(model())
     }
 
     /// The BSRoformer.cpp build for the card or the processor, where this platform has one.
     /// Where Apollo's weights for Restore after compression live, beside the separators'.
     pub fn restore_model_path(&self) -> PathBuf {
-        self.downloader.path_of(&crate::restore::MODEL)
+        self.downloader.path_of(crate::restore::model())
     }
 
     pub fn restore_installed(&self) -> bool {
-        self.downloader.is_installed(&crate::restore::MODEL)
+        self.downloader.is_installed(crate::restore::model())
     }
 
     /// The BSRoformer.cpp build for the card or the processor on this machine, where this platform has one.
@@ -206,7 +181,7 @@ impl Separator {
     /// Mel-Band RoFormer can run: its model, the engine build for the card or the processor, and for a CUDA build the
     /// libraries that build loads.
     pub fn roformer_installed(&self, gpu: bool) -> bool {
-        self.downloader.is_installed(&ROFORMER_MODEL) && self.roformer_runtime_installed(gpu)
+        self.downloader.is_installed(roformer_model()) && self.roformer_runtime_installed(gpu)
     }
 
     pub fn roformer_runtime_installed(&self, gpu: bool) -> bool {
@@ -255,7 +230,7 @@ impl Separator {
             right: samples.iter().skip(1).step_by(CHANNELS).copied().collect(),
         };
         crate::audio_pcm::write_wav_f32(&mix, &stereo)?;
-        let separated = dub_sep::separate(&mix, &work.path().join("stems"), &cli, &self.downloader.path_of(&ROFORMER_MODEL))
+        let separated = dub_sep::separate(&mix, &work.path().join("stems"), &cli, &self.downloader.path_of(roformer_model()))
             .map_err(|error| anyhow::anyhow!("Mel-Band RoFormer: {error}"))?;
         Ok((crate::audio_pcm::decode_stereo_44k(&separated.vocals)?, crate::audio_pcm::decode_stereo_44k(&separated.instrumental)?))
     }

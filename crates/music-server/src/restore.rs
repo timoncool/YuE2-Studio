@@ -9,21 +9,9 @@ use serde_json::{json, Value};
 
 use crate::downloads::{Asset, AssetKind};
 
-/// Apollo's weights, audio.cpp's GGUF of the official checkpoint, F32 as it is published and pinned to the revision
-/// it was measured at.
-pub const MODEL: Asset = Asset {
-    id: "apollo",
-    label: "Apollo",
-    kind: AssetKind::Model,
-    url: "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/73ce4162f6cce370dd533c6782b772135c1b2a8e/Apollo-GGUF/apollo-orig.gguf",
-    relative_path: "models/apollo/apollo-orig.gguf",
-    bytes: 66_398_592,
-    unzip_into: None,
-    marker: "",
-    pick: &[],
-    vram_gb: Some(2),
-    note: "Restores music compressed to MP3: removes the artefacts of compression, 44.1 kHz, the channels kept. Apollo (JusperLee), weights CC BY-SA 4.0, runs on audio.cpp's server.",
-};
+pub fn model() -> &'static Asset {
+    crate::components::required("apollo")
+}
 
 /// The model's id in audio.cpp's server.
 pub const ID: &str = "apollo";
@@ -117,9 +105,9 @@ mod tests {
 
     #[test]
     fn the_weights_are_pinned_to_a_revision() {
-        assert!(MODEL.url.contains("/resolve/73ce4162f6cce370dd533c6782b772135c1b2a8e/"), "{}", MODEL.url);
-        assert!(!MODEL.url.contains("/resolve/main/"));
-        assert!(MODEL.note.contains("CC BY-SA 4.0"));
+        assert!(model().url.contains("/resolve/73ce4162f6cce370dd533c6782b772135c1b2a8e/"), "{}", model().url);
+        assert!(!model().url.contains("/resolve/main/"));
+        assert!(model().note.contains("CC BY-SA 4.0"));
     }
 
     #[test]

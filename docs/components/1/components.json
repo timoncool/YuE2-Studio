@@ -1,6 +1,6 @@
 {
  "product": "yue2-studio",
- "sequence": 4,
+ "sequence": 5,
  "published": "2026-11-23",
  "files": {
   "gemma-4-e4b-q4_0": {
@@ -723,6 +723,45 @@
    "unzip_into": "onnx",
    "marker": "libonnxruntime",
    "note": "The tempo model runs on this, on the processor; it is loaded at run time, not linked in."
+  },
+  "htdemucs-6s": {
+   "label": "HT-Demucs 6 stems",
+   "kind": "model",
+   "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/462b4cec041e06ffb3d8fcf0d8c655051b1cd9f5/HTDemucs-6stems-GGUF/htdemucs-6stems-f16.gguf",
+   "bytes": 54919200,
+   "sha256": "1db9bd58af6995d8caab209c99f5a284212e5bd0654fbfd7e50ce1d5ac140ba9",
+   "path": "models/htdemucs/htdemucs-6stems-f16.gguf",
+   "vram_gb": 2,
+   "note": "Six stems: drums, bass, other, vocals, guitar, piano. MIT-licensed, runs on audio.cpp's server."
+  },
+  "roformer": {
+   "label": "Mel-Band RoFormer voc_fv6 (Q8_0)",
+   "kind": "model",
+   "url": "https://huggingface.co/chenmozhijin/BSRoformer-GGUF/resolve/df802a6773d25ba6ef785ff619daa3e510503168/GaboxR67/MelBandRoformers/melbandroformers/vocals/voc_fv6-Q8_0.gguf",
+   "bytes": 251707744,
+   "sha256": "2cd84c9f24513749b0cb1a6ab3e3be5c5e2f7d0e8533e50512c1f394d2828a73",
+   "path": "models/bsroformer/voc_fv6-Q8_0.gguf",
+   "vram_gb": 2,
+   "note": "The vocals and the rest, cleaner than HT-Demucs: Dub Studio's separator, run by BSRoformer.cpp."
+  },
+  "apollo": {
+   "label": "Apollo",
+   "kind": "model",
+   "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/73ce4162f6cce370dd533c6782b772135c1b2a8e/Apollo-GGUF/apollo-orig.gguf",
+   "bytes": 66398592,
+   "sha256": "41ee9eb6c5c265f126c1baaa3aca94d506dd604f4750f6da46d3cec00310df00",
+   "path": "models/apollo/apollo-orig.gguf",
+   "vram_gb": 2,
+   "note": "Restores music compressed to MP3: removes the artefacts of compression, 44.1 kHz, the channels kept. Apollo (JusperLee), weights CC BY-SA 4.0, runs on audio.cpp's server."
+  },
+  "rvc-f16": {
+   "label": "RVC F16 GGUF",
+   "kind": "model",
+   "url": "https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/32c1ce1fea57a513eb9386aa62408d47b1cf7ab2/RVC-GGUF/rvc-f16.gguf",
+   "bytes": 1260187648,
+   "sha256": "09bd8f233e7ae82697826513c94d754c3904e58e30ad503b83437defccf99a72",
+   "path": "models/rvc/rvc-f16.gguf",
+   "note": "Native RVC voice conversion support weights for audio.cpp."
   }
  },
  "sets": {

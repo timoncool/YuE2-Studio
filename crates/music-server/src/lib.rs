@@ -2643,7 +2643,7 @@ async fn separator_on_card(state: &AppState, runtime: lyrics_sync::OnnxFlavour) 
 
 /// The separator's files to download for its engine: HT-Demucs's model, or RoFormer's model and engine build.
 fn roformer_set(gpu: bool) -> Vec<&'static downloads::Asset> {
-    std::iter::once(&separation::ROFORMER_MODEL).chain(separation::Separator::roformer_engine(gpu)).collect()
+    std::iter::once(separation::roformer_model()).chain(separation::Separator::roformer_engine(gpu)).collect()
 }
 
 fn stems_on_disk(state: &AppState, song_id: &str) -> Vec<String> {
@@ -2683,18 +2683,18 @@ async fn separation_assets(State(state): State<AppState>) -> Json<Value> {
     let server: Vec<&'static downloads::Asset> = build.as_ref().map(|build| acpp::assets(*build)).unwrap_or_default();
     let model_installed = state.separator.is_installed();
     let mut assets = vec![serde_json::json!({
-        "id": separation::MODEL.id,
-        "label": separation::MODEL.label,
-        "bytes": separation::MODEL.bytes,
-        "note": separation::MODEL.note,
+        "id": separation::model().id,
+        "label": separation::model().label,
+        "bytes": separation::model().bytes,
+        "note": separation::model().note,
         "installed": model_installed,
     })];
     assets.extend(server.iter().map(|asset| {
         serde_json::json!({ "id": asset.id, "label": asset.label, "bytes": asset.bytes, "note": asset.note, "installed": state.acpp.downloader().is_installed(asset) })
     }));
     let server_progress = set_progress(state.acpp.downloader(), &server);
-    let bytes = server_progress["bytes"].as_u64().unwrap_or(0) + separation::MODEL.bytes;
-    let installed_bytes = server_progress["installed_bytes"].as_u64().unwrap_or(0) + if model_installed { separation::MODEL.bytes } else { 0 };
+    let bytes = server_progress["bytes"].as_u64().unwrap_or(0) + separation::model().bytes;
+    let installed_bytes = server_progress["installed_bytes"].as_u64().unwrap_or(0) + if model_installed { separation::model().bytes } else { 0 };
     // the model comes first and its finished record stays; the server downloading after it is the one to show
     Json(serde_json::json!({
         "assets": assets,
@@ -2931,7 +2931,7 @@ async fn install_separation_asset(
         let build = separation_build(wanted).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
         let background = state.clone();
         tokio::spawn(async move {
-            if let Err(error) = background.separator.downloader().install_all("separation", &[&separation::MODEL]).await {
+            if let Err(error) = background.separator.downloader().install_all("separation", &[separation::model()]).await {
                 eprintln!("[ERROR] the separator model could not be installed: {error:#}");
                 return;
             }
@@ -2950,11 +2950,11 @@ async fn install_separation_asset(
     // "started: true". The button then did nothing, twice, silently, with a
     // successful reply, and no amount of error handling in the interface could
     // have shown it.
-    if request.asset_id == separation::MODEL.id {
+    if request.asset_id == separation::model().id {
         state
             .separator
             .downloader()
-            .install("separation", &separation::MODEL)
+            .install("separation", separation::model())
             .await
             .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     } else if let Some(asset) = [acpp_server::asset::Build::Cuda13, acpp_server::asset::Build::Cuda12, acpp_server::asset::Build::Vulkan, acpp_server::asset::Build::Cpu, acpp_server::asset::Build::Metal]
@@ -3002,7 +3002,7 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
                 _ => "metal",
             });
             let selected = separation_build(config.runtime).ok();
-            (&separation::MODEL, selected.is_some_and(|build| state.acpp.installed(build)),
+            (separation::model(), selected.is_some_and(|build| state.acpp.installed(build)),
                 selected.map_or(0, |build| acpp_missing_bytes(&state, build)), card, gpu.is_some_and(|build| state.acpp.installed(build)), gpu.map_or(0, |build| acpp_missing_bytes(&state, build)))
         }
         separation::Engine::Roformer => {
@@ -3022,7 +3022,7 @@ async fn separation_status(State(state): State<AppState>) -> Json<Value> {
             };
             let gpu = roformer_on_card(&state, config.runtime);
             let selected_bytes = separation::Separator::roformer_engine(gpu).filter(|asset| !state.separator.downloader().is_installed(asset)).map_or(0, |asset| asset.bytes);
-            (&separation::ROFORMER_MODEL, state.separator.roformer_runtime_installed(gpu), selected_bytes,
+            (separation::roformer_model(), state.separator.roformer_runtime_installed(gpu), selected_bytes,
                 card.filter(|_| available), available && shared == 0 && state.separator.roformer_runtime_installed(true),
                 if available { missing + shared } else { 0 })
         }
@@ -3635,7 +3635,7 @@ async fn install_training_separator(state: &AppState, scope: &str) {
     };
     let separator = state.separator.clone();
     if !separator.is_installed() {
-        if let Err(error) = separator.downloader().install_all(scope, &[&separation::MODEL]).await {
+        if let Err(error) = separator.downloader().install_all(scope, &[separation::model()]).await {
             eprintln!("[ERROR] the separator model could not be installed: {error:#}");
             return;
         }
@@ -3753,8 +3753,8 @@ async fn training_pack_files(state: &AppState) -> (Vec<Value>, bool) {
     }
     pack.push(serde_json::json!({
         "id": "vocal-separator",
-        "label": separation::MODEL.label,
-        "bytes": separation::MODEL.bytes,
+        "label": separation::model().label,
+        "bytes": separation::model().bytes,
         "installed": separator_ready,
     }));
     (pack, separator_ready)
@@ -4714,13 +4714,13 @@ async fn restore_status(State(state): State<AppState>) -> Json<Value> {
     let build = separation_build(runtime);
     let model_installed = state.separator.restore_installed();
     let server_installed = build.as_ref().is_ok_and(|build| state.acpp.installed(*build));
-    let missing_bytes = (if model_installed { 0 } else { restore::MODEL.bytes }) + build.as_ref().map(|build| acpp_missing_bytes(&state, *build)).unwrap_or(0);
+    let missing_bytes = (if model_installed { 0 } else { restore::model().bytes }) + build.as_ref().map(|build| acpp_missing_bytes(&state, *build)).unwrap_or(0);
     Json(serde_json::json!({
         "model": {
-            "id": restore::MODEL.id,
-            "label": restore::MODEL.label,
-            "bytes": restore::MODEL.bytes,
-            "note": restore::MODEL.note,
+            "id": restore::model().id,
+            "label": restore::model().label,
+            "bytes": restore::model().bytes,
+            "note": restore::model().note,
             "installed": model_installed,
         },
         "runtime_installed": server_installed,
@@ -4742,7 +4742,7 @@ async fn restore_runtime(State(state): State<AppState>) -> Json<Value> {
         .map(|asset| serde_json::json!({ "id": asset.id, "label": asset.label, "bytes": asset.bytes, "note": asset.note, "installed": state.acpp.downloader().is_installed(asset), "kind": "runtime" }))
         .collect();
     let model_installed = state.separator.restore_installed();
-    assets.push(serde_json::json!({ "id": restore::MODEL.id, "label": restore::MODEL.label, "bytes": restore::MODEL.bytes, "note": restore::MODEL.note, "installed": model_installed, "kind": "model" }));
+    assets.push(serde_json::json!({ "id": restore::model().id, "label": restore::model().label, "bytes": restore::model().bytes, "note": restore::model().note, "installed": model_installed, "kind": "model" }));
     let server_progress = set_progress(state.acpp.downloader(), &server);
     let server_installed = build.as_ref().is_ok_and(|build| state.acpp.installed(*build));
     Json(serde_json::json!({
@@ -4755,7 +4755,7 @@ async fn restore_runtime(State(state): State<AppState>) -> Json<Value> {
         },
         "error": build.err().map(|error| error.to_string()),
         "active_download": restore_download(&state).await,
-        "chosen_model": restore::MODEL.id,
+        "chosen_model": restore::model().id,
     }))
 }
 
@@ -4763,7 +4763,7 @@ async fn restore_runtime(State(state): State<AppState>) -> Json<Value> {
 async fn install_restore(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let runtime = state.separation_config.read().await.runtime;
     let build = separation_build(runtime).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
-    let model: Vec<&'static downloads::Asset> = if state.separator.restore_installed() { Vec::new() } else { vec![&restore::MODEL] };
+    let model: Vec<&'static downloads::Asset> = if state.separator.restore_installed() { Vec::new() } else { vec![restore::model()] };
     if model.is_empty() && state.acpp.installed(build) {
         return Ok(Json(serde_json::json!({ "installed": true })));
     }
@@ -4785,7 +4785,7 @@ async fn remove_restore_model(State(state): State<AppState>) -> Result<Json<Valu
     if state.restore_run.read().await.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is being restored".into()));
     }
-    let freed = state.separator.downloader().remove(&restore::MODEL).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+    let freed = state.separator.downloader().remove(restore::model()).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
     Ok(Json(serde_json::json!({ "freed_bytes": freed })))
 }
 
@@ -4916,7 +4916,7 @@ fn restore_track(
 /// replaces the one its last restoration made; a recording's is a new track named after the file.
 fn restored_into_library(state: &AppState, source: &RestoreSource, audio: Vec<u8>) -> anyhow::Result<(String, Option<String>)> {
     let duration = library::audio_duration_seconds(&audio, "wav", None);
-    let settings = serde_json::json!({ "model": restore::MODEL.label });
+    let settings = serde_json::json!({ "model": restore::model().label });
     let (title, caption, lyrics, derived) = match source {
         RestoreSource::Song(original, _) => (restore::restored_title(&original.title), original.caption.clone(), original.lyrics.clone(), derivation(original, "restore", settings)),
         RestoreSource::File { title, .. } => (restore::restored_title(title), String::new(), String::new(), serde_json::json!({ "from_file": title, "tool": "restore", "settings": settings })),
@@ -8711,13 +8711,13 @@ async fn remove_separation_model(State(state): State<AppState>, request: Option<
     let roformer = request.is_some_and(|Json(request)| request.asset_id == "roformer");
     let downloader = state.separator.downloader();
     let freed = if roformer {
-        let mut freed = downloader.remove(&separation::ROFORMER_MODEL).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
+        let mut freed = downloader.remove(separation::roformer_model()).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
         for engine in separation::RoformerBuild::ALL.into_iter().filter_map(separation::roformer_asset) {
             freed += downloader.remove(engine).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?;
         }
         freed
     } else {
-        downloader.remove(&separation::MODEL).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?
+        downloader.remove(separation::model()).map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))?
     };
     Ok(Json(serde_json::json!({ "freed_bytes": freed })))
 }
@@ -11173,7 +11173,7 @@ fn update_catalogue(part: update_screen::Part) -> Vec<&'static downloads::Asset>
     let mut assets: Vec<&'static downloads::Asset> = match part {
         Part::Engine => engine_runtime::assets(),
         Part::Karaoke => lyrics_sync::assets(),
-        Part::Separation => std::iter::once(&separation::MODEL).chain(roformer_set(true)).chain(roformer_set(false)).chain(std::iter::once(&restore::MODEL)).collect(),
+        Part::Separation => std::iter::once(separation::model()).chain(roformer_set(true)).chain(roformer_set(false)).chain(std::iter::once(restore::model())).collect(),
         Part::Midi => midi::SIZES.iter().flat_map(midi::weight_assets).collect(),
         Part::Training => training::pack().iter()
             .chain((trainer_cuda_build() == Some(hardware::CudaBuild::Cuda12)).then(training::cuda12_backend))
@@ -11310,7 +11310,7 @@ fn update_plan_now(
         }
     };
     if leftovers.iter().any(|leftover| leftover.what == "htdemucs-onnx" && !leftover.paths.is_empty()) {
-        take(Part::Separation, &separation::MODEL, state.separator.downloader());
+        take(Part::Separation, separation::model(), state.separator.downloader());
     }
     // the tempo of the listening pack moves from the card's ONNX Runtime to the processor's
     if leftovers.iter().any(|leftover| leftover.what == "ort-gpu" && !leftover.paths.is_empty()) && state.training.listen_ready() {
@@ -13133,7 +13133,7 @@ async fn import_tracks(state: &AppState, job: &MusicJob, job_id: &str, tracks: V
             "tracks_asked": job.tracks_asked,
             // the window showing this job's card hands the card to the song
             "job_id": job_id,
-            "vocals_extraction": vocals_used_gpu.map(|used_gpu| serde_json::json!({ "used_gpu": used_gpu, "model": separation::MODEL.id })),
+            "vocals_extraction": vocals_used_gpu.map(|used_gpu| serde_json::json!({ "used_gpu": used_gpu, "model": separation::model().id })),
         });
         // Several tracks from one request share its name; number them so the
         // library can tell the takes apart.
