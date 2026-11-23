@@ -5,6 +5,8 @@ import Combobox, { type ComboOption } from './kit/Combobox';
 import { FieldLabel } from './kit/FieldLabel';
 import { useI18n } from '../context/I18nContext';
 import { formCardStrings } from '../i18n/formCards';
+import { nativeMusicEngineName } from '../services/nativeLibrary';
+import { relativeMoment } from '../services/dates';
 
 /** Finished songs of the library: the ones a form can take as an original, a voice or a melody. */
 export function useFinishedSongs(): { songs: Song[]; loaded: boolean } {
@@ -26,7 +28,10 @@ export function LibrarySongPicker({ label, value, onChange, placeholder, none, m
 }) {
   const { songs } = useFinishedSongs();
   const { language } = useI18n();
-  const options: ComboOption[] = songs.map(song => ({ value: song.id, label: song.title || '—', hint: song.style?.slice(0, 80) }));
+  const options: ComboOption[] = songs.map(song => ({
+    value: song.id, label: song.title || '—', cover: song.coverUrl || null, search: song.style,
+    hint: [song.ditModel === 'imported-audio' ? '' : song.ditModel === 'openrouter' ? 'OpenRouter' : nativeMusicEngineName(song.ditModel), song.duration, song.createdAt && relativeMoment(new Date(song.createdAt), language)].filter(Boolean).join(' · '),
+  }));
   if (value && !songs.some(song => song.id === value)) options.unshift({ value, label: missing ?? formCardStrings[language].missingSong, disabled: true });
   if (none) options.unshift({ value: '', label: none });
   const picker = <Combobox label={label} value={value} placeholder={placeholder} options={options}

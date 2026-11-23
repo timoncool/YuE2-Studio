@@ -196,7 +196,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
       secondary
         ? <SecondaryButton onClick={() => void start()} aria-label={bytes > 0 ? sets.download(name, gb(bytes)) : install}>
           <Download size={13} aria-hidden />{bytes > 0 ? (compact ? sets.downloadSize(gb(bytes)) : sets.download(name, gb(bytes))) : install}</SecondaryButton>
-        : <PrimaryButton className={fit ? '' : 'w-full'} onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
+        : <PrimaryButton className={fit ? '' : 'w-full'} onClick={() => void start()}><Download size={14} aria-hidden />{bytes > 0 ? sets.download(name, gb(bytes)) : install}</PrimaryButton>
     )}
     {busy && canCancel && <SecondaryButton className="mt-2" disabled={cancelling}
       onClick={() => void cancel()}>{t('cancelDownload')}</SecondaryButton>}

@@ -50,7 +50,9 @@ export const RestoreTool: React.FC<{
   chosenIsRestored: boolean;
   /** A run ended: the library has a new track. */
   onDone: () => void;
-}> = ({ songId, songTitle, restoredId, chosenIsRestored, onDone }) => {
+  /** The page shows the track picker only while the chosen track is the source. */
+  onSourceChange?: (from: 'song' | 'file') => void;
+}> = ({ songId, songTitle, restoredId, chosenIsRestored, onDone, onSourceChange }) => {
   const { t, language } = useI18n();
   const page = toolsPageStrings[language];
   const size = (bytes: number) => formatSize(bytes, language);
@@ -178,7 +180,7 @@ export const RestoreTool: React.FC<{
         {status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={page.download('Apollo', size(status.missing_bytes))} />}
       </>}
       footer={<>{page.model}: Apollo (JusperLee) · {page.license} CC BY-SA 4.0</>}>
-      <CatalogSegments<'song' | 'file'> fill label={t('restoreFrom')} value={from} onChange={setFrom}
+      <CatalogSegments<'song' | 'file'> fill label={t('restoreFrom')} value={from} onChange={next => { setFrom(next); onSourceChange?.(next); }}
         options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
       {from === 'file' && (
         <div>

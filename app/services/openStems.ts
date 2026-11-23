@@ -8,12 +8,10 @@ import { Song } from '../types';
  * application to switch pages, and the tools page picks the track up.
  */
 export function openStems(song: Song): void {
-  window.dispatchEvent(new CustomEvent('yue:open-stems', { detail: song.id }));
+  window.dispatchEvent(new CustomEvent('yue:open-stems', { detail: { songId: song.id, tool: 'stems' } }));
 }
 
-/** Opens a track on the tools page at its MIDI card. */
+/** Opens a track in the tools page's Audio to MIDI. */
 export function openMidi(song: Song): void {
-  openStems(song);
-  // the tools page mounts first, then its MIDI card is brought into view
-  window.setTimeout(() => window.dispatchEvent(new Event('yue:focus-midi')), 300);
+  window.dispatchEvent(new CustomEvent('yue:open-stems', { detail: { songId: song.id, tool: 'midi' } }));
 }

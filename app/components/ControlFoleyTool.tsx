@@ -54,11 +54,12 @@ export function ControlFoleyTool({ control, busy, onGenerate }: {
   const status = model.data;
   const page = toolsPageStrings[language];
   const limits = status?.duration_seconds;
-  useEffect(() => { if (limits && !duration) setDuration(String(limits.default)); }, [limits, duration]);
+  const filled = useRef(false);
+  useEffect(() => { if (limits && !filled.current) { filled.current = true; setDuration(String(limits.default)); } }, [limits]);
   const seconds = Number(duration);
   const inRange = Boolean(limits && duration.trim() && seconds >= limits.min && seconds <= limits.max);
   const noFfmpeg = Boolean(status?.missing.includes('FFmpeg'));
-  const reason = noFfmpeg ? text.ffmpeg : !source ? page.chooseVideo : busy ? page.otherGeneration : null;
+  const reason = noFfmpeg ? text.ffmpeg : !source ? page.chooseVideo : limits && !inRange ? `${page.foleySeconds}: ${page.range(new Intl.NumberFormat(language).format(limits.min), new Intl.NumberFormat(language).format(limits.max))}` : busy ? page.otherGeneration : null;
   const canCreate = Boolean(status?.ready && inRange && !reason && !uploading);
   const download = status && !status.ready && status.missing_bytes > 0 && status.installable;
   const [queued, setQueued] = useState(false);
@@ -101,9 +102,12 @@ export function ControlFoleyTool({ control, busy, onGenerate }: {
         <SecondaryButton onClick={() => void model.refetch()}>{common.refresh}</SecondaryButton>
       </div>
       : !status ? <p role="status" className="text-xs text-zinc-500 dark:text-zinc-400">{modelText.loading}</p>
-      : download ? <AudioCppModelInstall model="controlfoley" bytes={status.missing_bytes} fit
-          target={{ catalogue: '/v1/tools/controlfoley/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
-          language={language} onInstalled={() => void model.refetch()} />
+      : download ? <>
+          <AudioCppModelInstall model="controlfoley" bytes={status.missing_bytes} fit
+            target={{ catalogue: '/v1/tools/controlfoley/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
+            language={language} onInstalled={() => void model.refetch()} />
+          {noFfmpeg && <ActionReason>{text.ffmpeg}</ActionReason>}
+        </>
       : !status.ready && !noFfmpeg ? <p role="status" className="text-xs">{modelText.unavailable}</p>
       : <>
         <PrimaryButton disabled={!canCreate} onClick={() => void generate().then(ok => setQueued(ok))}>{text.create}</PrimaryButton>

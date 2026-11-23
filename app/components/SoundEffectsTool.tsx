@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { YueRequest } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { SELF_READ } from '../services/studioQueries';
@@ -63,10 +63,11 @@ export function SoundEffectsTool({ control, busy, onGenerate }: {
 
   const page = toolsPageStrings[language];
   const limit = status?.duration_seconds;
-  useEffect(() => { if (limit && !duration) setDuration(String(limit.default)); }, [limit, duration]);
+  const filled = useRef(false);
+  useEffect(() => { if (limit && !filled.current) { filled.current = true; setDuration(String(limit.default)); } }, [limit]);
   const seconds = Number(duration);
   const inRange = Boolean(limit && duration.trim() && seconds >= limit.min && seconds <= limit.max);
-  const reason = !description.trim() ? page.describeSound : busy ? page.otherGeneration : null;
+  const reason = !description.trim() ? page.describeSound : limit && !inRange ? `${page.duration}: ${page.range(new Intl.NumberFormat(language).format(limit.min), new Intl.NumberFormat(language).format(limit.max))}` : busy ? page.otherGeneration : null;
   const canCreate = Boolean(status?.ready && inRange && !reason);
   const download = status && !status.ready && status.missing_bytes > 0 && status.installable;
 

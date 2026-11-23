@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AudioLines, Disc3, Disc, ExternalLink, Plus, SlidersVertical } from 'lucide-react';
 import { useI18n } from '../../context/I18nContext';
+import { djStrings } from '../../i18n/dj';
 import { equalizer, onEqualizer } from '../../services/audioGraph';
 import { equalizerPanelOpen, onEqualizerPanel, onSidebarExtras, setEqualizerPanelOpen, sidebarExtras } from '../../services/playerPanels';
 import { onVisualizer, setVisualizer, visualizer } from '../../services/visualizerState';
@@ -31,7 +32,8 @@ const LOOK: Record<ExtrasLayout, string> = {
 };
 
 export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout = 'bar' }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const dj = djStrings[language];
   const [djOpen, setDjOpen] = useState(djModeOn);
   const [eqOpen, setEqOpen] = useState(equalizerPanelOpen);
   const [eqOn, setEqOn] = useState(() => equalizer().enabled);
@@ -103,11 +105,11 @@ export const PlayerExtraButtons: React.FC<{ layout?: ExtrasLayout }> = ({ layout
         {layout === 'list' && <span className="truncate text-sm font-medium">{t('vizTitle')}</span>}
       </button>}
       <button type="button" onClick={() => setDjModeOn(!djModeOn())}
-        title="DJ mode · two decks, scratching, stems and mixing"
-        aria-label="DJ mode" aria-pressed={djOpen}
+        title={`${dj.mode} · ${dj.subtitle}`}
+        aria-label={dj.mode} aria-pressed={djOpen}
         className={`${LOOK[layout]} ${layout === 'bar' ? 'hidden md:flex' : ''} ${djOpen ? ON : ''}`}>
         <Disc size={layout === 'bar' ? 17 : 20} className="shrink-0" />
-        {layout === 'list' && <span className="truncate text-sm font-medium">DJ mode</span>}
+        {layout === 'list' && <span className="truncate text-sm font-medium">{dj.mode}</span>}
       </button>
       {show('winamp') && <div ref={box} className={layout === 'bar' ? 'relative hidden md:block' : 'w-full'}>
         <button

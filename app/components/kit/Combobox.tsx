@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Music } from "lucide-react";
 
-export type ComboOption = { value: string; label: string; search?: string; group?: string; disabled?: boolean; hint?: string };
+export type ComboOption = { value: string; label: string; search?: string; group?: string; disabled?: boolean; hint?: string;
+  /** A row with a picture: the cover's address, or null for the placeholder note. */
+  cover?: string | null };
 
 /** A list with a filter field (Dub Studio's Combobox): typing a piece of a name narrows it; arrows and Enter pick, Escape
  * closes. Options keep their order; a change of `group` between neighbours starts a labelled group. */
@@ -98,7 +100,17 @@ export default function Combobox({ value, options, onChange, label, placeholder,
                 onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => !o.disabled && setActive(i)}
                 onClick={() => !o.disabled && commit(o.value)} title={o.hint ? `${o.label}\n${o.hint}` : o.label}
                 className={`px-2.5 py-1.5 text-[12px] ${o.hint ? "" : "truncate"} ${o.disabled ? "text-[var(--color-muted)] cursor-default" : "text-[var(--color-text)] cursor-pointer"} ${i === active && !o.disabled ? "bg-[var(--color-overlay)]" : ""} ${o.value === value ? "!text-[var(--color-accent)]" : ""}`}>
-                {o.hint ? <><div className="truncate">{o.label}</div><div className="text-[11px] leading-snug text-[var(--color-muted)]">{o.hint}</div></> : o.label}
+                {o.cover !== undefined ? (
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    {o.cover ? <img src={o.cover} alt="" className="size-9 shrink-0 rounded object-cover" />
+                      : <span className="grid size-9 shrink-0 place-items-center rounded bg-[var(--color-overlay)] text-[var(--color-muted)]"><Music size={14} aria-hidden /></span>}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">{o.label}</div>
+                      {o.hint && <div className="truncate text-[11px] leading-snug text-[var(--color-muted)]">{o.hint}</div>}
+                    </div>
+                    {o.value === value && <Check size={14} aria-hidden className="shrink-0 text-[var(--color-accent)]" />}
+                  </div>
+                ) : o.hint ? <><div className="truncate">{o.label}</div><div className="text-[11px] leading-snug text-[var(--color-muted)]">{o.hint}</div></> : o.label}
               </div>
             </div>
           ))}

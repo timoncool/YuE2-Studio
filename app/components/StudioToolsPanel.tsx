@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SELF_READ, useKaraokeStatus, useOpenRouterSettings } from '../services/studioQueries';
 import { karaokeReason, recogniseLyrics } from '../services/karaoke';
-import { Check, ChevronRight, Copy, Download, FileAudio, KeyboardMusic, Loader2, Play, Scissors, SlidersHorizontal, Wand2 } from 'lucide-react';
+import { AudioWaveform, Check, ChevronLeft, ChevronRight, Clapperboard, Copy, Download, FileAudio, KeyboardMusic, Loader2, Piano, Play, Scissors, SlidersHorizontal, Sparkles, Wand2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { saveFile } from '../services/saveFile';
@@ -25,7 +25,7 @@ import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { CatalogSegments } from './kit/Catalog';
 import { FieldLabel } from './kit/FieldLabel';
-import { ActionReason, ToolCard, ToolLauncher, ToolState } from './kit/ToolCard';
+import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
 import { LibrarySongPicker } from './LibrarySongPicker';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
@@ -71,8 +71,22 @@ interface CatalogModel {
 const CONTROL =
   'w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-hidden focus:border-pink-500 disabled:opacity-50 dark:border-white/10 dark:bg-black/30 dark:text-white';
 
-export function StudioToolsPanel({ initialSongId, onGenerateEffect, generationBusy }: {
+export const TOOL_IDS = ['stems', 'midi', 'restore', 'recognise', 'process', 'editor', 'effects', 'foley', 'midi-editor'] as const;
+export type ToolId = typeof TOOL_IDS[number];
+const TOOL_KEY = 'yue2.tools.tool';
+const rememberedTool = (): ToolId => {
+  try {
+    const saved = localStorage.getItem(TOOL_KEY);
+    return (TOOL_IDS as readonly string[]).includes(saved ?? '') ? saved as ToolId : 'stems';
+  } catch {
+    return 'stems';
+  }
+};
+
+export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect, generationBusy }: {
   initialSongId?: string | null;
+  /** The tool a menu or the address asked for; without one the list comes first on a phone. */
+  initialTool?: ToolId | null;
   onGenerateEffect?: (request: YueRequest) => void;
   generationBusy?: boolean;
 } = {}): React.ReactElement {
@@ -93,6 +107,16 @@ export function StudioToolsPanel({ initialSongId, onGenerateEffect, generationBu
   const [asrError, setAsrError] = useState<string | null>(null);
   const [processError, setProcessError] = useState<string | null>(null);
   const [asrSource, setAsrSource] = useState<'song' | 'file'>('song');
+  const [restoreFromFile, setRestoreFromFile] = useState(false);
+  const [tool, setTool] = useState<ToolId>(() => initialTool ?? rememberedTool());
+  const [listOnly, setListOnly] = useState(!initialTool);
+  useEffect(() => { if (initialTool) { setTool(initialTool); setListOnly(false); } }, [initialTool]);
+  const choose = (next: ToolId) => {
+    setTool(next);
+    setListOnly(false);
+    try { localStorage.setItem(TOOL_KEY, next); } catch { /* the choice is a convenience */ }
+    window.history.replaceState(window.history.state, '', `/tools/${next}`);
+  };
 
   const [asrModels, setAsrModels] = useState<CatalogModel[]>([]);
   const [asrModel, setAsrModel] = useState('');
@@ -137,6 +161,14 @@ export function StudioToolsPanel({ initialSongId, onGenerateEffect, generationBu
       setSongsLoaded(true);
     }
   }, []);
+
+  // a song made while the page is open is chosen in the picker before this list knows it
+  const reloadedFor = useRef('');
+  useEffect(() => {
+    if (!songId || !songsLoaded || reloadedFor.current === songId || songs.some(song => song.id === songId)) return;
+    reloadedFor.current = songId;
+    void loadSongs();
+  }, [songId, songsLoaded, songs, loadSongs]);
 
   // A track handed over by a menu wins over whatever was chosen here before.
   useEffect(() => {
@@ -285,251 +317,281 @@ export function StudioToolsPanel({ initialSongId, onGenerateEffect, generationBu
   const stemsReason = !songId ? page.chooseTrack : chosenIsStem ? t('stemOfStem') : settings.stems.length === 0 ? page.whichStems : null;
   const stemLabel = (stem: string) => t(`stem_${stem}` as never) || stem;
   const openSettings = (detail: string) => window.dispatchEvent(new CustomEvent('yue:open-settings', { detail }));
-  const languages = ['ru', 'en', 'zh', 'ja', 'ko', 'pt', 'es', 'de', 'fr', 'it', 'uk'];
+  const languages = ['ru', 'en', 'uk', 'be', 'kk', 'zh', 'ja', 'ko', 'pt', 'es', 'de', 'fr', 'it', 'pl', 'cs', 'nl', 'sv', 'fi', 'no', 'da', 'tr', 'el', 'he', 'ar', 'fa', 'hi', 'id', 'vi', 'th', 'hu', 'ro', 'bg', 'sr', 'hr', 'lt', 'lv', 'et'];
   const languageName = (code: string) => { try { return new Intl.DisplayNames([language], { type: 'language' }).of(code) ?? code; } catch { return code; } };
   const asrReason = asrWay === 'karaoke' && !karaokeRecogniser ? t('karaokeNoRecogniser')
     : asrWay === 'openrouter' && !cloudReady ? page.cloudKey
       : asrWay === 'openrouter' && asrModels.length === 0 ? t('noSpeechModel')
       : fromSong ? (!songId ? page.chooseTrack : null) : !asrFile ? page.chooseFile : null;
-  const launcherButton = 'inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-zinc-200';
 
-  return (
-    <div className="flex-1 overflow-y-auto bg-white px-5 pb-6 dark:bg-suno md:px-8">
-      <div className="mx-auto max-w-4xl space-y-6">
-        <header className="pt-6">
-          <h1 className="text-2xl font-bold text-zinc-950 dark:text-white">{page.title}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">{page.intro}</p>
-        </header>
+  const tools: { id: ToolId; group: 'track' | 'new'; icon: React.ReactNode; title: string; hint: string }[] = [
+    { id: 'stems', group: 'track', icon: <Scissors size={16} />, title: t('stemsTitle'), hint: page.navStems },
+    { id: 'midi', group: 'track', icon: <Piano size={16} />, title: t('midiTitle'), hint: page.navMidi },
+    { id: 'restore', group: 'track', icon: <Sparkles size={16} />, title: t('restoreTitle'), hint: page.navRestore },
+    { id: 'recognise', group: 'track', icon: <FileAudio size={16} />, title: page.recognise, hint: page.navRecognise },
+    { id: 'process', group: 'track', icon: <Wand2 size={16} />, title: t('processTitle'), hint: page.navProcess },
+    { id: 'editor', group: 'track', icon: <SlidersHorizontal size={16} />, title: t('audioEditor'), hint: page.navEditor },
+    ...(onGenerateEffect ? [
+      { id: 'effects' as const, group: 'new' as const, icon: <AudioWaveform size={16} />, title: page.effectsTitle, hint: page.navEffects },
+      { id: 'foley' as const, group: 'new' as const, icon: <Clapperboard size={16} />, title: page.foleyTitle, hint: page.navFoley },
+    ] : []),
+    { id: 'midi-editor', group: 'new', icon: <KeyboardMusic size={16} />, title: t('midiEdTitle'), hint: page.navMidiEditor },
+  ];
+  const current = tools.find(entry => entry.id === tool) ?? tools[0];
+  const needsTrack = current.group === 'track' && !(current.id === 'recognise' && !fromSong) && !(current.id === 'restore' && restoreFromFile);
 
-        <div className="sticky top-0 z-10 -mx-2 rounded-2xl border border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur dark:border-white/10 dark:bg-zinc-950/90">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <FieldLabel hidden>{page.track}</FieldLabel>
-            <div className="min-w-0 flex-1 basis-64">
-              <LibrarySongPicker label={page.track} value={songId} placeholder={t('searchYourSongs')} showLabel={false} controlClassName={CONTROL}
-                onChange={id => setSongId(id)} />
-            </div>
-            {facts && <span className="text-xs text-zinc-600 dark:text-zinc-300">{facts}</span>}
-          </div>
-          {songsError && <p role="alert" className="mt-2 text-xs text-rose-600 dark:text-rose-300">{t('toolsSongsFailed').replace('{error}', songsError)}
-            {' '}<button type="button" className="underline" onClick={() => void loadSongs()}>{t('refresh')}</button></p>}
-          {songsLoaded && !songsError && songs.length === 0 && <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{t('noSongsYet')}</p>}
+  const trackBar = (
+    <div className="sticky top-0 z-10 -mx-1 mb-4 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-zinc-950">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <FieldLabel hidden>{page.track}</FieldLabel>
+        <div className="min-w-0 flex-1 basis-64">
+          <LibrarySongPicker label={page.track} value={songId} placeholder={t('searchYourSongs')} showLabel={false} controlClassName={CONTROL}
+            onChange={id => setSongId(id)} />
         </div>
+        {facts && <span className="text-xs text-zinc-600 dark:text-zinc-300">{facts}</span>}
+      </div>
+      {songsError && <p role="alert" className="mt-2 text-xs text-rose-600 dark:text-rose-300">{t('toolsSongsFailed').replace('{error}', songsError)}
+        {' '}<button type="button" className="underline" onClick={() => void loadSongs()}>{t('refresh')}</button></p>}
+      {songsLoaded && !songsError && songs.length === 0 && <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{t('noSongsYet')}</p>}
+    </div>
+  );
 
-        <section className="space-y-4" aria-labelledby="tools-with-track">
-          <div>
-            <h2 id="tools-with-track" className="text-base font-semibold text-zinc-900 dark:text-white">{page.withTrack}</h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{page.withTrackHint}</p>
-          </div>
-
+  const pane = (() => {
+    switch (current.id) {
+      case 'stems': return (
           <ToolCard icon={<Scissors size={17} />} title={t('stemsTitle')}
-            state={status && (status.ready ? <ToolState tone="ready">{page.ready}</ToolState>
-              : download ? <ToolState tone="busy">{page.downloading(status.model.label, bytesText(download.downloaded_bytes), bytesText(download.total_bytes))}</ToolState>
-                : serverMissing ? <ToolState tone="blocked">{page.unavailable}</ToolState>
-                  : <ToolState tone="missing">{page.needsDownload(bytesText(status.missing_bytes ?? status.model.bytes))}</ToolState>)}
-            description={status?.engine === 'roformer' ? t('stemsHintRoformer' as never) : t('stemsHint')}
-            action={status && !status.ready && !serverMissing ? (download ? (
-              <div className="flex items-end gap-2">
-                <div className="min-w-0 flex-1">
-                  <WorkProgress label={page.downloading(status.model.label, bytesText(download.downloaded_bytes), bytesText(download.total_bytes))}
-                    percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
-                </div>
-                <SecondaryButton disabled={busy} onClick={() => void changeStemDownload('cancel')}>{t('cancelDownload')}</SecondaryButton>
+          state={status && (status.ready ? <ToolState tone="ready">{page.ready}</ToolState>
+            : download ? <ToolState tone="busy">{page.downloading(status.model.label, bytesText(download.downloaded_bytes), bytesText(download.total_bytes))}</ToolState>
+              : serverMissing ? <ToolState tone="blocked">{page.unavailable}</ToolState>
+                : <ToolState tone="missing">{page.needsDownload(bytesText(status.missing_bytes ?? status.model.bytes))}</ToolState>)}
+          description={status?.engine === 'roformer' ? t('stemsHintRoformer' as never) : t('stemsHint')}
+          action={status && !status.ready && !serverMissing ? (download ? (
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <WorkProgress label={page.downloading(status.model.label, bytesText(download.downloaded_bytes), bytesText(download.total_bytes))}
+                  percent={Math.round((download.downloaded_bytes / Math.max(1, download.total_bytes)) * 100)} />
               </div>
-            ) : (
-              <PrimaryButton disabled={busy} onClick={() => void changeStemDownload('install')}>
-                <Download size={14} />{page.download(status.model.label, bytesText(status.missing_bytes ?? status.model.bytes))}
-              </PrimaryButton>
-            )) : (
-              <>
-                <PrimaryButton onClick={() => (replacing.length > 0 ? setConfirmReplace(true) : void separate())}
-                  disabled={!status?.ready || Boolean(stemsReason) || running || busy}>
-                  {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                  {stems.length > 0 ? t('stemsAgain') : t('stemsStart')}
-                </PrimaryButton>
-                {serverMissing ? <ActionReason>{t('updateWhyAudiocppServer')} ·{' '}
-                  <button type="button" onClick={() => openSettings('models')} className="underline underline-offset-2">{t('changeProfileHint')}</button></ActionReason>
-                  : stemsReason && !running && <ActionReason>{stemsReason}</ActionReason>}
-                {running && <WorkProgress label={t('stemsRunning')} percent={percent} elapsedMs={run?.elapsed_ms} />}
-              </>
-            )}
-            result={stems.length > 0 && songId && (
-              <StemMixer
-                // the audio graph is wired once for a set of stems: another set is another mixer
-                key={`${songId}:${stems.join(',')}`}
-                stems={stems}
-                urlFor={stem => apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`)}
-                mixUrl={apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`)}
-                label={stemLabel}
-                onDownload={stem => {
-                  const tempoKey = chosen ? tempoAndKey((chosen.generation_settings as Record<string, unknown> | null | undefined)?.abc) : '';
-                  void saveFile(`${chosen?.title ?? 'track'} - ${stem}${tempoKey ? ` - ${tempoKey}` : ''}.wav`, { url: apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`) });
-                }}
-                onEdit={stem => void openAudioEditor(apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`))}
-              />
-            )}
-            error={(run?.error || error || download?.error || status?.download?.error) && <>
-              <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{run?.error || error || status?.download?.error}</p>
-              {status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} />}
-            </>}
-            footer={status && <>{page.model}: {status.model.label}</>}>
-            <div className="grid">
-              <FieldLabel>{page.whichStems}</FieldLabel>
-              <div className="flex flex-wrap gap-2">
-                {(status?.stems ?? []).map(stem => {
-                  const on = settings.stems.includes(stem);
-                  return (
-                    <button key={stem} type="button" role="checkbox" aria-checked={on} disabled={busy || running}
-                      onClick={() => void saveSettings({ ...settings, stems: on ? settings.stems.filter(name => name !== stem) : [...settings.stems, stem] })}
-                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${on ? 'border-pink-400 bg-pink-500/10 text-zinc-900 dark:text-white' : 'border-zinc-200 text-zinc-600 dark:border-white/10 dark:text-zinc-300'}`}>
-                      <span className={`grid h-3.5 w-3.5 place-items-center rounded-sm ${on ? 'bg-pink-500 text-white' : 'bg-zinc-200 dark:bg-white/10'}`}>
-                        {on && <Check size={9} strokeWidth={3} />}
-                      </span>
-                      {stemLabel(stem)}
-                    </button>
-                  );
-                })}
-              </div>
+              <SecondaryButton disabled={busy} onClick={() => void changeStemDownload('cancel')}>{t('cancelDownload')}</SecondaryButton>
             </div>
-            <details className="group text-xs">
-              <summary className="flex cursor-pointer list-none items-center gap-1 font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white [&::-webkit-details-marker]:hidden">
-                <ChevronRight size={14} aria-hidden className="transition-transform group-open:rotate-90" />{page.options}
-              </summary>
-              <div className="mt-2 grid">
-                <FieldLabel>{t('separationRuntime')}</FieldLabel>
-                <fieldset disabled={busy || running || !status}>
-                  <DevicePicker value={settings.runtime} onChange={choice => void saveSettings({ ...settings, runtime: choice })}
-                    cardAvailable={Boolean(status?.card && status?.card_runtime_installed)} />
-                </fieldset>
-                {status?.card && !status?.card_runtime_installed && status?.engine !== 'roformer' && (
-                  <button type="button" onClick={() => openSettings('models')} className="mt-2 justify-self-start text-left text-xs text-amber-700 underline underline-offset-2 dark:text-amber-300">
-                    {t('separationInstallGpu')}{status?.card_missing_bytes ? ` · ${bytesText(status.card_missing_bytes)}` : ''}
-                  </button>
-                )}
-              </div>
-            </details>
-            <ConfirmDialog
-              isOpen={confirmReplace}
-              title={t('replaceStemsTitle')}
-              message={t('replaceStemsMessage').replace('{stems}', () => replacing.map(stemLabel).join(', '))}
-              confirmLabel={t('replaceStemsConfirm')}
-              onConfirm={() => { setConfirmReplace(false); void separate(); }}
-              onCancel={() => setConfirmReplace(false)}
+          ) : (
+            <PrimaryButton disabled={busy} onClick={() => void changeStemDownload('install')}>
+              <Download size={14} />{page.download(status.model.label, bytesText(status.missing_bytes ?? status.model.bytes))}
+            </PrimaryButton>
+          )) : (
+            <>
+              <PrimaryButton onClick={() => (replacing.length > 0 ? setConfirmReplace(true) : void separate())}
+                disabled={!status?.ready || Boolean(stemsReason) || running || busy}>
+                {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                {stems.length > 0 ? t('stemsAgain') : t('stemsStart')}
+              </PrimaryButton>
+              {serverMissing ? <ActionReason>{t('updateWhyAudiocppServer')} ·{' '}
+                <button type="button" onClick={() => openSettings('models')} className="underline underline-offset-2">{t('changeProfileHint')}</button></ActionReason>
+                : stemsReason && !running && <ActionReason>{stemsReason}</ActionReason>}
+              {running && <WorkProgress label={t('stemsRunning')} percent={percent} elapsedMs={run?.elapsed_ms} />}
+            </>
+          )}
+          result={stems.length > 0 && songId && (
+            <StemMixer
+              // the audio graph is wired once for a set of stems: another set is another mixer
+              key={`${songId}:${stems.join(',')}`}
+              stems={stems}
+              urlFor={stem => apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`)}
+              mixUrl={apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`)}
+              label={stemLabel}
+              onDownload={stem => {
+                const tempoKey = chosen ? tempoAndKey((chosen.generation_settings as Record<string, unknown> | null | undefined)?.abc) : '';
+                void saveFile(`${chosen?.title ?? 'track'} - ${stem}${tempoKey ? ` - ${tempoKey}` : ''}.wav`, { url: apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`) });
+              }}
+              onEdit={stem => void openAudioEditor(apiUrl(`/v1/library/songs/${encodeURIComponent(songId)}/stems/${stem}`))}
             />
-          </ToolCard>
-
-          <MidiTool songId={songId} songTitle={chosen?.title ?? ''} />
-
-          <RestoreTool
-            songId={songId}
-            songTitle={chosen?.title ?? ''}
-            restoredId={restoredOf(songs, songId)}
-            chosenIsRestored={derivedBy(chosen, 'restore')}
-            onDone={() => void loadSongs()}
-          />
-
-          <ToolCard icon={<FileAudio size={17} />} title={page.recognise}
-            description={page.recogniseIntro}
-            action={<>
-              <PrimaryButton onClick={() => void transcribe()} disabled={Boolean(asrReason) || asrBusy}>
-                {asrBusy ? <Loader2 size={14} className="animate-spin" /> : <FileAudio size={14} />} {page.recognise}
-              </PrimaryButton>
-              {asrReason && <ActionReason>{asrReason}{asrWay === 'openrouter' && !cloudReady && <>{' '}
-                <button type="button" onClick={() => openSettings('cloud')} className="underline underline-offset-2">{page.configure}</button></>}
-                {asrWay === 'karaoke' && !karaokeRecogniser && <>{' '}
-                <button type="button" onClick={() => openSettings('models')} className="underline underline-offset-2">{page.configure}</button></>}</ActionReason>}
-            </>}
-            result={asrText && (
-              <div className="grid gap-2">
-                <textarea readOnly value={asrText} rows={8} className={`${CONTROL} resize-y font-mono text-[13px] leading-5`} />
-                <div className="flex flex-wrap gap-2">
-                  <SecondaryButton onClick={() => void copyText()}>{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t('copied') : t('copy')}</SecondaryButton>
-                  <SecondaryButton onClick={() => void saveFile(`${(fromSong ? chosen?.title : asrFile?.name?.replace(/\.[^.]+$/, '')) || 'lyrics'}.txt`, { blob: new Blob([asrText], { type: 'text/plain;charset=utf-8' }) })}>
-                    <Download size={13} /> {page.saveText}</SecondaryButton>
-                </div>
-              </div>
-            )}
-            error={asrError && <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{asrError}</p>}>
-            <div className="grid">
-              <FieldLabel hidden>{page.recogniseWay}</FieldLabel>
-              <CatalogSegments<'karaoke' | 'openrouter'> fill label={page.recogniseWay} value={asrWay} onChange={setChosenWay}
-                options={[{ value: 'karaoke', label: page.wayLocal }, { value: 'openrouter', label: page.wayCloud }]} />
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t(asrWay === 'karaoke' ? 'transcribeWayKaraokeHint' : 'transcribeWayOpenRouterHint')}</p>
+          )}
+          error={(run?.error || error || download?.error || status?.download?.error) && <>
+            <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{run?.error || error || status?.download?.error}</p>
+            {status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} />}
+          </>}
+          footer={status && <>{page.model}: {status.model.label}</>}>
+          <div className="grid">
+            <FieldLabel>{page.whichStems}</FieldLabel>
+            <div className="flex flex-wrap gap-2">
+              {(status?.stems ?? []).map(stem => {
+                const on = settings.stems.includes(stem);
+                return (
+                  <button key={stem} type="button" role="checkbox" aria-checked={on} disabled={busy || running}
+                    onClick={() => void saveSettings({ ...settings, stems: on ? settings.stems.filter(name => name !== stem) : [...settings.stems, stem] })}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${on ? 'border-pink-400 bg-pink-500/10 text-zinc-900 dark:text-white' : 'border-zinc-200 text-zinc-600 dark:border-white/10 dark:text-zinc-300'}`}>
+                    <span className={`grid h-3.5 w-3.5 place-items-center rounded-sm ${on ? 'bg-pink-500 text-white' : 'bg-zinc-200 dark:bg-white/10'}`}>
+                      {on && <Check size={9} strokeWidth={3} />}
+                    </span>
+                    {stemLabel(stem)}
+                  </button>
+                );
+              })}
             </div>
-            {asrWay === 'openrouter' && cloudReady && asrModels.length > 0 && (
-              <label className="grid text-xs">
-                <FieldLabel>{page.model}</FieldLabel>
-                <select value={asrModel} onChange={event => setAsrModel(event.target.value)} className={CONTROL}>
-                  {asrModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-                </select>
-              </label>
-            )}
-            {asrWay === 'karaoke' && (
-              <CatalogSegments<'song' | 'file'> fill label={t('restoreFrom')} value={asrSource} onChange={setAsrSource}
-                options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
-            )}
-            {!fromSong && (
-              <div>
-                <SecondaryButton aria-label={`${page.fromFile}: ${asrFile?.name ?? t('chooseAudioFile')}`} onClick={() => filePicker.current?.click()}>
-                  <FileAudio size={13} aria-hidden />{asrFile?.name ?? t('chooseAudioFile')}
-                </SecondaryButton>
-                <input ref={filePicker} type="file" accept="audio/*" className="hidden"
-                  onChange={event => { setAsrFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
+          </div>
+          <details className="group text-xs">
+            <summary className="flex cursor-pointer list-none items-center gap-1 font-semibold text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white [&::-webkit-details-marker]:hidden">
+              <ChevronRight size={14} aria-hidden className="transition-transform group-open:rotate-90" />{page.options}
+            </summary>
+            <div className="mt-2 grid">
+              <FieldLabel>{t('separationRuntime')}</FieldLabel>
+              <fieldset disabled={busy || running || !status}>
+                <DevicePicker value={settings.runtime} onChange={choice => void saveSettings({ ...settings, runtime: choice })}
+                  cardAvailable={Boolean(status?.card && status?.card_runtime_installed)} />
+              </fieldset>
+              {status?.card && !status?.card_runtime_installed && status?.engine !== 'roformer' && (
+                <button type="button" onClick={() => openSettings('models')} className="mt-2 justify-self-start text-left text-xs text-amber-700 underline underline-offset-2 dark:text-amber-300">
+                  {t('separationInstallGpu')}{status?.card_missing_bytes ? ` · ${bytesText(status.card_missing_bytes)}` : ''}
+                </button>
+              )}
+            </div>
+          </details>
+          <ConfirmDialog
+            isOpen={confirmReplace}
+            title={t('replaceStemsTitle')}
+            message={t('replaceStemsMessage').replace('{stems}', () => replacing.map(stemLabel).join(', '))}
+            confirmLabel={t('replaceStemsConfirm')}
+            onConfirm={() => { setConfirmReplace(false); void separate(); }}
+            onCancel={() => setConfirmReplace(false)}
+          />
+        </ToolCard>
+      );
+      case 'midi': return <MidiTool songId={songId} songTitle={chosen?.title ?? ''} />;
+      case 'restore': return <RestoreTool songId={songId} songTitle={chosen?.title ?? ''} restoredId={restoredOf(songs, songId)}
+        chosenIsRestored={derivedBy(chosen, 'restore')} onDone={() => void loadSongs()} onSourceChange={from => setRestoreFromFile(from === 'file')} />;
+      case 'recognise': return (
+          <ToolCard icon={<FileAudio size={17} />} title={page.recognise}
+          description={page.recogniseIntro}
+          action={<>
+            <PrimaryButton onClick={() => void transcribe()} disabled={Boolean(asrReason) || asrBusy}>
+              {asrBusy ? <Loader2 size={14} className="animate-spin" /> : <FileAudio size={14} />} {page.recognise}
+            </PrimaryButton>
+            {asrReason && <ActionReason>{asrReason}{asrWay === 'openrouter' && !cloudReady && <>{' '}
+              <button type="button" onClick={() => openSettings('cloud')} className="underline underline-offset-2">{page.configure}</button></>}
+              {asrWay === 'karaoke' && !karaokeRecogniser && <>{' '}
+              <button type="button" onClick={() => openSettings('models')} className="underline underline-offset-2">{page.configure}</button></>}</ActionReason>}
+          </>}
+          result={asrText && (
+            <div className="grid gap-2">
+              <textarea readOnly value={asrText} rows={8} className={`${CONTROL} resize-y font-mono text-[13px] leading-5`} />
+              <div className="flex flex-wrap gap-2">
+                <SecondaryButton onClick={() => void copyText()}>{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t('copied') : t('copy')}</SecondaryButton>
+                <SecondaryButton onClick={() => void saveFile(`${(fromSong ? chosen?.title : asrFile?.name?.replace(/\.[^.]+$/, '')) || 'lyrics'}.txt`, { blob: new Blob([asrText], { type: 'text/plain;charset=utf-8' }) })}>
+                  <Download size={13} /> {page.saveText}</SecondaryButton>
               </div>
-            )}
+            </div>
+          )}
+          error={asrError && <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{asrError}</p>}>
+          <div className="grid">
+            <FieldLabel hidden>{page.recogniseWay}</FieldLabel>
+            <CatalogSegments<'karaoke' | 'openrouter'> fill label={page.recogniseWay} value={asrWay} onChange={setChosenWay}
+              options={[{ value: 'karaoke', label: page.wayLocal }, { value: 'openrouter', label: page.wayCloud }]} />
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t(asrWay === 'karaoke' ? 'transcribeWayKaraokeHint' : 'transcribeWayOpenRouterHint')}</p>
+          </div>
+          {asrWay === 'openrouter' && cloudReady && asrModels.length > 0 && (
             <label className="grid text-xs">
-              <FieldLabel>{page.language}</FieldLabel>
-              <select value={asrLanguage} onChange={event => setAsrLanguage(event.target.value)} className={`${CONTROL} max-w-xs`}>
-                <option value="">{page.autoLanguage}</option>
-                {languages.map(code => <option key={code} value={code}>{languageName(code)}</option>)}
+              <FieldLabel>{page.model}</FieldLabel>
+              <select value={asrModel} onChange={event => setAsrModel(event.target.value)} className={CONTROL}>
+                {asrModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
               </select>
             </label>
-          </ToolCard>
+          )}
+          <div className="grid">
+          <FieldLabel>{page.source}</FieldLabel>
+          {asrWay === 'karaoke' ? (
+            <CatalogSegments<'song' | 'file'> fill label={page.source} value={asrSource} onChange={setAsrSource}
+              options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
+          ) : <p className="text-xs text-zinc-500 dark:text-zinc-400">{page.cloudFileOnly}</p>}
+        </div>
+          {!fromSong && (
+            <div>
+              <SecondaryButton aria-label={`${page.fromFile}: ${asrFile?.name ?? t('chooseAudioFile')}`} onClick={() => filePicker.current?.click()}>
+                <FileAudio size={13} aria-hidden />{asrFile?.name ?? t('chooseAudioFile')}
+              </SecondaryButton>
+              <input ref={filePicker} type="file" accept="audio/*" className="hidden"
+                onChange={event => { setAsrFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
+            </div>
+          )}
+          <label className="grid text-xs">
+            <FieldLabel>{page.language}</FieldLabel>
+            <select value={asrLanguage} onChange={event => setAsrLanguage(event.target.value)} className={`${CONTROL} max-w-xs`}>
+              <option value="">{page.autoLanguage}</option>
+              {languages.map(code => <option key={code} value={code}>{languageName(code)}</option>)}
+            </select>
+          </label>
+        </ToolCard>
+      );
+      case 'process': return (
+        <ToolCard icon={<Wand2 size={17} />} title={t('processTitle')} description={t('processHint')}
+          action={<>
+            <PrimaryButton disabled={!songId}
+              onClick={() => {
+                if (!songId) return;
+                setProcessError(null);
+                void fetch(`/v1/library/songs/${encodeURIComponent(songId)}`)
+                  .then(response => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
+                  .then(body => window.dispatchEvent(new CustomEvent('yue:process-song', { detail: mapNativeLibrarySong(body) })))
+                  .catch(problem => setProcessError(problem instanceof Error ? problem.message : String(problem)));
+              }}>
+              <Wand2 size={14} /> {t('processMenu')}
+            </PrimaryButton>
+            {!songId && <ActionReason>{page.chooseTrack}</ActionReason>}
+          </>}
+          error={processError && <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">{processError}</p>} />
+      );
+      case 'editor': return (
+        <ToolCard icon={<SlidersHorizontal size={17} />} title={t('audioEditor')} description={t('audioEditorIntro')}
+          action={<>
+            <PrimaryButton disabled={!songId} onClick={() => { if (songId) void openAudioEditor(apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`)); }}>
+              <SlidersHorizontal size={14} /> {t('openTrackInEditor')}
+            </PrimaryButton>
+            {!songId ? <ActionReason>{page.chooseTrack}</ActionReason> : stems.length > 0 && <ActionReason>{page.editorStems}</ActionReason>}
+          </>} />
+      );
+      case 'effects': return onGenerateEffect ? <SoundEffectsTool control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} /> : null;
+      case 'foley': return onGenerateEffect ? <ControlFoleyTool control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} /> : null;
+      case 'midi-editor': return (
+        <ToolCard icon={<KeyboardMusic size={17} />} title={t('midiEdTitle')} description={t('midiEdIntro')}
+          action={<PrimaryButton onClick={() => setMidiEditorOpen(true)}><KeyboardMusic size={14} /> {t('midiEdOpen')}</PrimaryButton>} />
+      );
+    }
+  })();
 
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/3">
-            <p className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{page.openIn}</p>
-            <ToolLauncher icon={<Wand2 size={17} />} title={t('processTitle')} description={t('processHint')}>
-              <button type="button" disabled={!songId} className={launcherButton}
-                onClick={() => {
-                  if (!songId) return;
-                  setProcessError(null);
-                  void fetch(`/v1/library/songs/${encodeURIComponent(songId)}`)
-                    .then(response => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
-                    .then(body => window.dispatchEvent(new CustomEvent('yue:process-song', { detail: mapNativeLibrarySong(body) })))
-                    .catch(problem => setProcessError(problem instanceof Error ? problem.message : String(problem)));
-                }}>
-                <Wand2 size={13} /> {t('processMenu')}
-              </button>
-              {!songId && <ActionReason>{page.chooseTrack}</ActionReason>}
-              {processError && <p role="alert" className="mt-1 text-xs text-rose-600 dark:text-rose-300">{processError}</p>}
-            </ToolLauncher>
-            <div className="border-t border-zinc-200 dark:border-white/10" />
-            <ToolLauncher icon={<SlidersHorizontal size={17} />} title={t('audioEditor')} description={t('audioEditorIntro')}>
-              <button type="button" disabled={!songId} className={launcherButton}
-                onClick={() => { if (songId) void openAudioEditor(apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`)); }}>
-                <SlidersHorizontal size={13} /> {t('openTrackInEditor')}
-              </button>
-              {!songId && <ActionReason>{page.chooseTrack}</ActionReason>}
-            </ToolLauncher>
-          </div>
-        </section>
+  const navItem = (entry: typeof tools[number]) => (
+    <li key={entry.id}>
+      <button type="button" aria-current={entry.id === current.id ? 'page' : undefined} onClick={() => choose(entry.id)}
+        className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${entry.id === current.id && !listOnly
+          ? 'bg-pink-500/10 text-zinc-950 dark:text-white' : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-white/5'}`}>
+        <span className={`mt-0.5 shrink-0 ${entry.id === current.id && !listOnly ? 'text-pink-500' : 'text-zinc-400'}`} aria-hidden>{entry.icon}</span>
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold">{entry.title}</span>
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">{entry.hint}</span>
+        </span>
+      </button>
+    </li>
+  );
 
-        <section className="space-y-4" aria-labelledby="tools-create">
-          <div>
-            <h2 id="tools-create" className="text-base font-semibold text-zinc-900 dark:text-white">{page.createNew}</h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{page.createNewHint}</p>
-          </div>
-          {onGenerateEffect && <SoundEffectsTool control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} />}
-          {onGenerateEffect && <ControlFoleyTool control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} />}
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/3">
-            <ToolLauncher icon={<KeyboardMusic size={17} />} title={t('midiEdTitle')} description={t('midiEdIntro')}>
-              <button type="button" onClick={() => setMidiEditorOpen(true)} className={launcherButton}>
-                <KeyboardMusic size={13} /> {t('midiEdOpen')}
-              </button>
-            </ToolLauncher>
-          </div>
-          {midiEditorOpen && <MidiEditor source={{ kind: 'new' }} onClose={() => setMidiEditorOpen(false)} />}
-        </section>
+  return (
+    <div className="flex-1 overflow-y-auto bg-white dark:bg-suno">
+      <div className="mx-auto grid max-w-6xl gap-6 px-5 py-6 md:grid-cols-[17rem_1fr] md:px-8">
+        <nav aria-label={page.title} className={`${listOnly ? '' : 'max-md:hidden'} md:sticky md:top-0 md:self-start`}>
+          <h1 className="px-2.5 text-2xl font-bold text-zinc-950 dark:text-white">{page.title}</h1>
+          <p className="mt-1 px-2.5 text-xs text-zinc-500 dark:text-zinc-400">{page.intro}</p>
+          {(['track', 'new'] as const).map(group => (
+            <div key={group} className="mt-5">
+              <h2 className="px-2.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{group === 'track' ? page.withTrack : page.createNew}</h2>
+              <ul className="mt-1 space-y-0.5">{tools.filter(entry => entry.group === group).map(navItem)}</ul>
+            </div>
+          ))}
+        </nav>
+        <main aria-label={current.title} className={`min-w-0 ${listOnly ? 'max-md:hidden' : ''}`}>
+          <button type="button" onClick={() => setListOnly(true)} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-zinc-600 hover:text-pink-600 md:hidden dark:text-zinc-300">
+            <ChevronLeft size={16} aria-hidden />{page.title}
+          </button>
+          {needsTrack && trackBar}
+          {pane}
+        </main>
       </div>
+      {midiEditorOpen && <MidiEditor source={{ kind: 'new' }} onClose={() => setMidiEditorOpen(false)} />}
     </div>
   );
 }

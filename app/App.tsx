@@ -127,7 +127,7 @@ import { SetupGate } from './components/SetupGate';
 import { UpdateScreen, readUpdatePlan } from './components/UpdateScreen';
 import { EngineStarting } from './components/EngineStarting';
 import { StudioOffline } from './components/StudioOffline';
-import { StudioToolsPanel } from './components/StudioToolsPanel';
+import { StudioToolsPanel, TOOL_IDS, type ToolId } from './components/StudioToolsPanel';
 import { AdaptersPage } from './components/AdaptersPage';
 import { VoicesPage } from './components/VoicesPage';
 import { voicesPageStrings } from './i18n/voicesPage';
@@ -237,6 +237,7 @@ function AppContent() {
   // A track sent here from a menu's "separate into stems".
   const [rvcSongId, setRvcSongId] = useState<string | null>(null);
   const [stemsSongId, setStemsSongId] = useState<string | null>(null);
+  const [toolsTool, setToolsTool] = useState<ToolId | null>(null);
   // Which of the three situations the studio is in. It starts unknown, and
   // unknown must not look like "nothing is installed": showing the download
   // page for a second on every launch is how a ready studio was made to look
@@ -265,7 +266,11 @@ function AppContent() {
         setCurrentView('voices');
         return;
       }
-      setStemsSongId(songId);
+      const ask = (event as CustomEvent<string | { songId: string; tool: ToolId }>).detail;
+      setStemsSongId(typeof ask === 'string' ? ask : ask.songId);
+      const tool = typeof ask === 'string' ? 'stems' : ask.tool;
+      setToolsTool(tool);
+      window.history.pushState({}, '', `/tools/${tool}`);
       setCurrentView('tools');
     };
     const openSettings = (event: Event) => {
@@ -743,7 +748,11 @@ function AppContent() {
         setCurrentView('search');
       } else if (path === '/news') {
         setCurrentView('news');
-      } else if (path === '/tools' || path === '/adapters' || path === '/voices') {
+      } else if (path === '/tools' || path.startsWith('/tools/')) {
+        const tool = path.split('/')[2];
+        setToolsTool((TOOL_IDS as readonly string[]).includes(tool) ? tool as ToolId : null);
+        setCurrentView('tools');
+      } else if (path === '/adapters' || path === '/voices') {
         setCurrentView(path.slice(1) as View);
       }
     };
@@ -1502,7 +1511,7 @@ function AppContent() {
   const renderContent = (view: typeof currentView = currentView) => {
     switch (view) {
       case 'tools':
-        return <StudioToolsPanel initialSongId={stemsSongId}
+        return <StudioToolsPanel initialSongId={stemsSongId} initialTool={toolsTool}
           onGenerateEffect={generations.generate} generationBusy={generations.queueBusy} />;
 
       case 'adapters':

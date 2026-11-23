@@ -32,7 +32,7 @@ it('requires an audio-backed voice, restores references and can clear the melody
     expect(voice.value).toBe('Dry voice');
     expect(melody.value).toBe('Melody');
     act(() => voice.click());
-    expect([...document.querySelectorAll('[role="option"]')].map(option => option.textContent)).toEqual(['Dry voice', 'Melody']);
+    expect([...document.querySelectorAll('[role="option"]')].map(option => option.querySelector('.font-semibold')?.textContent)).toEqual(['Dry voice', 'Melody']);
     act(() => voice.click());
     act(() => melody.click());
     await act(async () => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent === 'No melody reference')!.click());

@@ -131,13 +131,6 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
     };
   }, [songId, loadSongMidi]);
 
-  // the track menu's "To MIDI" lands here
-  useEffect(() => {
-    const focus = () => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    window.addEventListener('yue:focus-midi', focus);
-    return () => window.removeEventListener('yue:focus-midi', focus);
-  }, []);
-
   const post = async (path: string, body: object) => {
     setBusy(true);
     setError(null);
