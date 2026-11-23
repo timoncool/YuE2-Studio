@@ -61,7 +61,7 @@ import { minimaxCaptionStrings } from '../i18n/minimaxCaption';
 import { HeartMuLaControls, AudioCppModelInstall, emptyHeartMuLaDraft, heartMuLaDraft, heartMuLaOptions } from './HeartMuLaControls';
 import { HotStepSa3Controls, hotStepSa3Profile, hotStepHeartmulaProfile, type HotStepSa3Draft } from './HotStepSa3Controls';
 import { StableAudioControls, emptyStableAudioDraft, stableAudioDraft, stableAudioOptions, stableAudioPromptRequired } from './StableAudioControls';
-import { MuLaCoverFields } from './MuLaCoverFields';
+import { MuLaCoverFields, mulaCoverTitle } from './MuLaCoverFields';
 import { HotStepCoverFields, type HotStepCoverDraft } from './HotStepCoverFields';
 import { SoulXSingerFields, soulxRequired, type SoulXInputs } from './SoulXSingerFields';
 import { Vevo2ModelDirectory, Vevo2SingingFields, vevo2SingingStrings, type Vevo2References } from './Vevo2SingingFields';
@@ -2389,6 +2389,12 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 onPlan={(mode, idea) => void planAce(mode, idea)} undo={!acePlanning && aceUndo?.mode === 'inspire'} onUndo={undoAcePlan}
                 onCreate={idea => void planAce('inspire', idea).then(ok => { if (ok) setCreateAfterPlan(true); })}
                 card={(title, body, actions) => <Card title={title} actions={actions}>{body}</Card>} />}
+              {mulaCover && <Card title={mulaCoverTitle(language)}>
+                <MuLaCoverFields value={mulaCoverDraft.original}
+                  onChange={(original, abc) => setMulaCoverDraft(previous => previous.original === original ? previous : { original, abc })}
+                  onInstall={native.refresh}
+                  missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />
+              </Card>}
               <Card title={miDasheng || vevo2 || soulx || (magenta && magentaReference) ? t('title') : miniMaxEngine ? mmText.captionStructured : tt('styleCardTitle')}>
                 <input value={name} onChange={event => typeName(event.target.value)} placeholder={t('untitled')}
                   aria-label={t('untitled')} className={CONTROL + ' mb-2'} />
@@ -2456,10 +2462,6 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               {miniMaxEngine && native.profile?.ready && <Card title={mmText.componentOverride} fold="minimax-components" foldedByDefault={Object.keys(mmComponents).length === 0}>
                 <MiniMaxComponents value={mmComponents} onChange={setMmComponents} setFiles={native.profile.roles} />
               </Card>}
-              {mulaCover && <MuLaCoverFields value={mulaCoverDraft.original}
-                onChange={(original, abc) => setMulaCoverDraft(previous => previous.original === original ? previous : { original, abc })}
-                onInstall={native.refresh}
-                missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />}
               {soulx && <SoulXSingerFields key={audioFamily} conversion={soulxConversion} value={soulxInputs} onChange={setSoulxInputs} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
               {hotstepHeart && <HotStepSa3Controls value={hotstepHeartDraft} onChange={setHotstepHeartDraft}

@@ -23,22 +23,23 @@ it('only uses the melody and chords heard from the currently selected original',
     const [draft, setDraft] = useState<HotStepCoverDraft>({ original: '', abc: '' });
     return <HotStepCoverFields draft={draft} onChange={setDraft} ready refresh={() => undefined} controlClassName="" />;
   }
-  const select = (track: string) => act(() => {
-    const picker = host.querySelector('select')!;
-    picker.value = track;
-    picker.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-  const hear = () => act(async () => host.querySelector('button')!.click());
+  document.body.append(host);
+  const select = (title: string) => {
+    act(() => host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Original song"]')!.click());
+    act(() => [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.startsWith(title))!.click());
+  };
+  const hear = () => act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Hear melody and chords')!.click());
   try {
     await act(async () => root.render(<Form />));
-    select('old');
+    select('Old track');
     await hear();
-    select('source');
+    select('Source track');
     await hear();
     expect(mocks.transcribe).toHaveBeenLastCalledWith({ songId: 'source' }, false, expect.any(AbortSignal));
     await act(async () => finishOld('Stale score'));
     expect(host.querySelector('textarea')?.value).toBe('Melody and chords of the current track');
   } finally {
     await act(async () => root.unmount());
+    host.remove();
   }
 });

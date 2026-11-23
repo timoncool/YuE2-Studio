@@ -984,13 +984,12 @@ it('submits the same MuLaCover reference after switching engines in either direc
     const [route, choose] = React.useState<NonNullable<React.ComponentProps<typeof CreatePanel>['musicEngine']>>('local');
     return panel({ musicEngine: route, onMusicEngineChange: choose });
   }
-  const select = (label: string) => [...host.querySelectorAll('label')]
-    .find(node => node.textContent?.startsWith(label))!.querySelector('select')!;
-  const choose = (label: string, value: string) => act(() => {
-    const input = select(label);
-    input.value = value;
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  const select = (label: string) => host.querySelector<HTMLInputElement>(`input[role="combobox"][aria-label="${label}"]`)!;
+  const choose = (label: string, value: string) => {
+    click(select(label));
+    const title = value === 'first-recording' ? 'First' : 'Second';
+    click([...document.querySelectorAll('[role="option"]')].find(option => option.textContent?.startsWith(title))!);
+  };
   act(() => root.render(<Editor />));
   await flush();
   pickModel('MuLaCover');
@@ -1001,7 +1000,7 @@ it('submits the same MuLaCover reference after switching engines in either direc
   expect(sent[0]).not.toHaveProperty('abc');
   chooseEngine('hotstep');
   await flush();
-  expect(select('Original song').value).toBe('first-recording');
+  expect(select('Original song').value).toBe('First');
   click(buttonNamed('create')!);
   expect(sent[1]).toMatchObject({
     music_source: { kind: 'native', engine: 'hotstep', model: 'heartmula-mulacover' }, cover_of: 'first-recording', abc: firstScore,
@@ -1009,7 +1008,7 @@ it('submits the same MuLaCover reference after switching engines in either direc
   choose('Original song', 'second-recording');
   chooseEngine('audio.cpp');
   await flush();
-  expect(select('Original song').value).toBe('second-recording');
+  expect(select('Original song').value).toBe('Second');
   expect(host.textContent).toContain('The draft keeps your ABC score.');
   click(buttonNamed('create')!);
   expect(sent[2]).toMatchObject({ music_source: { kind: 'audio_cpp', model: 'mulacover' }, cover_of: 'second-recording' });
@@ -1889,7 +1888,7 @@ it('submits a MuLaCover library original and restores it for a new take', async 
   } as Song;
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
-  const picker = [...host.querySelectorAll('select')].find(select => select.closest('label')?.textContent?.includes('Original song'));
+  const picker = host.querySelector<HTMLInputElement>('input[role="combobox"][aria-label="Original song"]');
   expect(picker?.value).toBe('original-track');
   click(buttonNamed('create')!);
   expect(sent.at(-1)).toMatchObject({

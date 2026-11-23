@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useI18n } from '../context/I18nContext';
 import { useLibrarySongs } from '../services/studioQueries';
+import Combobox from './kit/Combobox';
+
+export const mulaCoverTitle = (language: string) => (strings[language as keyof typeof strings] ?? strings.en).original;
 
 const strings = {
   en: { original: 'Original song', choose: 'Choose from the library', install: 'Install resampler', installing: 'Installing resampler…', error: 'Could not install the MuLaCover resampler.', license: 'Noncommercial weights and output terms' },
@@ -46,19 +49,13 @@ export function MuLaCoverFields({ value, onChange, onInstall, missingSoxr, contr
 
   return (
     <div className="space-y-2">
-      <label className="grid gap-1">
-        <span>{text.original}</span>
-        <select required className={controlClassName} value={value}
-          onChange={event => {
-            const id = event.target.value;
-            const score = songs.find(song => song.id === id)?.generationParams?.abc;
-            onChange(id, typeof score === 'string' ? score : '');
-          }}>
-          <option value="">{text.choose}</option>
-          {value && !songs.some(song => song.id === value) && <option value={value} disabled>{value}</option>}
-          {songs.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-        </select>
-      </label>
+      <Combobox label={text.original} value={value} placeholder={text.choose}
+        options={songs.map(song => ({ value: song.id, label: song.title || '—', hint: song.style?.slice(0, 80) }))}
+        inputClassName={`${controlClassName} font-semibold`}
+        onChange={id => {
+          const score = songs.find(song => song.id === id)?.generationParams?.abc;
+          onChange(id, typeof score === 'string' ? score : '');
+        }} />
       <a className="text-xs underline" target="_blank" rel="noreferrer"
         href="https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE">{text.license}</a>
       {missingSoxr && <div>

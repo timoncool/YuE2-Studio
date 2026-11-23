@@ -3,6 +3,7 @@ import type { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { useLibrarySongs } from '../services/studioQueries';
 import { transcribe } from '../services/transcription';
+import Combobox from './kit/Combobox';
 
 export type HotStepCoverDraft = { original: string; abc: string };
 
@@ -68,14 +69,12 @@ export function HotStepCoverFields({ draft, onChange, ready, refresh, controlCla
   };
 
   return <div className="space-y-2">
-    <label className="grid gap-1">
-      <span>{text.original}</span>
-      <select required value={draft.original} className={controlClassName} onChange={event => choose(event.target.value)}>
-        <option value="">{text.choose}</option>
-        {draft.original && !tracks.some(song => song.id === draft.original) && <option value={draft.original} disabled>{draft.original}</option>}
-        {tracks.map(song => <option key={song.id} value={song.id}>{song.title}</option>)}
-      </select>
-    </label>
+    <div className="grid gap-1">
+      <span aria-hidden>{text.original}</span>
+      <Combobox label={text.original} value={draft.original} placeholder={text.choose}
+        options={tracks.map(song => ({ value: song.id, label: song.title || '—', hint: song.style?.slice(0, 80) }))}
+        inputClassName={`${controlClassName} font-semibold`} onChange={choose} />
+    </div>
     <button type="button" disabled={!draft.original || listening} className="text-xs underline disabled:opacity-50"
       onClick={() => void hear()}>{listening ? text.listening : text.transcribe}</button>
     <label className="grid gap-1">
