@@ -40,7 +40,6 @@ mod audio_cpp_sound_effects;
 mod hotstep_cover;
 mod hotstep_runtime;
 mod hotstep_generation;
-mod hotstep_ace_assets;
 mod hotstep_yue2;
 mod hotstep_heartmula;
 mod hotstep_heartmula_assets;

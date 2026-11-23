@@ -2,22 +2,6 @@
 use super::*;
 use anyhow::ensure;
 
-macro_rules! weight {
-    ($file:literal, $size:literal, $sha:literal) => {
-        (downloads::Asset {
-            id: $file, label: $file, kind: downloads::AssetKind::Model,
-            url: concat!("https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/", $file),
-            relative_path: concat!("models/yue2/", $file), bytes: $size, unzip_into: None,
-            marker: $file, pick: &[], vram_gb: None, note: "YuE2 GGUF for HOT-Step",
-        }, $sha)
-    };
-}
-
-pub(super) const ASSETS: [(downloads::Asset, &str); 2] = [
-    weight!("yue2-lm-Q4_K_M-imat.gguf", 2_429_623_904, "9d46d4cc86d3d774c7bcf5dc547aa837a5a1bca107361d1bf7adf446cbaedf91"),
-    weight!("yue2-vae-standard-f32.gguf", 530_348_768, "c4ffc363b246f404c1d150075da4c41c4a031524036042ce45aeb500d4d5fe71"),
-];
-
 pub(super) fn payload(request: &mut CreateMusicJobRequest) -> anyhow::Result<Value> {
     ensure!(!request.style.trim().is_empty(), "Enter a YuE2 style prompt.");
     ensure!(

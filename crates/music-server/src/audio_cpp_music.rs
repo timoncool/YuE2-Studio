@@ -266,16 +266,8 @@ fn managed_model(family: Family) -> Option<ManagedModel> {
 /// The catalogue engine whose sets are the audio.cpp model families (`distribution/components-src/audio-cpp.json`).
 pub(super) const SETS: &str = "audio.cpp";
 
-/// Every file of a family's set with its pinned SHA-256; none when the catalogue has no such set.
 pub(super) fn set_files(family: &str) -> Option<Vec<(&'static downloads::Asset, &'static str)>> {
-    let set = crate::components::sets(SETS).into_iter().find(|set| set.id == family)?;
-    set.roles
-        .values()
-        .map(|id| {
-            let asset = crate::components::asset(id).ok()?;
-            Some((asset, crate::pin_sha::sha256(asset.url)?))
-        })
-        .collect()
+    crate::components::set_files(SETS, family)
 }
 
 /// The file of a family's set at `name` inside the family's folder.

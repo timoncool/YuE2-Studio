@@ -177,10 +177,7 @@ pub(super) async fn install_assets(
                     .into_iter()
                     .filter(|item| item.kind == downloads::AssetKind::Model)
                 {
-                    let sha = assets::sha256(item.url)
-                        .or_else(|| hotstep_sa3_assets::sha256(item.url))
-                        .or_else(|| hotstep_heartmula_assets::sha256(item.url))
-                        .or_else(|| hotstep_cover_assets::sha256(item.url))
+                    let sha = crate::pin_sha::sha256(item.url)
                         .context("No pinned HOT-Step training checksum")?;
                     audio_cpp_music::repair_managed_file(&repair.path_of(item), item, sha)?;
                 }

@@ -1,6 +1,6 @@
 {
  "product": "yue2-studio",
- "sequence": 6,
+ "sequence": 7,
  "published": "2026-11-23",
  "files": {
   "gemma-4-e4b-q4_0": {
@@ -644,6 +644,366 @@
     "libcublas.so.12": "5757ab5839fb4f203ca47ecb336110d10f4a5606b1e097f195fbca89774569e2",
     "libcublasLt.so.12": "2c9006a75c74b3bea2dc7ae2ec38ab038b0e45ea02cb4b717a915e8a5796acb1"
    }
+  },
+  "hotstep/heartmula-mulacover-global-BF16.gguf": {
+   "label": "heartmula-mulacover-global-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartmula-mulacover-global-BF16.gguf",
+   "bytes": 7755339840,
+   "sha256": "6b7a7d889242ae121f7c1b8d2a9ecd6de3d09eba9e831ee9bd42a0ce020f77a7",
+   "path": "models/heartmula-mulacover-global-BF16.gguf",
+   "marker": "heartmula-mulacover-global-BF16.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/heartmula-mulacover-local-BF16.gguf": {
+   "label": "heartmula-mulacover-local-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartmula-mulacover-local-BF16.gguf",
+   "bytes": 994370080,
+   "sha256": "5d35548e2474ca5bcc28fde9ed54629ea80d14c8181abc5c1b5f990c84a810d3",
+   "path": "models/heartmula-mulacover-local-BF16.gguf",
+   "marker": "heartmula-mulacover-local-BF16.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/heartcodec-flow-Q8_0.gguf": {
+   "label": "heartcodec-flow-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-flow-Q8_0.gguf",
+   "bytes": 1609869536,
+   "sha256": "f9b67fd65b6873c371b62680cd0ae2d3064d0b1081e8758a4f538d076734f83c",
+   "path": "models/heartcodec-flow-Q8_0.gguf",
+   "marker": "heartcodec-flow-Q8_0.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/heartcodec-scalar-decoder-F16.gguf": {
+   "label": "heartcodec-scalar-decoder-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-scalar-decoder-F16.gguf",
+   "bytes": 167671648,
+   "sha256": "cc53325408d2527b99f09cfdf65451bee72cb952b0c52ff135d673b4aacb087f",
+   "path": "models/heartcodec-scalar-decoder-F16.gguf",
+   "marker": "heartcodec-scalar-decoder-F16.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/heartcodec-rvq-F32.gguf": {
+   "label": "heartcodec-rvq-F32.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-rvq-F32.gguf",
+   "bytes": 17194624,
+   "sha256": "d292f57cbcb204a06f998c8bf0f4a2ef671ba82b1a0071904d102435e3525b44",
+   "path": "models/heartcodec-rvq-F32.gguf",
+   "marker": "heartcodec-rvq-F32.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/heartmula-tokenizer.gguf": {
+   "label": "heartmula-tokenizer.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartmula-tokenizer.gguf",
+   "bytes": 7852064,
+   "sha256": "d4881e7fd90d6bc80367d909cc1453da93b666f29d4ab89a8befbba00f4c3cb1",
+   "path": "models/heartmula-tokenizer.gguf",
+   "marker": "heartmula-tokenizer.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/Qwen3-Embedding-0.6B-BF16.gguf": {
+   "label": "Qwen3-Embedding-0.6B-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/Qwen3-Embedding-0.6B-BF16.gguf",
+   "bytes": 1196890592,
+   "sha256": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
+   "path": "models/Qwen3-Embedding-0.6B-BF16.gguf",
+   "marker": "Qwen3-Embedding-0.6B-BF16.gguf",
+   "note": "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa."
+  },
+  "hotstep/sa3-dit-BF16.gguf": {
+   "label": "sa3-dit-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/sa3-dit-BF16.gguf",
+   "bytes": 2908308288,
+   "sha256": "550ecd0f7dd7b8bd30c3da8e6370e39393898fd1c9eace3e10714f5102e80492",
+   "path": "models/sa3-dit-BF16.gguf",
+   "marker": "sa3-dit-BF16.gguf",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/sa3-same-enc-F16.gguf": {
+   "label": "sa3-same-enc-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/sa3-same-enc-F16.gguf",
+   "bytes": 852575904,
+   "sha256": "465257fdea87aa80a3fe77459e6130a6eeeb230e4249aea5854edb6ce63fc7a5",
+   "path": "models/sa3-same-enc-F16.gguf",
+   "marker": "sa3-same-enc-F16.gguf",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/sa3-same-dec-F16.gguf": {
+   "label": "sa3-same-dec-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/sa3-same-dec-F16.gguf",
+   "bytes": 852574880,
+   "sha256": "c9e6ec019d0aa834c575e839f331ddca90cc3e080a8fddfcfd57db058b308a69",
+   "path": "models/sa3-same-dec-F16.gguf",
+   "marker": "sa3-same-dec-F16.gguf",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/sa3-text-enc-BF16.gguf": {
+   "label": "sa3-text-enc-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/sa3-text-enc-BF16.gguf",
+   "bytes": 1183213792,
+   "sha256": "9945540fe3d89d3a2736c7125cf9e677775013607e7a53840a7f2deed055a3ef",
+   "path": "models/sa3-text-enc-BF16.gguf",
+   "marker": "sa3-text-enc-BF16.gguf",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/onnx/sa3/tokenizer.json": {
+   "label": "tokenizer.json",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/tokenizer.json",
+   "bytes": 34362429,
+   "sha256": "7794135caa3ea73918949c902a781cc61dab674a4b59c17d85931c77c1114cbd",
+   "path": "models/onnx/sa3/tokenizer.json",
+   "marker": "tokenizer.json",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/onnx/sa3/tokenizer_config.json": {
+   "label": "tokenizer_config.json",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/tokenizer_config.json",
+   "bytes": 46437,
+   "sha256": "9546baec0dfefec0e29873edea9488ecde153f846e18c06ea48cb44587bf408f",
+   "path": "models/onnx/sa3/tokenizer_config.json",
+   "marker": "tokenizer_config.json",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/onnx/sa3/special_tokens_map.json": {
+   "label": "special_tokens_map.json",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-StableStep/resolve/22f23e05097301a50df2d4c1573514333069c8e0/special_tokens_map.json",
+   "bytes": 636,
+   "sha256": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
+   "path": "models/onnx/sa3/special_tokens_map.json",
+   "marker": "special_tokens_map.json",
+   "note": "HOT-Step Stable Audio 3 Medium weights and tokenizer."
+  },
+  "hotstep/sa3-dit-base-BF16.gguf": {
+   "label": "sa3-dit-base-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Stable-Audio-3-Medium-Base-GGUF/resolve/dd7740c5e37ea21c2981cc48e7e53ca10fe5a577/sa3-dit-base-BF16.gguf",
+   "bytes": 2908305984,
+   "sha256": "9b75b6e470e756e867b50eb02f0174dea0db2d7f17790ec58a6aa9a411b45563",
+   "path": "models/sa3-dit-base-BF16.gguf",
+   "marker": "sa3-dit-base-BF16.gguf",
+   "note": "HOT-Step Stable Audio 3 CUDA training component."
+  },
+  "hotstep/runtime/hotstep-1.5.2-cuda12.8/cublas64_12.dll": {
+   "label": "cublas64_12.dll",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-SuperSep/resolve/440487b8300dcd61453cc52ec244a38150b03456/runtime/cuda12/cublas64_12.dll",
+   "bytes": 113712640,
+   "sha256": "0a60a7ecbf906f7f3842826fecaf412f1587ff6269729339245a1ec224364161",
+   "path": "runtime/hotstep-1.5.2-cuda12.8/cublas64_12.dll",
+   "marker": "cublas64_12.dll",
+   "note": "HOT-Step Stable Audio 3 CUDA training component."
+  },
+  "hotstep/runtime/hotstep-1.5.2-cuda12.8/cublasLt64_12.dll": {
+   "label": "cublasLt64_12.dll",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-SuperSep/resolve/440487b8300dcd61453cc52ec244a38150b03456/runtime/cuda12/cublasLt64_12.dll",
+   "bytes": 692441600,
+   "sha256": "a21ddfc1c9cd090ab07d2c6aad235aa4f15fe60fe896d5db28adf7a279c09ef3",
+   "path": "runtime/hotstep-1.5.2-cuda12.8/cublasLt64_12.dll",
+   "marker": "cublasLt64_12.dll",
+   "note": "HOT-Step Stable Audio 3 CUDA training component."
+  },
+  "hotstep/runtime/hotstep-1.5.2-cuda12.8/cudart64_12.dll": {
+   "label": "cudart64_12.dll",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HOT-Step-CPP-SuperSep/resolve/440487b8300dcd61453cc52ec244a38150b03456/runtime/cuda12/cudart64_12.dll",
+   "bytes": 573952,
+   "sha256": "9d9b868955149875ac4ef43442aaaa8913d4a7b3e4d6dd60ee871626aa045768",
+   "path": "runtime/hotstep-1.5.2-cuda12.8/cudart64_12.dll",
+   "marker": "cudart64_12.dll",
+   "note": "HOT-Step Stable Audio 3 CUDA training component."
+  },
+  "hotstep/heartmula-3b-global-Q8_0.gguf": {
+   "label": "heartmula-3b-global-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartmula-3b-global-Q8_0.gguf",
+   "bytes": 3658162880,
+   "sha256": "54546b73a4a1a47af91d064c9cf36f9f58ab817bb5b8782aa1d49f952aba247e",
+   "path": "models/heartmula-3b-global-Q8_0.gguf",
+   "marker": "heartmula-3b-global-Q8_0.gguf",
+   "note": "HOT-Step HeartMuLa 3B and HeartCodec."
+  },
+  "hotstep/heartmula-3b-local-Q8_0.gguf": {
+   "label": "heartmula-3b-local-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartmula-3b-local-Q8_0.gguf",
+   "bytes": 528309344,
+   "sha256": "0533e957c05feb704f32cc422a17818035e63dda64ce41f878cd6bfb6d823724",
+   "path": "models/heartmula-3b-local-Q8_0.gguf",
+   "marker": "heartmula-3b-local-Q8_0.gguf",
+   "note": "HOT-Step HeartMuLa 3B and HeartCodec."
+  },
+  "hotstep/heartcodec-muencoder-F16.gguf": {
+   "label": "heartcodec-muencoder-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-muencoder-F16.gguf",
+   "bytes": 651074464,
+   "sha256": "871ac1e66785a1ed6eee6b4f79c32f69556965223c5f701f2967123abde7e864",
+   "path": "models/heartcodec-muencoder-F16.gguf",
+   "marker": "heartcodec-muencoder-F16.gguf",
+   "note": "HOT-Step HeartMuLa 3B and HeartCodec."
+  },
+  "hotstep/heartcodec-wavlm-F16.gguf": {
+   "label": "heartcodec-wavlm-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-wavlm-F16.gguf",
+   "bytes": 189171488,
+   "sha256": "afe8f3f6da22339da19d9c80c6605a69a0c03077f04d9193d4e8f0e5b82476c6",
+   "path": "models/heartcodec-wavlm-F16.gguf",
+   "marker": "heartcodec-wavlm-F16.gguf",
+   "note": "HOT-Step HeartMuLa 3B and HeartCodec."
+  },
+  "hotstep/heartcodec-whisper-F16.gguf": {
+   "label": "heartcodec-whisper-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-whisper-F16.gguf",
+   "bytes": 178950976,
+   "sha256": "2ab07c9e51c64d9d474b5e4e7c549e4c8d815194945cf91dd6e57bc9f46885fc",
+   "path": "models/heartcodec-whisper-F16.gguf",
+   "marker": "heartcodec-whisper-F16.gguf",
+   "note": "HOT-Step HeartMuLa 3B and HeartCodec."
+  },
+  "hotstep/heartcodec-query-F16.gguf": {
+   "label": "heartcodec-query-F16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/HeartMuLa-GGUF/resolve/fa50b8e6a972214e6ea10decf711c252f88c8d4c/heartcodec-query-F16.gguf",
+   "bytes": 59549952,
+   "sha256": "446d0ce24ef7f314f4f59e4f9d941f27081f50ae0625e6e4dcfbecd1262dce98",
+   "path": "models/heartcodec-query-F16.gguf",
+   "marker": "heartcodec-query-F16.gguf",
+   "note": "HOT-Step HeartMuLa 3B and HeartCodec."
+  },
+  "hotstep/minimax-music3/mm3-lm-Q3_K_M.gguf": {
+   "label": "mm3-lm-Q3_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/67b48c3028544e4ad9c26946b7c7c840f355ec2b/mm3-lm-Q3_K_M.gguf",
+   "bytes": 4589971808,
+   "sha256": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
+   "path": "models/minimax-music3/mm3-lm-Q3_K_M.gguf",
+   "marker": "mm3-lm-Q3_K_M.gguf",
+   "note": "MiniMax Music3 compact split weights for HOT-Step"
+  },
+  "hotstep/minimax-music3/mm3-depth-Q4_K_M.gguf": {
+   "label": "mm3-depth-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/67b48c3028544e4ad9c26946b7c7c840f355ec2b/mm3-depth-Q4_K_M.gguf",
+   "bytes": 404836256,
+   "sha256": "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e",
+   "path": "models/minimax-music3/mm3-depth-Q4_K_M.gguf",
+   "marker": "mm3-depth-Q4_K_M.gguf",
+   "note": "MiniMax Music3 compact split weights for HOT-Step"
+  },
+  "hotstep/minimax-music3/mm3-cond-f16.gguf": {
+   "label": "mm3-cond-f16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/67b48c3028544e4ad9c26946b7c7c840f355ec2b/mm3-cond-f16.gguf",
+   "bytes": 50341120,
+   "sha256": "526a7682d5135ef46fa3e42de367ea3d411c8804c34796bc0c50822a3b4a2461",
+   "path": "models/minimax-music3/mm3-cond-f16.gguf",
+   "marker": "mm3-cond-f16.gguf",
+   "note": "MiniMax Music3 compact split weights for HOT-Step"
+  },
+  "hotstep/minimax-music3/mm3-dit-Q3_K_M.gguf": {
+   "label": "mm3-dit-Q3_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/67b48c3028544e4ad9c26946b7c7c840f355ec2b/mm3-dit-Q3_K_M.gguf",
+   "bytes": 1138427712,
+   "sha256": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
+   "path": "models/minimax-music3/mm3-dit-Q3_K_M.gguf",
+   "marker": "mm3-dit-Q3_K_M.gguf",
+   "note": "MiniMax Music3 compact split weights for HOT-Step"
+  },
+  "hotstep/minimax-music3/mm3-voc-f16.gguf": {
+   "label": "mm3-voc-f16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/67b48c3028544e4ad9c26946b7c7c840f355ec2b/mm3-voc-f16.gguf",
+   "bytes": 216638016,
+   "sha256": "90e578bbbec4fb363b22af4c9203a246f09e18bc3261ca16805ebc2bebdbeb4c",
+   "path": "models/minimax-music3/mm3-voc-f16.gguf",
+   "marker": "mm3-voc-f16.gguf",
+   "note": "MiniMax Music3 compact split weights for HOT-Step"
+  },
+  "hotstep/ace-step-1.5/acestep-v15-turbo-Q8_0.gguf": {
+   "label": "acestep-v15-turbo-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q8_0.gguf",
+   "bytes": 2549528000,
+   "sha256": "288f708a61cfc241013a98a62f98ba331f83fe34d0d3559acdd9b0f6a2f7cd6b",
+   "path": "models/ace-step-1.5/acestep-v15-turbo-Q8_0.gguf",
+   "marker": "acestep-v15-turbo-Q8_0.gguf",
+   "note": "ACE-Step 1.5 Turbo for the published HOT-Step profile"
+  },
+  "hotstep/ace-step-1.5/Qwen3-Embedding-0.6B-BF16.gguf": {
+   "label": "Qwen3-Embedding-0.6B-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/Qwen3-Embedding-0.6B-BF16.gguf",
+   "bytes": 1196890592,
+   "sha256": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
+   "path": "models/ace-step-1.5/Qwen3-Embedding-0.6B-BF16.gguf",
+   "marker": "Qwen3-Embedding-0.6B-BF16.gguf",
+   "note": "ACE-Step 1.5 Turbo for the published HOT-Step profile"
+  },
+  "hotstep/ace-step-1.5/vae-BF16.gguf": {
+   "label": "vae-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/vae-BF16.gguf",
+   "bytes": 337420928,
+   "sha256": "0599862ac5d15cd308e1d2e368373aea6c02e25ebd1737ad4a4562a0901b0ef8",
+   "path": "models/ace-step-1.5/vae-BF16.gguf",
+   "marker": "vae-BF16.gguf",
+   "note": "ACE-Step 1.5 Turbo for the published HOT-Step profile"
+  },
+  "hotstep/runtime/hotstep-1.5.2-cpu/plugins/solvers/euler.lua": {
+   "label": "euler.lua",
+   "kind": "model",
+   "url": "https://raw.githubusercontent.com/scragnog/HOT-Step-CPP/cdef1b0d67afa96b4b202ce69d0aed793af2be2e/engine/plugins/solvers/euler.lua",
+   "bytes": 521,
+   "sha256": "db90641436e49d2d1f74ebcb26b5919903190b0dc4a4b69b28387885bed4e557",
+   "path": "runtime/hotstep-1.5.2-cpu/plugins/solvers/euler.lua",
+   "marker": "euler.lua",
+   "note": "ACE-Step 1.5 Turbo for the published HOT-Step profile"
+  },
+  "hotstep/runtime/hotstep-1.5.2-cpu/plugins/guidance/apg.lua": {
+   "label": "apg.lua",
+   "kind": "model",
+   "url": "https://raw.githubusercontent.com/scragnog/HOT-Step-CPP/cdef1b0d67afa96b4b202ce69d0aed793af2be2e/engine/plugins/guidance/apg.lua",
+   "bytes": 1073,
+   "sha256": "ea804bb957fd99724acb7b199d5214526c350c0355353de155fb8fc5aa869f4b",
+   "path": "runtime/hotstep-1.5.2-cpu/plugins/guidance/apg.lua",
+   "marker": "apg.lua",
+   "note": "ACE-Step 1.5 Turbo for the published HOT-Step profile"
+  },
+  "hotstep/yue2/yue2-lm-Q4_K_M-imat.gguf": {
+   "label": "yue2-lm-Q4_K_M-imat.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-lm-Q4_K_M-imat.gguf",
+   "bytes": 2429623904,
+   "sha256": "9d46d4cc86d3d774c7bcf5dc547aa837a5a1bca107361d1bf7adf446cbaedf91",
+   "path": "models/yue2/yue2-lm-Q4_K_M-imat.gguf",
+   "marker": "yue2-lm-Q4_K_M-imat.gguf",
+   "note": "YuE2 GGUF for HOT-Step"
+  },
+  "hotstep/yue2/yue2-vae-standard-f32.gguf": {
+   "label": "yue2-vae-standard-f32.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/YuE2-GGUF/resolve/eb7de0903bf4dfbd14a2384ae0c0d14150cfa2c7/yue2-vae-standard-f32.gguf",
+   "bytes": 530348768,
+   "sha256": "c4ffc363b246f404c1d150075da4c41c4a031524036042ce45aeb500d4d5fe71",
+   "path": "models/yue2/yue2-vae-standard-f32.gguf",
+   "marker": "yue2-vae-standard-f32.gguf",
+   "note": "YuE2 GGUF for HOT-Step"
   },
   "acestep-v15-turbo-Q4_K_M.gguf": {
    "label": "acestep-v15-turbo-Q4_K_M.gguf",
@@ -1355,6 +1715,165 @@
     },
     "roles": {
      "seed-vc-mlx-q8_0.gguf": "acpp/seed_vc/seed-vc-mlx-q8_0.gguf"
+    }
+   }
+  ],
+  "hotstep": [
+   {
+    "id": "mulacover",
+    "label": {
+     "en": "HOT-Step MuLaCover",
+     "ru": "HOT-Step MuLaCover",
+     "zh": "HOT-Step MuLaCover",
+     "ja": "HOT-Step MuLaCover",
+     "ko": "HOT-Step MuLaCover",
+     "pt": "HOT-Step MuLaCover"
+    },
+    "roles": {
+     "models/heartmula-mulacover-global-BF16.gguf": "hotstep/heartmula-mulacover-global-BF16.gguf",
+     "models/heartmula-mulacover-local-BF16.gguf": "hotstep/heartmula-mulacover-local-BF16.gguf",
+     "models/heartcodec-flow-Q8_0.gguf": "hotstep/heartcodec-flow-Q8_0.gguf",
+     "models/heartcodec-scalar-decoder-F16.gguf": "hotstep/heartcodec-scalar-decoder-F16.gguf",
+     "models/heartcodec-rvq-F32.gguf": "hotstep/heartcodec-rvq-F32.gguf",
+     "models/heartmula-tokenizer.gguf": "hotstep/heartmula-tokenizer.gguf",
+     "models/Qwen3-Embedding-0.6B-BF16.gguf": "hotstep/Qwen3-Embedding-0.6B-BF16.gguf"
+    }
+   },
+   {
+    "id": "stable-audio-3",
+    "label": {
+     "en": "Stable Audio 3 Medium",
+     "ru": "Stable Audio 3 Medium",
+     "zh": "Stable Audio 3 Medium",
+     "ja": "Stable Audio 3 Medium",
+     "ko": "Stable Audio 3 Medium",
+     "pt": "Stable Audio 3 Medium"
+    },
+    "roles": {
+     "models/sa3-dit-BF16.gguf": "hotstep/sa3-dit-BF16.gguf",
+     "models/sa3-same-enc-F16.gguf": "hotstep/sa3-same-enc-F16.gguf",
+     "models/sa3-same-dec-F16.gguf": "hotstep/sa3-same-dec-F16.gguf",
+     "models/sa3-text-enc-BF16.gguf": "hotstep/sa3-text-enc-BF16.gguf",
+     "models/onnx/sa3/tokenizer.json": "hotstep/onnx/sa3/tokenizer.json",
+     "models/onnx/sa3/tokenizer_config.json": "hotstep/onnx/sa3/tokenizer_config.json",
+     "models/onnx/sa3/special_tokens_map.json": "hotstep/onnx/sa3/special_tokens_map.json"
+    }
+   },
+   {
+    "id": "stable-audio-3-train",
+    "label": {
+     "en": "Stable Audio 3 Medium training base",
+     "ru": "Stable Audio 3 Medium training base",
+     "zh": "Stable Audio 3 Medium training base",
+     "ja": "Stable Audio 3 Medium training base",
+     "ko": "Stable Audio 3 Medium training base",
+     "pt": "Stable Audio 3 Medium training base"
+    },
+    "roles": {
+     "models/sa3-dit-base-BF16.gguf": "hotstep/sa3-dit-base-BF16.gguf"
+    }
+   },
+   {
+    "id": "trainer-cuda12",
+    "label": {
+     "en": "HOT-Step trainer CUDA 12 libraries",
+     "ru": "HOT-Step trainer CUDA 12 libraries",
+     "zh": "HOT-Step trainer CUDA 12 libraries",
+     "ja": "HOT-Step trainer CUDA 12 libraries",
+     "ko": "HOT-Step trainer CUDA 12 libraries",
+     "pt": "HOT-Step trainer CUDA 12 libraries"
+    },
+    "roles": {
+     "runtime/hotstep-1.5.2-cuda12.8/cublas64_12.dll": "hotstep/runtime/hotstep-1.5.2-cuda12.8/cublas64_12.dll",
+     "runtime/hotstep-1.5.2-cuda12.8/cublasLt64_12.dll": "hotstep/runtime/hotstep-1.5.2-cuda12.8/cublasLt64_12.dll",
+     "runtime/hotstep-1.5.2-cuda12.8/cudart64_12.dll": "hotstep/runtime/hotstep-1.5.2-cuda12.8/cudart64_12.dll"
+    }
+   },
+   {
+    "id": "heartmula",
+    "label": {
+     "en": "HeartMuLa 3B",
+     "ru": "HeartMuLa 3B",
+     "zh": "HeartMuLa 3B",
+     "ja": "HeartMuLa 3B",
+     "ko": "HeartMuLa 3B",
+     "pt": "HeartMuLa 3B"
+    },
+    "roles": {
+     "models/heartmula-3b-global-Q8_0.gguf": "hotstep/heartmula-3b-global-Q8_0.gguf",
+     "models/heartmula-3b-local-Q8_0.gguf": "hotstep/heartmula-3b-local-Q8_0.gguf",
+     "models/heartcodec-flow-Q8_0.gguf": "hotstep/heartcodec-flow-Q8_0.gguf",
+     "models/heartcodec-scalar-decoder-F16.gguf": "hotstep/heartcodec-scalar-decoder-F16.gguf",
+     "models/heartcodec-rvq-F32.gguf": "hotstep/heartcodec-rvq-F32.gguf",
+     "models/heartmula-tokenizer.gguf": "hotstep/heartmula-tokenizer.gguf"
+    }
+   },
+   {
+    "id": "heartmula-train",
+    "label": {
+     "en": "HeartMuLa encoder for training",
+     "ru": "HeartMuLa encoder for training",
+     "zh": "HeartMuLa encoder for training",
+     "ja": "HeartMuLa encoder for training",
+     "ko": "HeartMuLa encoder for training",
+     "pt": "HeartMuLa encoder for training"
+    },
+    "roles": {
+     "models/heartcodec-muencoder-F16.gguf": "hotstep/heartcodec-muencoder-F16.gguf",
+     "models/heartcodec-wavlm-F16.gguf": "hotstep/heartcodec-wavlm-F16.gguf",
+     "models/heartcodec-whisper-F16.gguf": "hotstep/heartcodec-whisper-F16.gguf",
+     "models/heartcodec-query-F16.gguf": "hotstep/heartcodec-query-F16.gguf"
+    }
+   },
+   {
+    "id": "minimax-music3",
+    "label": {
+     "en": "MiniMax Music3",
+     "ru": "MiniMax Music3",
+     "zh": "MiniMax Music3",
+     "ja": "MiniMax Music3",
+     "ko": "MiniMax Music3",
+     "pt": "MiniMax Music3"
+    },
+    "roles": {
+     "models/minimax-music3/mm3-lm-Q3_K_M.gguf": "hotstep/minimax-music3/mm3-lm-Q3_K_M.gguf",
+     "models/minimax-music3/mm3-depth-Q4_K_M.gguf": "hotstep/minimax-music3/mm3-depth-Q4_K_M.gguf",
+     "models/minimax-music3/mm3-cond-f16.gguf": "hotstep/minimax-music3/mm3-cond-f16.gguf",
+     "models/minimax-music3/mm3-dit-Q3_K_M.gguf": "hotstep/minimax-music3/mm3-dit-Q3_K_M.gguf",
+     "models/minimax-music3/mm3-voc-f16.gguf": "hotstep/minimax-music3/mm3-voc-f16.gguf"
+    }
+   },
+   {
+    "id": "ace-step-1.5",
+    "label": {
+     "en": "ACE-Step 1.5",
+     "ru": "ACE-Step 1.5",
+     "zh": "ACE-Step 1.5",
+     "ja": "ACE-Step 1.5",
+     "ko": "ACE-Step 1.5",
+     "pt": "ACE-Step 1.5"
+    },
+    "roles": {
+     "models/ace-step-1.5/acestep-v15-turbo-Q8_0.gguf": "hotstep/ace-step-1.5/acestep-v15-turbo-Q8_0.gguf",
+     "models/ace-step-1.5/Qwen3-Embedding-0.6B-BF16.gguf": "hotstep/ace-step-1.5/Qwen3-Embedding-0.6B-BF16.gguf",
+     "models/ace-step-1.5/vae-BF16.gguf": "hotstep/ace-step-1.5/vae-BF16.gguf",
+     "runtime/hotstep-1.5.2-cpu/plugins/solvers/euler.lua": "hotstep/runtime/hotstep-1.5.2-cpu/plugins/solvers/euler.lua",
+     "runtime/hotstep-1.5.2-cpu/plugins/guidance/apg.lua": "hotstep/runtime/hotstep-1.5.2-cpu/plugins/guidance/apg.lua"
+    }
+   },
+   {
+    "id": "yue2",
+    "label": {
+     "en": "YuE2",
+     "ru": "YuE2",
+     "zh": "YuE2",
+     "ja": "YuE2",
+     "ko": "YuE2",
+     "pt": "YuE2"
+    },
+    "roles": {
+     "models/yue2/yue2-lm-Q4_K_M-imat.gguf": "hotstep/yue2/yue2-lm-Q4_K_M-imat.gguf",
+     "models/yue2/yue2-vae-standard-f32.gguf": "hotstep/yue2/yue2-vae-standard-f32.gguf"
     }
    }
   ],

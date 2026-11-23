@@ -46,82 +46,18 @@ const WIN: Asset = Asset {
     note: "Native cover runtime, with the best CPU backend selected for this processor.",
 };
 
-macro_rules! model {
-    ($repo:literal, $revision:literal, $name:literal, $bytes:literal, $sha:literal) => {
-        (Asset {
-            id: $name, label: $name, kind: AssetKind::Model,
-            url: concat!("https://huggingface.co/", $repo, "/resolve/", $revision, "/", $name),
-            relative_path: concat!("models/", $name), bytes: $bytes, unzip_into: None,
-            marker: $name, pick: &[], vram_gb: None,
-            note: "HOT-Step HeartMuLa MuLaCover weights; codec and tokenizer are shared with HeartMuLa.",
-        }, $sha)
-    };
+/// A HOT-Step set of the component catalogue (`distribution/components-src/hotstep.json`) with each file's SHA-256.
+pub(super) fn set(id: &str) -> Vec<(&'static Asset, &'static str)> {
+    crate::components::set_files("hotstep", id).unwrap_or_else(|| panic!("the component catalogue has no HOT-Step set {id}"))
 }
 
-const MODELS: [(Asset, &str); 7] = [
-    model!(
-        "scragnog/HeartMuLa-GGUF",
-        "fa50b8e6a972214e6ea10decf711c252f88c8d4c",
-        "heartmula-mulacover-global-BF16.gguf",
-        7755339840,
-        "6b7a7d889242ae121f7c1b8d2a9ecd6de3d09eba9e831ee9bd42a0ce020f77a7"
-    ),
-    model!(
-        "scragnog/HeartMuLa-GGUF",
-        "fa50b8e6a972214e6ea10decf711c252f88c8d4c",
-        "heartmula-mulacover-local-BF16.gguf",
-        994370080,
-        "5d35548e2474ca5bcc28fde9ed54629ea80d14c8181abc5c1b5f990c84a810d3"
-    ),
-    model!(
-        "scragnog/HeartMuLa-GGUF",
-        "fa50b8e6a972214e6ea10decf711c252f88c8d4c",
-        "heartcodec-flow-Q8_0.gguf",
-        1609869536,
-        "f9b67fd65b6873c371b62680cd0ae2d3064d0b1081e8758a4f538d076734f83c"
-    ),
-    model!(
-        "scragnog/HeartMuLa-GGUF",
-        "fa50b8e6a972214e6ea10decf711c252f88c8d4c",
-        "heartcodec-scalar-decoder-F16.gguf",
-        167671648,
-        "cc53325408d2527b99f09cfdf65451bee72cb952b0c52ff135d673b4aacb087f"
-    ),
-    model!(
-        "scragnog/HeartMuLa-GGUF",
-        "fa50b8e6a972214e6ea10decf711c252f88c8d4c",
-        "heartcodec-rvq-F32.gguf",
-        17194624,
-        "d292f57cbcb204a06f998c8bf0f4a2ef671ba82b1a0071904d102435e3525b44"
-    ),
-    model!(
-        "scragnog/HeartMuLa-GGUF",
-        "fa50b8e6a972214e6ea10decf711c252f88c8d4c",
-        "heartmula-tokenizer.gguf",
-        7852064,
-        "d4881e7fd90d6bc80367d909cc1453da93b666f29d4ab89a8befbba00f4c3cb1"
-    ),
-    model!(
-        "Serveurperso/ACE-Step-1.5-GGUF",
-        "666ac70204440867d8c01ba4b119cc79c95b370a",
-        "Qwen3-Embedding-0.6B-BF16.gguf",
-        1196890592,
-        "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df"
-    ),
-];
-
-pub(super) fn heartmula_shared() -> impl Iterator<Item = &'static Asset> {
-    MODELS.iter().map(|(asset, _)| asset).filter(|asset| matches!(asset.id,
-        "heartcodec-flow-Q8_0.gguf" | "heartcodec-scalar-decoder-F16.gguf" | "heartcodec-rvq-F32.gguf" | "heartmula-tokenizer.gguf"))
+/// The MuLaCover weights; the codec and tokenizer are HeartMuLa's.
+fn models() -> Vec<(&'static Asset, &'static str)> {
+    set("mulacover")
 }
 
 pub(super) fn sha256(url: &str) -> Option<&'static str> {
-    if url == WIN_URL {
-        return Some("92de8271d38f16922d44ba176bcad9bff71df24bae301ba3e2594a6c2893d4a3");
-    }
-    MODELS
-        .iter()
-        .find_map(|(asset, sha)| (asset.url == url).then_some(*sha))
+    (url == WIN_URL).then_some("92de8271d38f16922d44ba176bcad9bff71df24bae301ba3e2594a6c2893d4a3")
 }
 
 fn server_override() -> Option<std::ffi::OsString> {
@@ -152,8 +88,8 @@ pub(super) fn model_folder(downloader: &Downloader) -> PathBuf {
 }
 
 pub(super) fn missing(downloader: &Downloader) -> Vec<&'static Asset> {
-    let mut missing: Vec<_> = MODELS
-        .iter()
+    let mut missing: Vec<_> = models()
+        .into_iter()
         .map(|(asset, _)| asset)
         .filter(|asset| {
             !std::fs::metadata(downloader.path_of(asset))

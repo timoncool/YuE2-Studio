@@ -339,6 +339,19 @@ pub(crate) fn sets(engine: &str) -> Vec<ModelSet> {
         .unwrap_or_default()
 }
 
+
+/// Every file of a set with its pinned SHA-256; none when the catalogue has no such set.
+pub(crate) fn set_files(engine: &str, set: &str) -> Option<Vec<(&'static Asset, &'static str)>> {
+    let set = sets(engine).into_iter().find(|candidate| candidate.id == set)?;
+    set.roles
+        .values()
+        .map(|id| {
+            let asset = asset(id).ok()?;
+            Some((asset, crate::pin_sha::sha256(asset.url)?))
+        })
+        .collect()
+}
+
 pub(crate) fn file(id: &str) -> Option<FileEntry> {
     both().into_iter().find_map(|loaded| entry(&loaded.catalogue, id).cloned())
 }
@@ -602,6 +615,7 @@ mod export {
         crate::component_catalogue::bundled().sources(sha).unwrap_or_default().iter()
             .filter(|url| url.as_str() != asset.url).map(|url| &*Box::leak(url.clone().into_boxed_str())).collect()
     }
+
 
 
 

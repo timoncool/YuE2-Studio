@@ -77,7 +77,7 @@ pub(super) async fn install(
             let assets = downloader.clone();
             tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
                 for asset in weights {
-                    let sha = hotstep_sa3_assets::sha256(asset.url)
+                    let sha = crate::pin_sha::sha256(asset.url)
                         .context("Missing Stable Audio 3 checksum")?;
                     audio_cpp_music::repair_managed_file(&assets.path_of(asset), asset, sha)?;
                 }

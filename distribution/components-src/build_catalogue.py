@@ -23,6 +23,8 @@ ROLES = {
     "minimaxmusic-cpp": {"lm", "depth", "cond", "dit", "vae"},
     # the audio.cpp model families: a set is a family, its roles are the files by name inside its folder
     "audio.cpp": set(),
+    # HOT-Step: a set per profile, its roles the files by path inside HOT-Step's folder
+    "hotstep": set(),
 }
 MOVING = re.compile(r"/(resolve|raw|blob)/(main|master)/")
 

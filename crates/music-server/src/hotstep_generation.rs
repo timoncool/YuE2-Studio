@@ -71,12 +71,13 @@ impl Family {
             }
         }
     }
-    fn assets(self) -> &'static [(downloads::Asset, &'static str)] {
-        match self {
-            Self::MiniMax => &WEIGHTS,
-            Self::Ace => &crate::hotstep_ace_assets::ASSETS,
-            Self::Yue => &crate::hotstep_yue2::ASSETS,
-        }
+    /// The weights of this family: a HOT-Step set of the component catalogue.
+    fn assets(self) -> Vec<(&'static downloads::Asset, &'static str)> {
+        crate::hotstep_cover_assets::set(match self {
+            Self::MiniMax => "minimax-music3",
+            Self::Ace => "ace-step-1.5",
+            Self::Yue => "yue2",
+        })
     }
     fn lock(self, state: &AppState) -> Arc<tokio::sync::Mutex<()>> {
         match self {
@@ -94,53 +95,6 @@ impl Family {
 }
 const ENGINE: &str = hotstep_cover::ENGINE;
 
-macro_rules! weight {
-    ($file:literal, $size:literal, $sha:literal) => {
-        (downloads::Asset {
-            id: $file, label: $file, kind: downloads::AssetKind::Model,
-            url: concat!("https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/67b48c3028544e4ad9c26946b7c7c840f355ec2b/", $file),
-            relative_path: concat!("models/minimax-music3/", $file),
-            bytes: $size, unzip_into: None, marker: $file, pick: &[], vram_gb: None,
-            note: "MiniMax Music3 compact split weights for HOT-Step",
-        }, $sha)
-    };
-}
-
-const WEIGHTS: [(downloads::Asset, &str); 5] = [
-    weight!(
-        "mm3-lm-Q3_K_M.gguf",
-        4_589_971_808,
-        "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5"
-    ),
-    weight!(
-        "mm3-depth-Q4_K_M.gguf",
-        404_836_256,
-        "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e"
-    ),
-    weight!(
-        "mm3-cond-f16.gguf",
-        50_341_120,
-        "526a7682d5135ef46fa3e42de367ea3d411c8804c34796bc0c50822a3b4a2461"
-    ),
-    weight!(
-        "mm3-dit-Q3_K_M.gguf",
-        1_138_427_712,
-        "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f"
-    ),
-    weight!(
-        "mm3-voc-f16.gguf",
-        216_638_016,
-        "90e578bbbec4fb363b22af4c9203a246f09e18bc3261ca16805ebc2bebdbeb4c"
-    ),
-];
-
-pub(super) fn sha256(url: &str) -> Option<&'static str> {
-    WEIGHTS
-        .iter()
-        .chain(crate::hotstep_ace_assets::ASSETS.iter())
-        .chain(crate::hotstep_yue2::ASSETS.iter())
-        .find_map(|(asset, sha)| (asset.url == url).then_some(*sha))
-}
 
 fn missing(downloader: &downloads::Downloader, family: Family) -> Vec<&'static downloads::Asset> {
     runtime::missing_runtime(downloader)
@@ -148,7 +102,7 @@ fn missing(downloader: &downloads::Downloader, family: Family) -> Vec<&'static d
         .chain(
             family
                 .assets()
-                .iter()
+                .into_iter()
                 .filter(|(asset, sha)| {
                     let path = downloader.path_of(asset);
                     !std::fs::metadata(&path)
@@ -224,7 +178,7 @@ async fn install_family(
             let repair = missing.clone();
             tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
                 for asset in repair {
-                    if let Some(sha) = sha256(asset.url) {
+                    if let Some(sha) = crate::pin_sha::sha256(asset.url) {
                         audio_cpp_music::repair_managed_file(&assets.path_of(asset), asset, sha)?;
                     }
                 }
