@@ -1048,20 +1048,22 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const effectiveCot: YueCot = cot || (defaults.cot as YueCot) || 'full';
 
   const profileLabel = useMemo(() => setupLabel(t, language, setup), [setup, t, language]);
-  const modelOptions: { value: string; label: string; group: string; ready?: boolean }[] = [
+  const modelOptions: { value: string; label: string; group: string; ready?: boolean; experimental?: boolean }[] = [
     ...linkedMusicFamilies.map(family => {
       // a family that runs only on audio.cpp or HOT-Step is ready when one of its profiles is
       const profiled = family.pairs.every((pair: LinkedMusicPair) => 'profile' in pair && pair.profile);
       const ready = profiled ? family.pairs.some((pair: LinkedMusicPair) => 'profile' in pair
         && [...native.audioProfiles, ...native.hotstepProfiles].some(profile => profile.id === pair.profile && profile.ready)) : undefined;
-      return { value: family.id, label: family.name, group: musicStrings.groupLocal, ready };
+      const experimental = profiled && family.pairs.some((pair: LinkedMusicPair) => 'profile' in pair
+        && [...native.audioProfiles, ...native.hotstepProfiles].some(profile => profile.id === pair.profile && profile.status === 'experimental'));
+      return { value: family.id, label: family.name, group: musicStrings.groupLocal, ready, experimental };
     }),
     ...native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
       pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id)))
-      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready })),
+      .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready, experimental: profile.status === 'experimental' })),
     ...native.audioProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
       pair.engine === 'audio.cpp' && 'profile' in pair && pair.profile === profile.id)))
-      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready })),
+      .map(profile => ({ value: `audio:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready, experimental: profile.status === 'experimental' })),
     ...(nativeEngine === 'hotstep' && modelChoice === 'hotstep' ? [{ value: 'hotstep', label: 'HOT-Step', group: musicStrings.groupLocal }] : []),
     ...(audioCpp && !linkedFamily && !native.audioProfiles.some(profile => `audio:${profile.id}` === modelChoice)
       ? [{ value: modelChoice, label: 'audio.cpp', group: musicStrings.groupLocal }] : []),
@@ -1092,7 +1094,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const modelHasSettings = Boolean(linkedFamily && linkedFamily.pairs.length > 1) || yue || (nativeSets && native.profiles.length > 0);
   // the model card stays in the form only while it asks for something: a download, a choice the settings cannot make
   const nativeCardNeeded = !onMusicEngineChange || native.loading || Boolean(native.error) || !native.ready || Boolean(native.originalModels)
-    || Boolean(vevo2 && native.profile?.model_directory) || native.profile?.status === 'experimental' || Boolean(native.installed && native.adapterRuntimeUpdate && nativeSets)
+    || Boolean(vevo2 && native.profile?.model_directory) || Boolean(native.installed && native.adapterRuntimeUpdate && nativeSets)
     || (native.profiles.length > 0 && !nativeSets && !audioCpp && nativeEngine !== 'hotstep');
   // the model's own side first (its quality, its synthesis model), how it runs last
   const modelSettings = <>
@@ -2248,7 +2250,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                     <p aria-hidden className="sticky -top-2 z-10 bg-white px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">{group}</p>
                     {entries.map(option => <PickerOption key={option.value} value={option.value} selected={option.value === modelChoice}
                       name={option.label} hint={modelHints[option.value.replace(/^(audio|hotstep):/, '')]}
-                      side={option.ready === false ? musicStrings.needsDownload : undefined}
+                      side={option.ready === false ? musicStrings.needsDownload : option.experimental ? musicStrings.experimental : undefined}
                       mark={option.value === modelChoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
                       onPick={() => { chooseModelFamily(option.value); close(); }} />)}
                   </div>;
@@ -2312,7 +2314,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                         {native.profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.label}{(!native.installed || !profile.ready) ? ` — ${nativeStrings.unavailable}` : ''}</option>)}
                       </select>
                     )}
-                    {native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
+                    {!onMusicEngineChange && native.profile?.status === 'experimental' && <p className="text-xs">{nativeStrings.experimental}</p>}
                     {native.profile && !native.ready && !nativeSets && !native.profile.installable &&
                       <p role="status" className="text-xs">{nativeStrings.unavailable}</p>}
                     {hotstepHeart && native.profile?.installable && !native.ready &&
@@ -2423,7 +2425,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 </> : !vevo2 && !soulx && !miDasheng && !(magenta && magentaReference) && <AutoTextarea className={CONTROL} value={style} onChange={event => setStyle(event.target.value)}
                   placeholder={tt('stylePlaceholder')} aria-label={tt('styleCardTitle')} />}
               </Card>
-              {miDasheng ? <Card title={formCardStrings[language].scene}><MiDashengFields value={scene} onChange={setScene} /></Card> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && !soulx && <Card title={t('lyrics')}
+              {miDasheng ? <Card title={formCardStrings[language].scene}><MiDashengFields value={scene} onChange={setScene} controlClassName={CONTROL} /></Card> : !magenta && !miniMaxH3 && !stableAudio && !hotstepSa3 && !soulx && <Card title={t('lyrics')}
                 actions={miniMaxEngine ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${overBudget ? 'bg-rose-500/10 text-rose-600 dark:text-rose-300' : 'bg-zinc-200/70 text-zinc-500 dark:bg-white/10 dark:text-zinc-400'}`}
                   title={promptQuery.error ? `${mmText.promptBudget} — ${promptQuery.error.message}` : promptCheck?.exact === false ? `${mmText.promptBudget} — ${mmText.promptBudgetEstimated}` : mmText.promptBudget}>
                   {mmText.promptBudgetShort} {promptQuery.error ? '!' : promptCheck ? `${promptCheck.exact ? '' : '≈'}${promptCheck.tokens} / ${promptCheck.limit}` : '…'}

@@ -17,7 +17,7 @@ it('restores each layer and lets music, effects and ambience submit without spee
   const updated = vi.fn();
   function Form() {
     const [value, setValue] = useState(initial);
-    return <MiDashengFields value={value} onChange={next => { setValue(next); updated(next); }} />;
+    return <MiDashengFields value={value} controlClassName="" onChange={next => { setValue(next); updated(next); }} />;
   }
   try {
     act(() => root.render(<Form />));
