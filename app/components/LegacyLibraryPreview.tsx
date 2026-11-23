@@ -138,8 +138,8 @@ export function LegacyLibraryPreview({ sources = [] }: { sources?: LegacySource[
       {exclude.length === 0 && preview.space.available_bytes !== null && preview.space.required_bytes > preview.space.available_bytes &&
         <p role="alert" className="text-amber-700 dark:text-amber-300">{t('legacyLibraryNoSpace')}</p>}
       <details className="group">
-        <summary className="flex min-h-8 cursor-pointer items-center gap-1.5">
-          <span className="font-medium">{t('legacyLibraryWhat')}:</span>
+        <summary className="min-h-8 cursor-pointer leading-8">
+          <span className="font-medium">{t('legacyLibraryWhat')}:</span>{' '}
           <span className="text-zinc-600 dark:text-zinc-300">{exclude.length === 0 ? t('legacyLibraryEverything')
             : t('legacyLibraryPartOf').replace('{n}', String(categories.length - exclude.length)).replace('{total}', String(categories.length))}</span>
         </summary>
