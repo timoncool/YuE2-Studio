@@ -1046,7 +1046,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   ];
   const modelReady = yue ? ready : cloud ? Boolean(configured && selectedMusicModel) : native.ready;
   const modelStateText = modelReady ? nativeModelSetStrings[language].ready : yue ? unavailableTitle : nativeStrings.unavailable;
-  const modelHints: Record<string, string> = { local: musicStrings.hintYue, 'acestep-cpp': musicStrings.hintAce, 'minimaxmusic-cpp': musicStrings.hintMiniMax, openrouter: musicStrings.hintCloud };
+  const modelHints: Record<string, string> = { ...musicStrings.hintModels, local: musicStrings.hintYue, 'acestep-cpp': musicStrings.hintAce, 'minimaxmusic-cpp': musicStrings.hintMiniMax, openrouter: musicStrings.hintCloud };
   const modelHasSettings = Boolean(linkedFamily && linkedFamily.pairs.length > 1) || yue || (nativeSets && native.profiles.length > 0);
   // the model card stays in the form only while it asks for something: a download, a choice the settings cannot make
   const nativeCardNeeded = !onMusicEngineChange || native.loading || Boolean(native.error) || !native.ready || Boolean(native.originalModels)
@@ -2185,7 +2185,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </div>
             <div className="flex min-w-0 shrink items-center gap-1.5">
               {onMusicEngineChange ? <>
-                <PickerPill className="w-[9.5rem] max-w-full" label={musicStrings.modelFamily} showLabel={false} align="right"
+                <PickerPill className="max-w-[13rem]" label={musicStrings.modelFamily} showLabel={false} align="right"
                   status={<span title={modelStateText} className={`h-2 w-2 shrink-0 rounded-full ${modelReady ? 'bg-emerald-500' : 'bg-amber-500'}`}>
                     <span className="sr-only">{modelStateText}</span></span>}
                   value={modelOptions.find(option => option.value === modelChoice)?.label ?? modelChoice}>
@@ -2195,7 +2195,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       return entries.length > 0 && <div key={group} className="mb-1 last:mb-0">
                         <p className="px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">{group}</p>
                         {entries.map(option => <PickerOption key={option.value} value={option.value} selected={option.value === modelChoice}
-                          name={option.label} hint={modelHints[option.value]}
+                          name={option.label} hint={modelHints[option.value.replace(/^(audio|hotstep):/, '')]}
                           mark={option.value === modelChoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
                           onPick={() => { chooseModelFamily(option.value); close(); }} />)}
                       </div>;
