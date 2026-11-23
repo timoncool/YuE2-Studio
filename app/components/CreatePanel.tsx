@@ -1048,7 +1048,13 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
 
   const profileLabel = useMemo(() => setupLabel(t, language, setup), [setup, t, language]);
   const modelOptions: { value: string; label: string; group: string; ready?: boolean }[] = [
-    ...linkedMusicFamilies.map(family => ({ value: family.id, label: family.name, group: musicStrings.groupLocal })),
+    ...linkedMusicFamilies.map(family => {
+      // a family that runs only on audio.cpp or HOT-Step is ready when one of its profiles is
+      const profiled = family.pairs.every((pair: LinkedMusicPair) => 'profile' in pair && pair.profile);
+      const ready = profiled ? family.pairs.some((pair: LinkedMusicPair) => 'profile' in pair
+        && [...native.audioProfiles, ...native.hotstepProfiles].some(profile => profile.id === pair.profile && profile.ready)) : undefined;
+      return { value: family.id, label: family.name, group: musicStrings.groupLocal, ready };
+    }),
     ...native.hotstepProfiles.filter(profile => !linkedMusicFamilies.some(family => family.pairs.some((pair: LinkedMusicPair) =>
       pair.engine === 'hotstep' && 'profile' in pair && pair.profile === profile.id)))
       .map(profile => ({ value: `hotstep:${profile.id}`, label: profile.label.split(' · ')[0], group: musicStrings.groupLocal, ready: profile.ready })),
@@ -2248,7 +2254,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 })}
               </>}
             </PickerPill>
-            {modelHasSettings && <PickerPill kind="dialog" className="min-w-0 max-w-[45%] shrink" label={settingsShowsEngine ? musicStrings.engine : musicStrings.modelSettings}
+            {modelHasSettings && <PickerPill kind="dialog" className="min-w-0 max-w-[45%] shrink" label={settingsShowsEngine ? musicStrings.engineShort : musicStrings.modelSettings}
               showLabel={settingsShowsEngine} align="right" value={settingsValue}>
               {() => <div className="space-y-3 p-1">{modelSettings}</div>}
             </PickerPill>}
@@ -2456,15 +2462,17 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 missingSoxr={native.profile?.missing.includes('libsoxr') === true} controlClassName={CONTROL} />}
               {soulx && <SoulXSingerFields key={audioFamily} conversion={soulxConversion} value={soulxInputs} onChange={setSoulxInputs} controlClassName={CONTROL} />}
               {vevo2 && <Vevo2SingingFields value={vevoReferences} onChange={setVevoReferences} controlClassName={CONTROL} />}
-              {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
               {hotstepHeart && <HotStepSa3Controls value={hotstepHeartDraft} onChange={setHotstepHeartDraft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} hasSampler={false} />}
               {hotstepSa3 && <HotStepSa3Controls value={hotstepSa3Draft} onChange={setHotstepSa3Draft}
                 adapters={native.profile?.adapters ?? []} control={CONTROL} language={language} />}
-              {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
               {(nativeEngine && !packedYue && abc.trim() || mulaCover && mulaCoverDraft.abc.trim()) && <p role="status" className="text-xs text-zinc-500">{nativeStrings.scoreKept}</p>}
               {nativeEngine && (native.profile || native.originalModels) && (
                 <Card title={nativeStrings.settings} fold="native-settings" foldedByDefault>
+                  {(heartMuLa || stableAudio) && <div className="mb-3">
+                    {heartMuLa && <HeartMuLaControls values={heartSettings} onChange={setHeartSettings} language={language} />}
+                    {stableAudio && <StableAudioControls value={stableSettings} onChange={setStableSettings} language={language} />}
+                  </div>}
                   <div className="grid grid-cols-2 gap-2">
                     {nativeControls.filter(([key]) => (vevo2 || soulx) ? key === 'seed' : !(miDasheng || magenta) || key !== 'steps').map(([key, label]) => (
                       <label key={key} className="space-y-1 text-xs">
