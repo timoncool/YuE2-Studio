@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { apiUrl } from '../services/apiBase';
 import { useI18n } from '../context/I18nContext';
 import { nativeMusicSourceStrings } from '../i18n/musicSource';
+import { nativeModelSetStrings } from '../i18n/nativeModelSet';
+import { WorkProgress } from './WorkProgress';
 
 export interface HeartMuLaOptions {
   temperature?: number;
@@ -90,6 +92,11 @@ type ModelInstallTarget =
   | { model: LegacyManagedModel; target?: never }
   | { model: string; target: { catalogue: string; installPath: string; label: string } };
 
+const INSTALL =
+  'inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-linear-to-r from-orange-500 to-pink-600 px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50';
+const CANCEL =
+  'mt-2 inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:border-pink-400 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-zinc-200';
+
 export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onInstalled, target }: ModelInstallTarget & {
   bytes: number;
   licenseUrl?: string;
@@ -99,6 +106,7 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [percent, setPercent] = useState<number>();
+  const [progress, setProgress] = useState<{ done: number; total: number }>();
   const [canCancel, setCanCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const { t } = useI18n();
@@ -110,7 +118,6 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
   const soulx = model === 'soulx_singer' ? 'SoulX-Singer SVS' : model === 'soulx_singer_svc' ? 'SoulX-Singer SVC' : undefined;
   const name = target?.label ?? soulx ?? (model === 'ace_step' ? 'ACE-Step 1.5 Turbo (audio.cpp)' : model === 'yue2' ? 'YuE2 (audio.cpp)' : hotstepYue ? 'YuE2 (HOT-Step)' : hotstepAce ? 'ACE-Step 1.5 Turbo (HOT-Step)' : hotstepMinimax ? 'MiniMax Music3 (HOT-Step)' : hotstepHeart ? 'HeartMuLa 3B (HOT-Step)' : hotstep ? 'Stable Audio 3 Medium (HOT-Step)' : model === 'stable_audio' ? 'Stable Audio 3' : 'HeartMuLa');
   const [install, installing, failed] = (installLabels[language] ?? installLabels.en).map(label => label.replace('HeartMuLa', name));
-  const size = bytes > 0 ? ` · ${new Intl.NumberFormat(language, { maximumFractionDigits: 2 }).format(bytes / (1024 ** 3))} GiB` : '';
 
   async function status(signal?: AbortSignal) {
     const response = await fetch(apiUrl(target?.catalogue ?? (hotstep ? '/v1/music/native/hotstep/profiles' : '/v1/music/audio-cpp/models')), { signal });
@@ -122,8 +129,9 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     setBusy(Boolean(row.installing));
     const download = row.download;
     setCanCancel(Boolean(row.installing && download && !download.done));
-    setPercent(row.installing && download && !download.done && download.total_bytes > 0
-      ? Math.min(100, Math.floor(100 * download.downloaded_bytes / download.total_bytes)) : undefined);
+    const running = row.installing && download && !download.done && download.total_bytes > 0;
+    setPercent(running ? Math.min(100, Math.floor(100 * download.downloaded_bytes / download.total_bytes)) : undefined);
+    setProgress(running ? { done: download.downloaded_bytes, total: download.total_bytes } : undefined);
     if (!row.installing && download?.error) setError(download.error);
     if (!row.installing && row.ready) onInstalled();
   }
@@ -175,12 +183,15 @@ export function AudioCppModelInstall({ model, bytes, licenseUrl, language, onIns
     }
   }
 
+  const sets = nativeModelSetStrings[language as keyof typeof nativeModelSetStrings] ?? nativeModelSetStrings.en;
+  const gb = (value: number) => new Intl.NumberFormat(language, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(value / 2 ** 30);
   return <div className="space-y-1 text-xs">
-    <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
-      disabled={busy} onClick={() => void start()}>
-      {busy ? installing + (percent === undefined ? '' : ` ${percent}%`) : install + size}
-    </button>
-    {busy && canCancel && <button type="button" className="ml-2 underline" disabled={cancelling}
+    {busy ? (
+      <WorkProgress label={`${installing}${progress ? ` · ${sets.of(gb(progress.done), gb(progress.total))}` : ''}`} percent={percent ?? null} />
+    ) : (
+      <button type="button" className={INSTALL} onClick={() => void start()}>{bytes > 0 ? sets.download(name, gb(bytes)) : install}</button>
+    )}
+    {busy && canCancel && <button type="button" className={CANCEL} disabled={cancelling}
       onClick={() => void cancel()}>{t('cancelDownload')}</button>}
     {error && <p role="alert">{error}</p>}
     {licenseUrl && <a href={licenseUrl} target="_blank" rel="noreferrer" className="block underline">{(nativeMusicSourceStrings[language as keyof typeof nativeMusicSourceStrings] ?? nativeMusicSourceStrings.en).modelLicense}</a>}

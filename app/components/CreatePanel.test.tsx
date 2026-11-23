@@ -1091,8 +1091,8 @@ it('chooses MiniMax Music3 through audio.cpp and reuses the saved seed and forma
   expect(generate().disabled).toBe(true);
   expect(host.textContent).not.toContain('heartmula.gguf');
   const installHeartMuLa = () => [...host.querySelectorAll('button')]
-    .find(button => button.textContent?.startsWith('Install HeartMuLa'));
-  expect(installHeartMuLa()?.textContent).toContain('7.13 GiB');
+    .find(button => button.textContent?.startsWith('Download HeartMuLa'));
+  expect(installHeartMuLa()?.textContent).toContain('7.1 GB');
   click(installHeartMuLa()!);
   await flush();
   await flush();
@@ -1741,7 +1741,7 @@ it.each([
   await flush();
   expect(host.textContent).toContain('Experimental');
   expect(host.textContent).not.toContain(file);
-  expect(buttonNamed(`Install ${model.name} · ${size}`)).toBeDefined();
+  expect(buttonNamed(`Download ${model.name} — ${(model.missing_bytes / 2 ** 30).toFixed(1)} GB`)).toBeDefined();
   expect(host.querySelector(`a[href="${model.package_url}"]`)).toBeNull();
   expect(host.querySelector(`a[href="${model.license_url}"]`)).not.toBeNull();
   expect(buttonNamed('create')?.disabled).toBe(true);
@@ -1813,7 +1813,7 @@ it('shows the MuLaCover weights and resampler steps independently', async () => 
   } as Song;
   act(() => root.render(panel({ musicEngine: 'audio.cpp', initialData: { song, timestamp: 1 } })));
   await flush();
-  expect(buttonNamed('Install MuLaCover · 7.66 GiB')).toBeDefined();
+  expect(buttonNamed('Download MuLaCover — 7.7 GB')).toBeDefined();
   expect(host.querySelector(`a[href="${package_url}"]`)).toBeNull();
   expect(host.querySelectorAll(`a[href="${license_url}"]`)).toHaveLength(1);
   expect(buttonNamed('Install resampler')).toBeDefined();

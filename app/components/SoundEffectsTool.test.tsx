@@ -34,7 +34,7 @@ it('keeps Create disabled until the effect model is ready, then sends the descri
   await act(async () => root.render(<SoundEffectsTool card="" control="" busy={false} onGenerate={generate} />));
   const button = (name: string) => Array.from(host.querySelectorAll('button')).find(el => el.textContent === name)!;
   expect(host.querySelector(`a[href="${source}"]`)).toBeNull();
-  expect(Array.from(host.querySelectorAll('button')).some(el => el.textContent?.startsWith('Install MOSS-SoundEffect v2'))).toBe(true);
+  expect(Array.from(host.querySelectorAll('button')).some(el => el.textContent?.startsWith('Download MOSS-SoundEffect v2'))).toBe(true);
   expect(button('Generate sound effect').disabled).toBe(true);
 
   ready = true;

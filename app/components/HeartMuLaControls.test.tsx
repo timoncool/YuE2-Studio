@@ -103,7 +103,7 @@ it('uses the desktop service address and observes the same installation after re
     await act(async () => root.unmount());
     root = createRoot(host);
     await act(async () => root.render(<AudioCppModelInstall model="heartmula" bytes={0} language="en" onInstalled={finished} />));
-    expect(host.querySelector('button')?.disabled).toBe(true);
+    expect(host.textContent).not.toContain('Install HeartMuLa');
     expect(host.textContent).toContain('40%');
     expect(starts).toBe(1);
   } finally {
