@@ -21,6 +21,7 @@ pub(crate) const ENGINE_ID: &str = "minimaxmusic-cpp";
 pub(crate) struct Profile {
     pub id: &'static str,
     pub label: &'static str,
+    pub vram_gb: f64,
     pub total_bytes: u64,
     pub requires_cuda13: bool,
     #[serde(skip)]
@@ -38,8 +39,8 @@ pub(crate) struct ProfileStatus {
     pub native_adapters: Vec<crate::adapters::Installed>,
 }
 
-#[cfg(test)]
-const ROLES: [&str; 5] = ["lm", "depth", "cond", "dit", "vae"];
+/// The roles of a MiniMax Music3 set, in the order of `PROFILE_FILE_FIELDS`.
+pub(crate) const ROLES: [&str; 5] = ["lm", "depth", "cond", "dit", "vae"];
 pub(super) const PROFILE_FILE_FIELDS: [&str; 5] = [
     "lm_model",
     "depth_model",
@@ -48,112 +49,43 @@ pub(super) const PROFILE_FILE_FIELDS: [&str; 5] = [
     "vae_model",
 ];
 
-// IDs and filenames match the published MiniMax Studio catalogue.
-pub(crate) const PROFILES: &[Profile] = &[
-    Profile {
-        id: "minimal",
-        label: "Minimal - Q3_K_M / Q4_K_M / Q3_K_M (8 GB cards)",
-        total_bytes: 6540010752,
-        requires_cuda13: false,
-        files: [
-            "mm3-lm-Q3_K_M.gguf",
-            "mm3-depth-Q4_K_M.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "mm3-dit-Q3_K_M.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [4589971808, 404836256, 100672192, 1138427712, 306102784],
-    },
-    Profile {
-        id: "recommended-light",
-        label: "Light - Q4_K_M / Q4_K_M / Q4_K_S (speed / low VRAM)",
-        total_bytes: 7713891584,
-        requires_cuda13: false,
-        files: [
-            "mm3-lm-Q4_K_M.gguf",
-            "mm3-depth-Q4_K_M.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "mm3-dit-Q4_K_S.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [5512456544, 404836256, 100672192, 1389823808, 306102784],
-    },
-    Profile {
-        id: "balanced",
-        label: "Balanced - Q6_K / Q8_0 / Q5_K_M",
-        total_bytes: 9834362240,
-        requires_cuda13: false,
-        files: [
-            "MiniMax-Music3-language_model-Q6_K.gguf",
-            "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "MiniMax-Music3-transformer-Q5_K_M.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [7048279328, 686513600, 100672192, 1692794336, 306102784],
-    },
-    Profile {
-        id: "quality-q8",
-        label: "Recommended - Quality Q8_0",
-        total_bytes: 12822947200,
-        requires_cuda13: false,
-        files: [
-            "MiniMax-Music3-language_model-Q8_0.gguf",
-            "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "MiniMax-Music3-transformer-Q8_0.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [9127257376, 686513600, 100672192, 2602401248, 306102784],
-    },
-    Profile {
-        id: "quality-lm-nvfp4",
-        label: "Quality, LM in NVFP4 - NVFP4 LM, Q8_0 depth decoder and DiT (CUDA 13 build; recommended on an RTX 50, which computes NVFP4 on its tensor cores)",
-        total_bytes: 9351911872,
-        requires_cuda13: true,
-        files: [
-            "mm3-lm-NVFP4.gguf",
-            "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "MiniMax-Music3-transformer-Q8_0.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [5656222048, 686513600, 100672192, 2602401248, 306102784],
-    },
-    Profile {
-        id: "quality-nvfp4",
-        label: "NVFP4 - LM, depth and DiT in NVFP4 (CUDA 13 build; an RTX 50 computes it on its tensor cores)",
-        total_bytes: 7848275200,
-        requires_cuda13: true,
-        files: [
-            "mm3-lm-NVFP4.gguf",
-            "mm3-depth-NVFP4.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "mm3-dit-NVFP4.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [5656222048, 401493920, 100672192, 1383784256, 306102784],
-    },
-    Profile {
-        id: "native",
-        label: "Full native - BF16 / F32 original weights",
-        total_bytes: 28600781952,
-        requires_cuda13: false,
-        files: [
-            "MiniMax-Music3-language_model-BF16.gguf",
-            "MiniMax-Music3-rvq_depth_decoder-BF16.gguf",
-            "MiniMax-Music3-condition_encoder-F32.gguf",
-            "MiniMax-Music3-transformer-F32.gguf",
-            "MiniMax-Music3-vocoder-F32.gguf",
-        ],
-        sizes: [17174297792, 1292053888, 100672192, 9727655296, 306102784],
-    },
-];
+/// The model sets of the component catalogue in use, built once per catalogue.
+pub(crate) fn profiles() -> &'static [Profile] {
+    static CACHE: std::sync::Mutex<Option<(u64, &'static [Profile])>> = std::sync::Mutex::new(None);
+    let sequence = crate::components::sequence();
+    let mut cache = CACHE.lock().expect("MiniMax set cache");
+    if let Some((seen, list)) = *cache {
+        if seen == sequence {
+            return list;
+        }
+    }
+    let leak = |text: &str| -> &'static str { Box::leak(text.to_owned().into_boxed_str()) };
+    let list: Vec<Profile> = crate::components::sets(ENGINE_ID)
+        .into_iter()
+        .map(|set| {
+            let entries = ROLES.map(|role| crate::components::file(&set.roles[role]).expect("checked by the catalogue"));
+            let files = entries.each_ref().map(|file| leak(file.path.rsplit('/').next().unwrap_or(&file.path)));
+            let sizes = entries.each_ref().map(|file| file.bytes);
+            Profile {
+                id: leak(&set.id),
+                label: leak(&set.label["en"]),
+                vram_gb: set.vram_gb,
+                total_bytes: sizes.iter().sum(),
+                requires_cuda13: set.requires.iter().any(|need| need == "cuda13"),
+                files,
+                sizes,
+            }
+        })
+        .collect();
+    let list: &'static [Profile] = Box::leak(list.into_boxed_slice());
+    *cache = Some((sequence, list));
+    list
+}
 
 /// Resolve the original files of a saved take, including older imports
 /// whose profile ID was absent but whose full set of filenames was saved.
 pub(crate) fn saved_profile(id: Option<&str>, replay: &Value) -> Result<&'static str> {
-    if let Some(profile) = PROFILES.iter().find(|profile| Some(profile.id) == id) {
+    if let Some(profile) = profiles().iter().find(|profile| Some(profile.id) == id) {
         for (field, file) in PROFILE_FILE_FIELDS.into_iter().zip(profile.files) {
             if let Some(saved) = replay.get(field) {
                 if saved.as_str() != Some(file) {
@@ -166,7 +98,7 @@ pub(crate) fn saved_profile(id: Option<&str>, replay: &Value) -> Result<&'static
         }
         return Ok(profile.id);
     }
-    PROFILES
+    profiles()
         .iter()
         .find(|profile| {
             PROFILE_FILE_FIELDS
@@ -194,7 +126,7 @@ struct ModelBuckets {
 
 /// The files of a model set and their exact sizes, `None` for an unknown set.
 pub(crate) fn profile_weights(id: &str) -> Option<Vec<(&'static str, u64)>> {
-    PROFILES
+    profiles()
         .iter()
         .find(|profile| profile.id == id)
         .map(|profile| profile.files.iter().copied().zip(profile.sizes).collect())
@@ -372,7 +304,7 @@ impl Client {
 
     pub(crate) async fn profiles(&self) -> Result<Vec<ProfileStatus>> {
         let props = self.props().await?;
-        Ok(PROFILES
+        Ok(profiles()
             .iter()
             .map(|profile| props.profile_status(profile))
             .collect())
@@ -383,7 +315,7 @@ impl Client {
         profile_id: &str,
         request: &SongRequest<'_>,
     ) -> Result<String> {
-        let profile = PROFILES
+        let profile = profiles()
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
@@ -394,7 +326,7 @@ impl Client {
     /// Render a saved semantic stream. The original profile binds model
     /// filenames even when a replay originating in an older Studio omitted them.
     pub(crate) async fn submit_replay(&self, profile_id: &str, mut body: Value) -> Result<String> {
-        let profile = PROFILES
+        let profile = profiles()
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
@@ -513,7 +445,7 @@ mod tests {
             runtime_dirs: vec![],
             adapters_root: None,
         };
-        let profile = &PROFILES[0];
+        let profile = &profiles()[0];
         assert!(!installation.engine_installed());
         assert!(
             installation
@@ -584,7 +516,7 @@ mod tests {
 
     #[tokio::test]
     async fn minimax_profile_dispatches_the_five_weight_files_and_returns_native_result() {
-        let profile = &PROFILES[0];
+        let profile = &profiles()[0];
         let props = json!({"models": ROLES.into_iter().zip(profile.files)
             .map(|(role, filename)| (role.to_owned(), json!([filename])))
             .collect::<serde_json::Map<_, _>>()});
@@ -746,7 +678,7 @@ impl Runtime {
         data_root: &Path,
         install: Installation,
     ) -> Result<Client> {
-        let profile = PROFILES
+        let profile = profiles()
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown MiniMax profile {profile_id}"))?;
@@ -983,7 +915,7 @@ impl Installation {
 
     pub(crate) fn profiles(&self) -> Vec<ProfileStatus> {
         let adapters = self.native_adapters();
-        PROFILES.iter().map(|profile| {
+        profiles().iter().map(|profile| {
             let mut status = profile.status_on_disk(&self.roots);
             if status.ready && self.engine_installed() {
                 status.native_adapters = adapters.clone();

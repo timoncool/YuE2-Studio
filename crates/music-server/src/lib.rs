@@ -4,6 +4,7 @@ mod adapters;
 mod acpp_install;
 mod community;
 mod component_catalogue;
+mod components;
 mod engine_catalogue;
 mod signed_music_jobs;
 mod signed_music_protocol;
@@ -1619,6 +1620,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         None => studio_log!("[ERROR] the studio has no data folder; its log goes to the console only"),
     }
     put_the_engine_folder_on_path();
+    crate::components::load_downloaded();
     let proxy = persisted.as_ref().and_then(|settings| settings.proxy.clone()).unwrap_or_default();
     if let Err(error) = proxy.clone().validated() {
         eprintln!("[ERROR] the saved proxy cannot be used, requests go straight out until it is fixed in Settings: {error:#}");
@@ -1797,6 +1799,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
     tokio::spawn(engine_catalogue::install::updates::watch(state.clone()));
+    tokio::spawn(crate::components::watch());
     spawn_idle_eviction(state.clone());
     {
         let state = state.clone();
@@ -1843,6 +1846,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/rvc/quick/{id}", get(rvc_quick::status).delete(rvc_quick::cancel))
         .route("/v1/rvc/apply/setup", get(rvc_apply::setup).post(rvc_apply::install))
         .route("/v1/rvc/voices/{id}", axum::routing::delete(rvc_voices::remove))
+        .route("/v1/components", get(components::status))
+        .route("/v1/components/refresh", post(components::refresh_now))
         .route("/v1/components/music-engines", get(engine_catalogue::list))
         .route("/v1/components/music-engines/refresh", post(engine_catalogue::refresh))
         .route("/v1/components/updates", get(engine_catalogue::install::updates::list))

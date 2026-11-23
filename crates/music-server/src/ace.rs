@@ -18,7 +18,9 @@ use crate::engine_result;
 
 mod installation;
 mod runtime;
-pub(crate) use installation::{profile_ids, profile_weights, resolve_installation};
+pub(crate) use installation::resolve_installation;
+#[cfg(test)]
+pub(crate) use installation::ROLES;
 pub use installation::{ENGINE_ID, InstalledProfile};
 pub use runtime::{Launch, Runtime};
 

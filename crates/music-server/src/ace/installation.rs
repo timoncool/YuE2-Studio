@@ -1,65 +1,42 @@
-// The four weights of each set in ACE-Step Studio 318cc0ad (model_manager.rs).
-const DIT_TURBO_Q4: Weight = Weight {
-    name: "acestep-v15-turbo-Q4_K_M.gguf",
-    bytes: 1_445_710_272,
-};
-const LM_0_6B_Q8: Weight = Weight {
-    name: "acestep-5Hz-lm-0.6B-Q8_0.gguf",
-    bytes: 709_846_656,
-};
+// Older songs name one of these two encoders; the sets themselves come from the component catalogue.
 const TE_QWEN3_0_6B_Q8: Weight = Weight {
     name: "Qwen3-Embedding-0.6B-Q8_0.gguf",
     bytes: 784_144_960,
-};
-const VAE_STANDARD_BF16: Weight = Weight {
-    name: "vae-BF16.gguf",
-    bytes: 337_420_928,
-};
-const DIT_XL_TURBO_Q4: Weight = Weight {
-    name: "acestep-v15-xl-turbo-Q4_K_M.gguf",
-    bytes: 2_989_922_688,
-};
-const LM_1_7B_Q8: Weight = Weight {
-    name: "acestep-5Hz-lm-1.7B-Q8_0.gguf",
-    bytes: 1_975_837_568,
-};
-const DIT_XL_TURBO_Q6: Weight = Weight {
-    name: "acestep-v15-xl-turbo-Q6_K.gguf",
-    bytes: 4_098_812_992,
-};
-const DIT_XL_TURBO_MXFP4: Weight = Weight {
-    name: "acestep-v15-xl-turbo-MXFP4.gguf",
-    bytes: 2_660_726_464,
-};
-const DIT_XL_TURBO_Q8: Weight = Weight {
-    name: "acestep-v15-xl-turbo-Q8_0.gguf",
-    bytes: 5_305_828_736,
-};
-const LM_4B_Q8: Weight = Weight {
-    name: "acestep-5Hz-lm-4B-Q8_0.gguf",
-    bytes: 4_457_323_648,
-};
-const DIT_XL_TURBO_BF16: Weight = Weight {
-    name: "acestep-v15-xl-turbo-BF16.gguf",
-    bytes: 9_978_530_816,
-};
-const LM_4B_BF16: Weight = Weight {
-    name: "acestep-5Hz-lm-4B-BF16.gguf",
-    bytes: 8_384_454_592,
 };
 const TE_QWEN3_0_6B_BF16: Weight = Weight {
     name: "Qwen3-Embedding-0.6B-BF16.gguf",
     bytes: 1_196_890_592,
 };
-const PROFILES: &[Profile] = &[
-    Profile { id: "minimal", label: "Minimal - 2B turbo Q4_K_M, LM 0.6B (4 GB cards)", weights: [DIT_TURBO_Q4, LM_0_6B_Q8, TE_QWEN3_0_6B_Q8, VAE_STANDARD_BF16] },
-    Profile { id: "recommended-light", label: "Light - XL turbo Q4_K_M, LM 1.7B (8 GB cards)", weights: [DIT_XL_TURBO_Q4, LM_1_7B_Q8, TE_QWEN3_0_6B_Q8, VAE_STANDARD_BF16] },
-    Profile { id: "balanced", label: "Balanced - XL turbo Q6_K, LM 1.7B (10 GB cards)", weights: [DIT_XL_TURBO_Q6, LM_1_7B_Q8, TE_QWEN3_0_6B_Q8, VAE_STANDARD_BF16] },
-    Profile { id: "balanced-mxfp4", label: "Balanced MXFP4 - XL turbo MXFP4, LM 1.7B (8 GB cards). MXFP4: half the DiT memory of Q8_0; an RTX 50 computes it on its tensor cores directly", weights: [DIT_XL_TURBO_MXFP4, LM_1_7B_Q8, TE_QWEN3_0_6B_Q8, VAE_STANDARD_BF16] },
-    Profile { id: "quality-q8", label: "Quality - XL turbo Q8_0, LM 4B Q8_0 (13 GB cards)", weights: [DIT_XL_TURBO_Q8, LM_4B_Q8, TE_QWEN3_0_6B_Q8, VAE_STANDARD_BF16] },
-    Profile { id: "quality-mxfp4", label: "Quality MXFP4 - XL turbo MXFP4, LM 4B Q8_0 (13 GB cards). MXFP4: half the DiT memory of Q8_0; an RTX 50 computes it on its tensor cores directly", weights: [DIT_XL_TURBO_MXFP4, LM_4B_Q8, TE_QWEN3_0_6B_Q8, VAE_STANDARD_BF16] },
-    Profile { id: "native", label: "Full native - XL turbo BF16, LM 4B BF16 (24 GB cards)", weights: [DIT_XL_TURBO_BF16, LM_4B_BF16, TE_QWEN3_0_6B_BF16, VAE_STANDARD_BF16] },
-];
+
+/// The roles of an ACE-Step set, in the order the engine's model directory is filled.
+pub(crate) const ROLES: [&str; 4] = ["dit", "lm", "text_encoder", "vae"];
+
+/// The model sets of the component catalogue in use, built once per catalogue.
+fn profiles() -> &'static [Profile] {
+    static CACHE: std::sync::Mutex<Option<(u64, &'static [Profile])>> = std::sync::Mutex::new(None);
+    let sequence = crate::components::sequence();
+    let mut cache = CACHE.lock().expect("ACE-Step set cache");
+    if let Some((seen, list)) = *cache {
+        if seen == sequence {
+            return list;
+        }
+    }
+    let leak = |text: &str| -> &'static str { Box::leak(text.to_owned().into_boxed_str()) };
+    let list: Vec<Profile> = crate::components::sets(ENGINE_ID)
+        .into_iter()
+        .map(|set| {
+            let weights = ROLES.map(|role| {
+                let file = crate::components::file(&set.roles[role]).expect("checked by the catalogue");
+                let name = file.path.rsplit('/').next().unwrap_or(&file.path);
+                Weight { name: leak(name), bytes: file.bytes }
+            });
+            Profile { id: leak(&set.id), label: leak(&set.label["en"]), vram_gb: set.vram_gb, weights }
+        })
+        .collect();
+    let list: &'static [Profile] = Box::leak(list.into_boxed_slice());
+    *cache = Some((sequence, list));
+    list
+}
 
 use super::Launch;
 use anyhow::{bail, Context, Result};
@@ -79,6 +56,7 @@ struct Weight {
 struct Profile {
     id: &'static str,
     label: &'static str,
+    vram_gb: f64,
     weights: [Weight; 4],
 }
 
@@ -86,6 +64,7 @@ struct Profile {
 pub struct InstalledProfile {
     pub id: &'static str,
     pub label: &'static str,
+    pub vram_gb: f64,
     pub total_bytes: u64,
     pub ready: bool,
     pub missing: Vec<&'static str>,
@@ -114,14 +93,14 @@ fn installation(data_root: &Path) -> Installation {
 
 /// The files of a model set and their exact sizes, `None` for an unknown set.
 pub(crate) fn profile_weights(id: &str) -> Option<Vec<(&'static str, u64)>> {
-    PROFILES
+    profiles()
         .iter()
         .find(|profile| profile.id == id)
         .map(|profile| profile.weights.iter().map(|weight| (weight.name, weight.bytes)).collect())
 }
 
 pub(crate) fn profile_ids() -> impl Iterator<Item = &'static str> {
-    PROFILES.iter().map(|profile| profile.id)
+    profiles().iter().map(|profile| profile.id)
 }
 
 pub(crate) async fn resolve_installation(
@@ -262,7 +241,7 @@ impl Installation {
     }
 
     pub fn profiles(&self) -> Vec<InstalledProfile> {
-        PROFILES
+        profiles()
             .iter()
             .map(|profile| {
                 let (root, mut status) = self.profile_root(profile);
@@ -309,7 +288,7 @@ impl Installation {
     }
 
     pub fn launch(&self, profile_id: &str) -> Result<Launch> {
-        let profile = PROFILES
+        let profile = profiles()
             .iter()
             .find(|profile| profile.id == profile_id)
             .with_context(|| format!("unknown ACE-Step profile {profile_id}"))?;
@@ -317,7 +296,7 @@ impl Installation {
     }
 
     pub fn launch_replay(&self, profile_id: &str, replay: &serde_json::Value) -> Result<Launch> {
-        let declared = PROFILES.iter().find(|profile| profile.id == profile_id);
+        let declared = profiles().iter().find(|profile| profile.id == profile_id);
         let slots = [
             ("synth_model", "dit", 0),
             ("lm_model", "lm", 1),
@@ -357,6 +336,7 @@ impl Installation {
         let mut profile = Profile {
             id: "legacy-replay",
             label: "ACE-Step replay",
+            vram_gb: 0.0,
             weights: [dit, lm, encoders[0], vae],
         };
         if declared.is_none() && !self.profile_root(&profile).1.ready {
@@ -465,6 +445,7 @@ impl Profile {
         InstalledProfile {
             id: self.id,
             label: self.label,
+            vram_gb: self.vram_gb,
             total_bytes: self.weights.iter().map(|weight| weight.bytes).sum(),
             ready: missing.is_empty(),
             missing,
@@ -568,14 +549,14 @@ mod tests {
 
     #[test]
     fn catalogue_uses_the_release_profile_ids_and_exact_totals() {
-        assert_eq!(PROFILES.len(), 7);
+        assert_eq!(profiles().len(), 7);
         let root = Path::new("this-path-does-not-need-to-exist");
-        let minimal = PROFILES[0].status(root);
+        let minimal = profiles()[0].status(root);
         assert_eq!(minimal.id, "minimal");
         assert_eq!(minimal.total_bytes, 3_277_122_816);
         assert_eq!(minimal.missing.len(), 4);
         assert!(!minimal.ready);
-        let native = PROFILES[6].status(root);
+        let native = profiles()[6].status(root);
         assert_eq!(native.id, "native");
         assert_eq!(native.total_bytes, 19_897_296_928);
     }
@@ -587,6 +568,7 @@ mod tests {
         let profile = Profile {
             id: "test",
             label: "Test",
+            vram_gb: 0.0,
             weights: [
                 Weight {
                     name: "dit.gguf",
@@ -666,6 +648,7 @@ mod discovery_tests {
         let profile = Profile {
             id: "portable",
             label: "Portable",
+            vram_gb: 0.0,
             weights: [
                 Weight {
                     name: "dit.gguf",
@@ -761,7 +744,7 @@ fn released_replay_weight(kind: &str, name: &str) -> Option<Weight> {
         "vae" => 3,
         _ => return None,
     };
-    if let Some(weight) = PROFILES
+    if let Some(weight) = profiles()
         .iter()
         .map(|profile| profile.weights[index])
         .find(|weight| weight.name == name)

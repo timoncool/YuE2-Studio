@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1"
 bytes = "1"
+minisign-verify = "0.3"
 tokenizers = { version = "0.23.2", default-features = false, features = ["fancy-regex"] }
 tough = "0.24"
 anyhow.workspace = true

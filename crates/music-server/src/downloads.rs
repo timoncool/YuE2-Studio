@@ -28,7 +28,7 @@ pub enum AssetKind {
     Runtime,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct Asset {
     pub id: &'static str,
     pub label: &'static str,

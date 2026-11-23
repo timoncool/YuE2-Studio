@@ -2950,6 +2950,18 @@ fn tools() -> &'static [Tool] {
                 call: |args| get(format!("/v1/rvc/catalog/progress/{}", segment(&text(args, "id")?))),
             },
             Tool {
+                name: "components_status",
+                description: "Read the component catalogue in use: its sequence, publication date, whether it is the built-in or a downloaded copy, and why the last refresh failed, if it did.",
+                schema: nothing,
+                call: |_| get("/v1/components".into()),
+            },
+            Tool {
+                name: "components_refresh",
+                description: "Download the published component catalogue, check its signature and use it when it is newer than the one in use.",
+                schema: nothing,
+                call: |_| post("/v1/components/refresh".into(), json!({})),
+            },
+            Tool {
                 name: "music_package_updates_get",
                 description: "Read the installed packages with independent updates available and the background update policy.",
                 schema: nothing,
@@ -4396,6 +4408,7 @@ mod tests {
             "engine_restart",
             "vst_scan",
             "openrouter_catalog_refresh",
+            "components_refresh",
             "assistant_start",
             "assistant_stop",
             "diagnostics_report",

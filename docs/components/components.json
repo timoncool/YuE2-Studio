@@ -1,0 +1,537 @@
+{
+ "sequence": 1,
+ "published": "2026-11-23",
+ "files": {
+  "acestep-v15-turbo-Q4_K_M.gguf": {
+   "label": "acestep-v15-turbo-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-turbo-Q4_K_M.gguf",
+   "bytes": 1445710272,
+   "sha256": "55b4d8514850f3d0f82536f37e99673aaf48df802b5ae5b153eea32a2e2daa5e",
+   "path": "models/acestep-cpp/acestep-v15-turbo-Q4_K_M.gguf"
+  },
+  "acestep-5Hz-lm-0.6B-Q8_0.gguf": {
+   "label": "acestep-5Hz-lm-0.6B-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-5Hz-lm-0.6B-Q8_0.gguf",
+   "bytes": 709846656,
+   "sha256": "bdaf9e292d4470f31c19cafeaca1b74936a114667e3a85e5d33b65247e9908ec",
+   "path": "models/acestep-cpp/acestep-5Hz-lm-0.6B-Q8_0.gguf"
+  },
+  "Qwen3-Embedding-0.6B-Q8_0.gguf": {
+   "label": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/Qwen3-Embedding-0.6B-Q8_0.gguf",
+   "bytes": 784144960,
+   "sha256": "972f23255e46adfe744a0eb9a0039f3c63988f65753b0968d776e8b27168c321",
+   "path": "models/acestep-cpp/Qwen3-Embedding-0.6B-Q8_0.gguf"
+  },
+  "vae-BF16.gguf": {
+   "label": "vae-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/vae-BF16.gguf",
+   "bytes": 337420928,
+   "sha256": "0599862ac5d15cd308e1d2e368373aea6c02e25ebd1737ad4a4562a0901b0ef8",
+   "path": "models/acestep-cpp/vae-BF16.gguf"
+  },
+  "acestep-v15-xl-turbo-Q4_K_M.gguf": {
+   "label": "acestep-v15-xl-turbo-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q4_K_M.gguf",
+   "bytes": 2989922688,
+   "sha256": "475e60e8644b1f91eebc0cd25f24c060bed06e64a862b4e60ffafe634c740478",
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q4_K_M.gguf"
+  },
+  "acestep-5Hz-lm-1.7B-Q8_0.gguf": {
+   "label": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-5Hz-lm-1.7B-Q8_0.gguf",
+   "bytes": 1975837568,
+   "sha256": "726f99a82f050b32ebc5c5e36acaa9d7acd06bfe5e579a62b00e0d0d6d0b7ec6",
+   "path": "models/acestep-cpp/acestep-5Hz-lm-1.7B-Q8_0.gguf"
+  },
+  "acestep-v15-xl-turbo-Q6_K.gguf": {
+   "label": "acestep-v15-xl-turbo-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q6_K.gguf",
+   "bytes": 4098812992,
+   "sha256": "e1f6665567e9bc0331b8dfd95c2b43a84e8bf114075c9b16abdd25ae97dc58fe",
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q6_K.gguf"
+  },
+  "acestep-v15-xl-turbo-MXFP4.gguf": {
+   "label": "acestep-v15-xl-turbo-MXFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/Ace-Step-1.5-MXFP4-Quants/resolve/05a04ec24513e44f21947a2d1ee8d1cae91d1095/acestep-v15-xl-turbo-MXFP4.gguf",
+   "bytes": 2660726464,
+   "sha256": "dfb0ba27f2dd25c6bb31ad7f1a7c8d6e5c538593c5fff92e3329d186c81751e4",
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-MXFP4.gguf"
+  },
+  "acestep-v15-xl-turbo-Q8_0.gguf": {
+   "label": "acestep-v15-xl-turbo-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-Q8_0.gguf",
+   "bytes": 5305828736,
+   "sha256": "4f1044fb646374fb5730e10f64325766883eb2fc02a643c1b403f2d61f39dc19",
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-Q8_0.gguf"
+  },
+  "acestep-5Hz-lm-4B-Q8_0.gguf": {
+   "label": "acestep-5Hz-lm-4B-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-5Hz-lm-4B-Q8_0.gguf",
+   "bytes": 4457323648,
+   "sha256": "972f91147a167f0c041f1b158d67985a82c0f6a852e68cdf70e46030cf08b1bc",
+   "path": "models/acestep-cpp/acestep-5Hz-lm-4B-Q8_0.gguf"
+  },
+  "acestep-v15-xl-turbo-BF16.gguf": {
+   "label": "acestep-v15-xl-turbo-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-v15-xl-turbo-BF16.gguf",
+   "bytes": 9978530816,
+   "sha256": "10d445a71653a8fef9a16a8457d9fb66da432ac500b357cce028f36c489c1b63",
+   "path": "models/acestep-cpp/acestep-v15-xl-turbo-BF16.gguf"
+  },
+  "acestep-5Hz-lm-4B-BF16.gguf": {
+   "label": "acestep-5Hz-lm-4B-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/acestep-5Hz-lm-4B-BF16.gguf",
+   "bytes": 8384454592,
+   "sha256": "9fca9915919a1108da33d8d98fbe6c1a07bfee101d27098416650dcbde037b72",
+   "path": "models/acestep-cpp/acestep-5Hz-lm-4B-BF16.gguf"
+  },
+  "Qwen3-Embedding-0.6B-BF16.gguf": {
+   "label": "Qwen3-Embedding-0.6B-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/ACE-Step-1.5-GGUF/resolve/666ac70204440867d8c01ba4b119cc79c95b370a/Qwen3-Embedding-0.6B-BF16.gguf",
+   "bytes": 1196890592,
+   "sha256": "6f57900773fbd447b2943bc8126e2dc68ed009151ba89a47c14d1be05d4c73df",
+   "path": "models/acestep-cpp/Qwen3-Embedding-0.6B-BF16.gguf"
+  },
+  "mm3-lm-Q3_K_M.gguf": {
+   "label": "mm3-lm-Q3_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-lm-Q3_K_M.gguf",
+   "bytes": 4589971808,
+   "sha256": "65a1ee35212547a95ed19067c5b3bc3492725d55e754729e693e4141396064a5",
+   "path": "models/minimaxmusic-cpp/mm3-lm-Q3_K_M.gguf"
+  },
+  "mm3-depth-Q4_K_M.gguf": {
+   "label": "mm3-depth-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-depth-Q4_K_M.gguf",
+   "bytes": 404836256,
+   "sha256": "77e729d6e0599ed7928a3c0f13a36e1d3ef5f7de9259eaf01a19445549fa958e",
+   "path": "models/minimaxmusic-cpp/mm3-depth-Q4_K_M.gguf"
+  },
+  "MiniMax-Music3-condition_encoder-F32.gguf": {
+   "label": "MiniMax-Music3-condition_encoder-F32.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-condition_encoder-F32.gguf",
+   "bytes": 100672192,
+   "sha256": "ebb69ec6e6d730b4dcc48ba1b51da4f201514cbaaa7cae0c8d6259d3b178efb0",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-condition_encoder-F32.gguf"
+  },
+  "mm3-dit-Q3_K_M.gguf": {
+   "label": "mm3-dit-Q3_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-dit-Q3_K_M.gguf",
+   "bytes": 1138427712,
+   "sha256": "f1a67119c34ede23e27240d3ebd630fa492247e1d0184263574482302ab48f3f",
+   "path": "models/minimaxmusic-cpp/mm3-dit-Q3_K_M.gguf"
+  },
+  "MiniMax-Music3-vocoder-F32.gguf": {
+   "label": "MiniMax-Music3-vocoder-F32.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-vocoder-F32.gguf",
+   "bytes": 306102784,
+   "sha256": "4eaa451e54fa755cfe7b0fd15b0bfe64458db35b822e1d250488d0a2a363507d",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-vocoder-F32.gguf"
+  },
+  "mm3-lm-Q4_K_M.gguf": {
+   "label": "mm3-lm-Q4_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-lm-Q4_K_M.gguf",
+   "bytes": 5512456544,
+   "sha256": "8d8e21098e1027b963776bbe9790609191e95610caa6e7cb53c26830b3efc94b",
+   "path": "models/minimaxmusic-cpp/mm3-lm-Q4_K_M.gguf"
+  },
+  "mm3-dit-Q4_K_S.gguf": {
+   "label": "mm3-dit-Q4_K_S.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-dit-Q4_K_S.gguf",
+   "bytes": 1389823808,
+   "sha256": "e20449c3f6a73a8cc2672947f2ee41728b12f0dcfd351c1c9a34a04a1c193031",
+   "path": "models/minimaxmusic-cpp/mm3-dit-Q4_K_S.gguf"
+  },
+  "MiniMax-Music3-language_model-Q6_K.gguf": {
+   "label": "MiniMax-Music3-language_model-Q6_K.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-language_model-Q6_K.gguf",
+   "bytes": 7048279328,
+   "sha256": "ca605cbae894696f9c111bfef33023b29722e93fe2c287071250b0af1a0e5416",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-language_model-Q6_K.gguf"
+  },
+  "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf": {
+   "label": "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+   "bytes": 686513600,
+   "sha256": "7da73a953747f3f40857ba266a53eeb5487adbe473d4e7a53c99d5eaf9e5c3d5",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf"
+  },
+  "MiniMax-Music3-transformer-Q5_K_M.gguf": {
+   "label": "MiniMax-Music3-transformer-Q5_K_M.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-transformer-Q5_K_M.gguf",
+   "bytes": 1692794336,
+   "sha256": "35d1ed8902237215064a4bb5a9bf3e03507d65b89146bea9e24e915cb4c5c8ce",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-transformer-Q5_K_M.gguf"
+  },
+  "MiniMax-Music3-language_model-Q8_0.gguf": {
+   "label": "MiniMax-Music3-language_model-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-language_model-Q8_0.gguf",
+   "bytes": 9127257376,
+   "sha256": "9ffa190eb5892c5c0829014dc3070b9ce8d2464636bbaae884b08f1bf6de0ad3",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-language_model-Q8_0.gguf"
+  },
+  "MiniMax-Music3-transformer-Q8_0.gguf": {
+   "label": "MiniMax-Music3-transformer-Q8_0.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-transformer-Q8_0.gguf",
+   "bytes": 2602401248,
+   "sha256": "cbadca0600f325ba9263ea4dcf0d71d0361abf0733303398b9995fbadac6b38e",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-transformer-Q8_0.gguf"
+  },
+  "mm3-lm-NVFP4.gguf": {
+   "label": "mm3-lm-NVFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-lm-NVFP4.gguf",
+   "bytes": 5656222048,
+   "sha256": "5d1e9e238c447cd5671d5695431d7df433d04ab18550d9f8ac6616b7c14e0e3e",
+   "path": "models/minimaxmusic-cpp/mm3-lm-NVFP4.gguf"
+  },
+  "mm3-depth-NVFP4.gguf": {
+   "label": "mm3-depth-NVFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-depth-NVFP4.gguf",
+   "bytes": 401493920,
+   "sha256": "33b9cf7b2324157ec13d5d9b105cc80e94104d93647229a9f83b9824efcba415",
+   "path": "models/minimaxmusic-cpp/mm3-depth-NVFP4.gguf"
+  },
+  "mm3-dit-NVFP4.gguf": {
+   "label": "mm3-dit-NVFP4.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/scragnog/MiniMax-Music3-GGUF/resolve/6781ce79b21beb7413f6b2358cd4adb355217c3d/mm3-dit-NVFP4.gguf",
+   "bytes": 1383784256,
+   "sha256": "99fa7349f3e06fa79af4a4ab7b89dab490caeb034e543e83a51844353abf41ed",
+   "path": "models/minimaxmusic-cpp/mm3-dit-NVFP4.gguf"
+  },
+  "MiniMax-Music3-language_model-BF16.gguf": {
+   "label": "MiniMax-Music3-language_model-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-language_model-BF16.gguf",
+   "bytes": 17174297792,
+   "sha256": "6fd8a735ed9bba12c620f86504bb062a4ed5ba2237615f318dcfe14ee911c4ae",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-language_model-BF16.gguf"
+  },
+  "MiniMax-Music3-rvq_depth_decoder-BF16.gguf": {
+   "label": "MiniMax-Music3-rvq_depth_decoder-BF16.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-rvq_depth_decoder-BF16.gguf",
+   "bytes": 1292053888,
+   "sha256": "d566347637257b86e4ce598907caa257be9794f70fc38861da70f0d8bd2f0686",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-rvq_depth_decoder-BF16.gguf"
+  },
+  "MiniMax-Music3-transformer-F32.gguf": {
+   "label": "MiniMax-Music3-transformer-F32.gguf",
+   "kind": "model",
+   "url": "https://huggingface.co/Serveurperso/MiniMax-Music3-GGUF/resolve/9cdffedb54de2509ae55a6831a677645fb353a7d/MiniMax-Music3-transformer-F32.gguf",
+   "bytes": 9727655296,
+   "sha256": "ffcf7873d475448ba7b18b62b2495d7e1f2941f9fe5cba315557f6307367ae59",
+   "path": "models/minimaxmusic-cpp/MiniMax-Music3-transformer-F32.gguf"
+  }
+ },
+ "sets": {
+  "acestep-cpp": [
+   {
+    "id": "minimal",
+    "label": {
+     "en": "Fast",
+     "ru": "Быстрая",
+     "zh": "快速",
+     "ja": "高速",
+     "ko": "빠름",
+     "pt": "Rápida"
+    },
+    "vram_gb": 4.0,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-turbo-Q4_K_M.gguf",
+     "lm": "acestep-5Hz-lm-0.6B-Q8_0.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   },
+   {
+    "id": "recommended-light",
+    "label": {
+     "en": "Light",
+     "ru": "Лёгкая",
+     "zh": "轻量",
+     "ja": "軽量",
+     "ko": "가벼움",
+     "pt": "Leve"
+    },
+    "vram_gb": 7.5,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-xl-turbo-Q4_K_M.gguf",
+     "lm": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   },
+   {
+    "id": "balanced",
+    "label": {
+     "en": "Balanced",
+     "ru": "Сбалансированная",
+     "zh": "均衡",
+     "ja": "バランス",
+     "ko": "균형",
+     "pt": "Equilibrada"
+    },
+    "vram_gb": 9.5,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-xl-turbo-Q6_K.gguf",
+     "lm": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   },
+   {
+    "id": "balanced-mxfp4",
+    "label": {
+     "en": "Balanced · MXFP4 for RTX 50",
+     "ru": "Сбалансированная · MXFP4 для RTX 50",
+     "zh": "均衡 · 适用于 RTX 50 的 MXFP4",
+     "ja": "バランス · RTX 50 向け MXFP4",
+     "ko": "균형 · RTX 50용 MXFP4",
+     "pt": "Equilibrada · MXFP4 para RTX 50"
+    },
+    "vram_gb": 8.0,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-xl-turbo-MXFP4.gguf",
+     "lm": "acestep-5Hz-lm-1.7B-Q8_0.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   },
+   {
+    "id": "quality-q8",
+    "label": {
+     "en": "Best",
+     "ru": "Максимальная",
+     "zh": "最佳",
+     "ja": "最高",
+     "ko": "최고",
+     "pt": "Máxima"
+    },
+    "vram_gb": 13.0,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-xl-turbo-Q8_0.gguf",
+     "lm": "acestep-5Hz-lm-4B-Q8_0.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   },
+   {
+    "id": "quality-mxfp4",
+    "label": {
+     "en": "Best · MXFP4 for RTX 50",
+     "ru": "Максимальная · MXFP4 для RTX 50",
+     "zh": "最佳 · 适用于 RTX 50 的 MXFP4",
+     "ja": "最高 · RTX 50 向け MXFP4",
+     "ko": "최고 · RTX 50용 MXFP4",
+     "pt": "Máxima · MXFP4 para RTX 50"
+    },
+    "vram_gb": 13.0,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-xl-turbo-MXFP4.gguf",
+     "lm": "acestep-5Hz-lm-4B-Q8_0.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   },
+   {
+    "id": "native",
+    "label": {
+     "en": "Original weights",
+     "ru": "Исходные веса",
+     "zh": "原始权重",
+     "ja": "元の重み",
+     "ko": "원본 가중치",
+     "pt": "Pesos originais"
+    },
+    "vram_gb": 23.5,
+    "requires": [],
+    "roles": {
+     "dit": "acestep-v15-xl-turbo-BF16.gguf",
+     "lm": "acestep-5Hz-lm-4B-BF16.gguf",
+     "text_encoder": "Qwen3-Embedding-0.6B-BF16.gguf",
+     "vae": "vae-BF16.gguf"
+    }
+   }
+  ],
+  "minimaxmusic-cpp": [
+   {
+    "id": "minimal",
+    "label": {
+     "en": "Fast",
+     "ru": "Быстрая",
+     "zh": "快速",
+     "ja": "高速",
+     "ko": "빠름",
+     "pt": "Rápida"
+    },
+    "vram_gb": 7.0,
+    "requires": [],
+    "roles": {
+     "lm": "mm3-lm-Q3_K_M.gguf",
+     "depth": "mm3-depth-Q4_K_M.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "mm3-dit-Q3_K_M.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   },
+   {
+    "id": "recommended-light",
+    "label": {
+     "en": "Light",
+     "ru": "Лёгкая",
+     "zh": "轻量",
+     "ja": "軽量",
+     "ko": "가벼움",
+     "pt": "Leve"
+    },
+    "vram_gb": 9.5,
+    "requires": [],
+    "roles": {
+     "lm": "mm3-lm-Q4_K_M.gguf",
+     "depth": "mm3-depth-Q4_K_M.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "mm3-dit-Q4_K_S.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   },
+   {
+    "id": "balanced",
+    "label": {
+     "en": "Balanced",
+     "ru": "Сбалансированная",
+     "zh": "均衡",
+     "ja": "バランス",
+     "ko": "균형",
+     "pt": "Equilibrada"
+    },
+    "vram_gb": 11.5,
+    "requires": [],
+    "roles": {
+     "lm": "MiniMax-Music3-language_model-Q6_K.gguf",
+     "depth": "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "MiniMax-Music3-transformer-Q5_K_M.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   },
+   {
+    "id": "quality-q8",
+    "label": {
+     "en": "Best",
+     "ru": "Максимальная",
+     "zh": "最佳",
+     "ja": "最高",
+     "ko": "최고",
+     "pt": "Máxima"
+    },
+    "vram_gb": 15.0,
+    "requires": [],
+    "roles": {
+     "lm": "MiniMax-Music3-language_model-Q8_0.gguf",
+     "depth": "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "MiniMax-Music3-transformer-Q8_0.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   },
+   {
+    "id": "quality-lm-nvfp4",
+    "label": {
+     "en": "Best · NVFP4 language model for RTX 50",
+     "ru": "Максимальная · языковая модель NVFP4 для RTX 50",
+     "zh": "最佳 · 适用于 RTX 50 的 NVFP4 语言模型",
+     "ja": "最高 · RTX 50 向け NVFP4 言語モデル",
+     "ko": "최고 · RTX 50용 NVFP4 언어 모델",
+     "pt": "Máxima · modelo de linguagem NVFP4 para RTX 50"
+    },
+    "vram_gb": 11.5,
+    "requires": [
+     "cuda13"
+    ],
+    "roles": {
+     "lm": "mm3-lm-NVFP4.gguf",
+     "depth": "MiniMax-Music3-rvq_depth_decoder-Q8_0.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "MiniMax-Music3-transformer-Q8_0.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   },
+   {
+    "id": "quality-nvfp4",
+    "label": {
+     "en": "NVFP4 for RTX 50",
+     "ru": "NVFP4 для RTX 50",
+     "zh": "适用于 RTX 50 的 NVFP4",
+     "ja": "RTX 50 向け NVFP4",
+     "ko": "RTX 50용 NVFP4",
+     "pt": "NVFP4 para RTX 50"
+    },
+    "vram_gb": 9.5,
+    "requires": [
+     "cuda13"
+    ],
+    "roles": {
+     "lm": "mm3-lm-NVFP4.gguf",
+     "depth": "mm3-depth-NVFP4.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "mm3-dit-NVFP4.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   },
+   {
+    "id": "native",
+    "label": {
+     "en": "Original weights",
+     "ru": "Исходные веса",
+     "zh": "原始权重",
+     "ja": "元の重み",
+     "ko": "원본 가중치",
+     "pt": "Pesos originais"
+    },
+    "vram_gb": 30.0,
+    "requires": [],
+    "roles": {
+     "lm": "MiniMax-Music3-language_model-BF16.gguf",
+     "depth": "MiniMax-Music3-rvq_depth_decoder-BF16.gguf",
+     "cond": "MiniMax-Music3-condition_encoder-F32.gguf",
+     "dit": "MiniMax-Music3-transformer-F32.gguf",
+     "vae": "MiniMax-Music3-vocoder-F32.gguf"
+    }
+   }
+  ]
+ }
+}
