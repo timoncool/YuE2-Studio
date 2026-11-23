@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
+import { PickerOption, PickerPill } from './kit/PickerPill';
 import { AlertTriangle, Layers, Plus, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { type AdapterLibrary, AdapterUse, InstalledAdapter, SCORE_STRENGTH_LIMIT, familyLabel, localized, scoreStrength, startingScales, useAdapterLibrary } from '../services/adapters';
@@ -28,23 +29,11 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
   const { installed, slots, model } = nativeLibrary ?? localLibrary;
   /** An adapter made for the other size of the model, which the engine cannot merge. */
   const otherSize = (adapter?: InstalledAdapter) => Boolean(adapter?.model && adapter.model !== 'lm' && model && adapter.model !== model);
-  const [choosing, setChoosing] = useState(false);
-  const menu = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!choosing) return;
-    const close = (event: MouseEvent) => {
-      if (menu.current && !menu.current.contains(event.target as Node)) setChoosing(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [choosing]);
 
   const roleOf = (slot: string) => slots.find(entry => entry.id === slot)?.role ?? '';
   const openPage = () => window.dispatchEvent(new CustomEvent('yue:navigate', { detail: 'adapters' }));
 
   const add = (adapter: InstalledAdapter) => {
-    setChoosing(false);
     onChange([...value, { id: adapter.id, scales: startingScales(adapter, slots) }]);
     if (adapter.trigger) onTrigger?.(adapter.trigger, true);
   };
@@ -146,42 +135,22 @@ export const AdapterPicker: React.FC<AdapterPickerProps> = ({ value, onChange, o
         </div>
       ) : (
         available.length > 0 && (
-          <div ref={menu} className="relative">
-            <button
-              type="button"
-              onClick={() => setChoosing(open => !open)}
-              aria-expanded={choosing}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-zinc-300 py-2 text-xs font-semibold text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300"
-            >
-              <Plus size={13} />
-              {t('adaptersAdd')}
-            </button>
-            {choosing && (
-              <div className="mt-1 max-h-72 overflow-y-auto rounded-lg border border-zinc-200 bg-white dark:border-white/10 dark:bg-zinc-900">
-                {available.map(adapter => (
-                  <button
-                    key={adapter.id}
-                    type="button"
-                    onClick={() => add(adapter)} disabled={adapter.training_base_matches === false}
-                    className="flex w-full items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-zinc-100 dark:border-white/5 dark:hover:bg-white/5"
-                  >
-                    <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-200">{localized(adapter.name, language)}</span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {adapter.origin.training_base && <span className={`text-[10px] ${adapter.training_base_matches === false ? 'text-amber-600' : 'text-zinc-400'}`}>
-                        {t('trainingBase')} · {adapter.origin.training_base.id}
-                      </span>}
-                      {adapter.model && (
-                        <span className={`text-[10px] font-bold ${otherSize(adapter) ? 'text-amber-600 dark:text-amber-300' : 'text-zinc-400'}`}>{familyLabel(adapter.model)}</span>
-                      )}
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-pink-600 dark:text-pink-300">
-                        {tt(`adapterKind_${adapter.kind}`) || adapter.kind}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <PickerPill look="add" label={t('adaptersAdd')} showLabel={false} status={<Plus size={13} aria-hidden />} value={t('adaptersAdd')}>
+            {close => <>
+              {available.map(adapter => <PickerOption key={adapter.id} value={adapter.id} selected={false} disabled={adapter.training_base_matches === false}
+                name={localized(adapter.name, language)}
+                hint={adapter.origin.training_base ? `${t('trainingBase')} · ${adapter.origin.training_base.id}` : undefined}
+                side={<span className="flex items-center gap-1.5">
+                  {adapter.model && <span className={otherSize(adapter) ? 'text-amber-600 dark:text-amber-300' : ''}>{familyLabel(adapter.model)}</span>}
+                  <span className="uppercase tracking-wide text-pink-600 dark:text-pink-300">{tt(`adapterKind_${adapter.kind}`) || adapter.kind}</span>
+                </span>}
+                onPick={() => { close(); add(adapter); }} />)}
+              {!nativeLibrary && <>
+                <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
+                <PickerOption selected={false} name={t('adaptersOpenPage')} side="↗" onPick={() => { close(); openPage(); }} />
+              </>}
+            </>}
+          </PickerPill>
         )
       )}
     </div>

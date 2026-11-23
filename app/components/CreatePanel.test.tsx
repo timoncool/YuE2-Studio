@@ -284,10 +284,16 @@ it('snapshots the last voice only when an automatic RVC take is enabled', async 
   expect(sent[0].rvc_after).toBeUndefined();
 
   click(buttonNamed('RVC take')!);
+  click(buttonNamed('Add a voice')!);
+  click([...document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')].find(item => item.textContent?.includes('Warm singer'))!);
   expect(host.textContent).toContain('Warm singer');
-  click(host.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Make an RVC take after generation"]')!);
+  const pitch = host.querySelector<HTMLInputElement>('input[type="range"][aria-label="Pitch, semitones"]')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(pitch, '-3');
+    pitch.dispatchEvent(new Event('input', { bubbles: true }));
+  });
   click(buttonNamed('create')!);
-  expect(sent[1].rvc_after).toEqual({ voice_id: 'installed-voice', backend: 'audio.cpp' });
+  expect(sent[1].rvc_after).toEqual({ voice_id: 'installed-voice', backend: 'audio.cpp', semitone_shift: -3, retrieval_blend: 0 });
 });
 
 describe('pauses between repeated generations (#261)', () => {

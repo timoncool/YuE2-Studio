@@ -3,6 +3,7 @@ import { yueSamplingStrings } from '../i18n/yueSampling';
 
 import { chooseLastRvcVoice, readRvcBackend, useLastRvcVoice } from '../services/rvcQuick';
 import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
+import { voicesPageStrings } from '../i18n/voicesPage';
 import { rvcQuickStrings } from '../i18n/rvcQuick';
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { libraryChanged, SELF_READ, useActivity, useAssistantStatus, useLibrarySongs, useOpenRouterSettings, useSetupStatus, setupStatusChanged, type ActivityEntry } from '../services/studioQueries';
@@ -547,6 +548,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
     return () => controller.abort();
   }, [rvcVoice]);
   const chosenRvcVoice = rvcVoices?.find(voice => voice.id === rvcVoice);
+  const rvcTake = rvcAfter && Boolean(chosenRvcVoice);
+  const [rvcShift, setRvcShift] = useState(0);
+  const [rvcBlend, setRvcBlend] = useState(0);
+  const voicesText = voicesPageStrings[language];
+  const openVoices = () => window.dispatchEvent(new CustomEvent('yue:navigate', { detail: 'voices' }));
   const writingText = songWritingStrings[language];
   const tt = t as unknown as (key: string) => string;
   const musicStrings = musicSourceStrings[language];
@@ -1907,7 +1913,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
   const generate = (request: YueRequest) => {
     cancelPause.current?.();
     const snapshot = rvcAfter && chosenRvcVoice && !instrumental
-      ? { ...request, rvc_after: { voice_id: rvcVoice, backend: readRvcBackend() } }
+      ? { ...request, rvc_after: { voice_id: rvcVoice, backend: readRvcBackend(), semitone_shift: rvcShift, retrieval_blend: chosenRvcVoice.index_name ? rvcBlend : 0 } }
       : request;
     if (forever) foreverRequest.current = { ...snapshot };
     onGenerate(snapshot);
@@ -3379,18 +3385,49 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             </p>
           )}
           </>}
-          {!instrumental && <Card title={rvcText.title} icon={<Mic size={13} />} fold="rvc-after" foldedByDefault
-            actions={<span className="text-[11px] text-zinc-500 dark:text-zinc-400">{rvcAfter && chosenRvcVoice ? voiceName(chosenRvcVoice) : rvcText.off}</span>}>
+          {!instrumental && <Card title={rvcText.title} icon={<Mic size={13} />} fold="rvc-after" foldedByDefault={!rvcTake}
+            actions={<button type="button" onClick={openVoices} className={ICON} title={voicesText.allVoices} aria-label={voicesText.allVoices}><Mic size={14} /></button>}>
             <div className="space-y-3">
-              <Switch checked={rvcAfter && Boolean(chosenRvcVoice)} onChange={setRvcAfter} label={rvcText.after} hint={rvcText.afterHint} disabled={!chosenRvcVoice && !rvcVoices?.length} />
-              {rvcVoicesError ? <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{rvcVoicesError}</p>
-                : rvcVoices && rvcVoices.length === 0 ? <p className="text-xs text-zinc-500 dark:text-zinc-400">{rvcText.noVoices}</p>
-                : rvcVoices && <PickerPill label={rvcText.voice} value={chosenRvcVoice ? voiceName(chosenRvcVoice) : '—'}>
-                  {close => rvcVoices.map(voice => <PickerOption key={voice.id} value={voice.id} selected={voice.id === rvcVoice} name={voiceName(voice)}
-                    hint={voice.origin?.name && voice.origin.name !== voice.model_name ? voice.model_name : undefined}
-                    mark={voice.id === rvcVoice ? <Check size={14} className="text-pink-500" aria-hidden /> : undefined}
-                    onPick={() => { chooseLastRvcVoice(voice.id); setRvcAfter(true); close(); }} />)}
-                </PickerPill>}
+              <p className="text-[11px] leading-4 text-zinc-500 dark:text-zinc-400">{rvcText.afterHint}</p>
+              {rvcVoicesError && <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{rvcVoicesError}</p>}
+              {rvcTake && chosenRvcVoice ? <div className="rounded-lg border border-zinc-200 p-2.5 dark:border-white/10">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-white">{voiceName(chosenRvcVoice)}</span>
+                    <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">{chosenRvcVoice.index_name ? voicesText.withIndex : voicesText.withoutIndex}</span>
+                  </span>
+                  <button type="button" onClick={() => setRvcAfter(false)} className={ICON} title={t('adaptersRemoveFromSong')} aria-label={t('adaptersRemoveFromSong')}><X size={13} /></button>
+                </div>
+                <div className="mt-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{voicesText.pitch}</span>
+                    <NumberField value={rvcShift} min={-24} max={24} step={1} label={voicesText.pitch} onChange={value => setRvcShift(Math.round(value))} />
+                  </div>
+                  <input type="range" min={-24} max={24} step={1} value={rvcShift} aria-label={voicesText.pitch}
+                    onChange={event => setRvcShift(Number(event.target.value))} className="mt-1.5 h-1 w-full cursor-pointer accent-pink-500" />
+                </div>
+                {chosenRvcVoice.index_name && <div className="mt-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{voicesText.blend}</span>
+                    <NumberField value={rvcBlend} min={0} max={1} step={0.05} label={voicesText.blend} onChange={setRvcBlend} />
+                  </div>
+                  <input type="range" min={0} max={1} step={0.05} value={rvcBlend} aria-label={voicesText.blend}
+                    onChange={event => setRvcBlend(Number(event.target.value))} className="mt-1.5 h-1 w-full cursor-pointer accent-pink-500" />
+                </div>}
+              </div>
+              : rvcVoices && rvcVoices.length === 0 ? <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] text-zinc-500">{rvcText.noVoices}</span>
+                <button type="button" onClick={openVoices} className="text-xs font-semibold text-pink-600 hover:underline dark:text-pink-400">{voicesText.openCatalog}</button>
+              </div>
+              : rvcVoices && <PickerPill look="add" label={voicesText.addVoice} showLabel={false} status={<Plus size={13} aria-hidden />} value={voicesText.addVoice}>
+                {close => <>
+                  {rvcVoices.map(voice => <PickerOption key={voice.id} value={voice.id} selected={false} name={voiceName(voice)}
+                    hint={`${voice.model_name} · ${voice.index_name ? voicesText.withIndex : voicesText.withoutIndex}`}
+                    onPick={() => { close(); chooseLastRvcVoice(voice.id); setRvcAfter(true); }} />)}
+                  <div role="separator" className="my-1 border-t border-zinc-200 dark:border-white/10" />
+                  <PickerOption selected={false} name={voicesText.allVoices} side="↗" onPick={() => { close(); openVoices(); }} />
+                </>}
+              </PickerPill>}
             </div>
           </Card>}
           {error && <div ref={errorBox} role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs leading-5 text-red-700 dark:text-red-200">{error}</div>}
@@ -3422,7 +3459,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             {pauseSeconds !== null && !queueBusy ? pauseText.cancel : tt('generateForeverStop')}</button>
         </div>}
         <div className="flex items-stretch gap-1.5">
-          <PickerPill look="split" className="order-2 w-[38%] max-w-[11rem] shrink-0" align="right" label={tt('createIntoPlaylist')} showLabel={false}
+          <PickerPill look="split" className="order-2 max-w-[45%] shrink-0" align="right" label={tt('createIntoPlaylist')} showLabel={false}
             status={<ListMusic size={15} className={`shrink-0 ${chosenPlaylistName ? 'text-pink-500' : ''}`} aria-hidden />}
             value={chosenPlaylistName ?? tt('createIntoPlaylist')}>
             {close => <>
@@ -3435,14 +3472,14 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 onPick={() => { choosePlaylist(entry.id); close(); }} />)}
             </>}
           </PickerPill>
-        <div className="order-1 flex min-w-0 flex-1 gap-px">
+        <div className="order-1 flex min-w-0 flex-1 rounded-xl shadow-lg">
         <button
           type="button"
           onClick={submit}
           disabled={pair.blocked || (cloud ? !selectedMusicModel || invalidParameters.length > 0 : nativeEngine
             ? packedAceInvalid.length > 0 || !native.ready || (aceEngine && !aceOptions) || mmComponentsPartial || !nativeAdaptersReady || (miDasheng && !miDashengPromptReady(scene)) || (magenta && !magentaReady) || (mulaCover && !mulaCoverDraft.original) || (hotstep && (!mulaCoverDraft.original || !mulaCoverDraft.abc.trim()))
             : yue && instrumental && instrumentalLoraLoading && !isGenerating)}
-          className={`flex h-12 min-w-0 flex-1 items-center justify-center gap-2 ${cloud ? 'rounded-xl' : 'rounded-l-xl'} bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50`}
+          className={`flex h-12 min-w-0 flex-1 items-center justify-center gap-2 ${cloud ? 'rounded-xl' : 'rounded-l-xl'} bg-linear-to-r from-orange-500 to-pink-600 text-base font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50`}
         >
           {isGenerating ? <Square size={18} /> : yue && instrumental ? <Guitar size={18} /> : <Sparkles size={18} />}
           {yue && composing && instrumental ? tt('composingScore') : yue && instrumental ? tt('createInstrumental') : t('create')}

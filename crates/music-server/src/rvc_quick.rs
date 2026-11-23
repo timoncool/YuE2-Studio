@@ -17,11 +17,15 @@ use crate::{
     rvc_voices, separate_song_audio, separation, stem_path,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub(super) struct Options {
     pub(super) voice_id: String,
     #[serde(default)]
     pub(super) backend: Backend,
+    #[serde(default)]
+    pub(super) semitone_shift: i32,
+    #[serde(default)]
+    pub(super) retrieval_blend: f64,
 }
 
 #[derive(Deserialize)]
@@ -86,6 +90,8 @@ pub(super) struct Progress {
     song_id: String,
     voice_id: String,
     backend: Backend,
+    semitone_shift: i32,
+    retrieval_blend: f64,
     status: Stage,
     take: Option<Value>,
     error: Option<String>,
@@ -144,11 +150,12 @@ pub(super) async fn start(
         .voice_id
         .or_else(|| stored.as_ref().map(|options| options.voice_id.clone()))
         .ok_or_else(|| rvc_voices::invalid("Select an installed RVC voice first."))?;
+    let (semitone_shift, retrieval_blend) = stored.as_ref().map_or((0, 0.0), |options| (options.semitone_shift, options.retrieval_blend));
     let backend = request
         .backend
         .or_else(|| stored.map(|options| options.backend))
         .unwrap_or_default();
-    enqueue(state, request.song_id, Options { voice_id, backend })
+    enqueue(state, request.song_id, Options { voice_id, backend, semitone_shift, retrieval_blend })
         .map(|job| (StatusCode::ACCEPTED, Json(job)))
 }
 
@@ -164,7 +171,10 @@ fn enqueue(state: AppState, song_id: String, options: Options) -> Result<Progres
             "Choose the original song rather than a stem.",
         ));
     }
-    let Options { voice_id, backend } = options;
+    let Options { voice_id, backend, semitone_shift, retrieval_blend } = options;
+    if !(-24..=24).contains(&semitone_shift) || !(0.0..=1.0).contains(&retrieval_blend) {
+        return Err(rvc_voices::invalid("Pitch must be within 24 semitones and closeness between 0 and 1."));
+    }
     check_voice(&state, &voice_id)?;
     let mut jobs = state.rvc_quick.jobs.lock().unwrap();
     if let Some(running) = jobs.values().find_map(|run| {
@@ -172,7 +182,9 @@ fn enqueue(state: AppState, song_id: String, options: Options) -> Result<Progres
         (progress.status.active()
             && progress.song_id == song.id
             && progress.voice_id == voice_id
-            && progress.backend == backend)
+            && progress.backend == backend
+            && progress.semitone_shift == semitone_shift
+            && progress.retrieval_blend == retrieval_blend)
             .then(|| progress.clone())
     }) {
         return Ok(running);
@@ -182,6 +194,8 @@ fn enqueue(state: AppState, song_id: String, options: Options) -> Result<Progres
         song_id: song.id,
         voice_id,
         backend,
+        semitone_shift,
+        retrieval_blend,
         status: Stage::Queued,
         take: None,
         error: None,
@@ -217,6 +231,8 @@ fn saved_take(
             && settings["quick"] == true
             && settings["voice_id"] == progress.voice_id
             && settings["requested_backend"] == requested
+            && settings["semitone_shift"].as_i64().unwrap_or(0) == i64::from(progress.semitone_shift)
+            && settings["retrieval_blend"].as_f64().unwrap_or(0.0) == progress.retrieval_blend
             && library
                 .media_path_for_song(&song)
                 .is_some_and(|path| path.is_file()))
@@ -293,8 +309,8 @@ async fn process_take(state: &AppState, run: &Arc<Run>) -> Result<(), Failure> {
             song_id: progress.song_id,
             voice_id: progress.voice_id,
             backend: progress.backend,
-            semitone_shift: 0,
-            retrieval_blend: 0.0,
+            semitone_shift: progress.semitone_shift,
+            retrieval_blend: progress.retrieval_blend,
         },
         Some(run.clone()),
     )
@@ -401,6 +417,8 @@ mod tests {
             song_id: "original".into(),
             voice_id: "voice".into(),
             backend: Backend::Auto,
+            semitone_shift: 0,
+            retrieval_blend: 0.0,
             status: Stage::Converting,
             take: None,
             error: None,
@@ -469,6 +487,11 @@ mod tests {
             ..same.clone()
         };
         assert!(saved_take(&library, &different_voice).unwrap().is_none());
+        let different_pitch = Progress {
+            semitone_shift: 3,
+            ..same.clone()
+        };
+        assert!(saved_take(&library, &different_pitch).unwrap().is_none());
         let different_backend = Progress {
             backend: Backend::VocalFastRs,
             ..same

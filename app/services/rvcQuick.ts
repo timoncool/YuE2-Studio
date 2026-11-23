@@ -8,7 +8,7 @@ const SELECTION_CHANGED = 'yue:rvc-selection';
 const SELECTION_URL = '/v1/rvc/selection';
 
 export type RvcBackend = 'auto' | 'vocal-fast-rs' | 'vocal-fast-metal' | 'audio.cpp' | 'burn-cuda';
-export interface RvcSelection { voice_id: string; backend: RvcBackend }
+export interface RvcSelection { voice_id: string; backend: RvcBackend; semitone_shift?: number; retrieval_blend?: number }
 
 export function readRvcBackend(): RvcBackend {
   const value = localStorage.getItem(RVC_BACKEND_STORAGE);

@@ -6,11 +6,13 @@ import catalogue from '../../docs/components/1/components.json';
 
 const bundled = catalogue.voices;
 import { I18nProvider } from '../context/I18nContext';
-import { StudioToolsPanel } from './StudioToolsPanel';
+import { VoicesPage } from './VoicesPage';
+
+vi.mock('./TrainingPanel', () => ({ TrainingPanel: () => null }));
 
 const flush = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 
-it('opens the curated catalog from Studio Tools and chooses an installed RVC voice', async () => {
+it('browses the voice catalogue and chooses an installed RVC voice', async () => {
   const high = bundled.voices.find(voice => voice.id === 'rvc-50ea3d733073550ef6f7')!;
   const drive = bundled.voices.find(voice => voice.id === 'rvc-5c72b2f2447908b9df55')!;
   const installed = { id: 'installed-tapok', model_name: 'voice.pth', index_name: 'voice.index',
@@ -46,13 +48,13 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
   const root = createRoot(host);
   const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   try {
-    act(() => root.render(<QueryClientProvider client={query}><I18nProvider><StudioToolsPanel /></I18nProvider></QueryClientProvider>));
+    act(() => root.render(<QueryClientProvider client={query}><I18nProvider><VoicesPage /></I18nProvider></QueryClientProvider>));
     await flush();
-    const section = host.querySelector<HTMLElement>('section[aria-label="Voice replacement"]')!;
-    const details = section;
-    const installedSelect = section.querySelector('select')!;
-    expect(installedSelect.value).toBe('');
-    expect(section.querySelector('h3')?.textContent).toBe('Voice catalogue');
+    act(() => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(tab => tab.textContent === 'Catalogue')!.click());
+    await flush();
+    const details = host;
+    expect(localStorage.getItem('studio.rvc.voiceId')).toBeNull();
+    expect(host.querySelector('h3')?.textContent).toBe('Voice catalogue');
     expect(details.querySelectorAll('li')).toHaveLength(40);
     expect(details.textContent).toContain(`Showing 40 of ${bundled.voices.length.toLocaleString('en')} voices`);
     const search = details.querySelector<HTMLInputElement>('input[type="search"]')!;
@@ -73,8 +75,6 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
     expect(select.textContent).toBe('Select');
     expect(select.disabled).toBe(false);
     act(() => { select.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-    expect(installedSelect.value).toBe(installed.id);
-    expect(installedSelect.selectedOptions[0]?.textContent).toContain(high.name);
     expect(localStorage.getItem('studio.rvc.voiceId')).toBe(installed.id);
     expect(fetchStudio.mock.calls.some(([path]) => path === '/v1/rvc/catalog/install')).toBe(false);
     const refresh = [...details.querySelectorAll('button')].find(button => button.textContent === 'Update catalog')!;
@@ -114,7 +114,7 @@ it('opens the curated catalog from Studio Tools and chooses an installed RVC voi
   }
 });
 
-it('applies the selected RVC voice to the current Studio Tools song', async () => {
+it('applies the selected RVC voice to the track it was opened for', async () => {
   const track = { id: 'source-song', audio_path: 'source.wav', title: 'RVC source song', engine_id: 'manual',
     caption: '', lyrics: '', metadata: {}, generation_settings: {}, source: 'manual' };
   const voice = { id: 'installed-voice', model_name: 'voice.pth', index_name: null, version: 1 };
@@ -142,12 +142,13 @@ it('applies the selected RVC voice to the current Studio Tools song', async () =
   const query = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   try {
     act(() => root.render(<QueryClientProvider client={query}><I18nProvider>
-      <StudioToolsPanel initialSongId={track.id} />
+      <VoicesPage initialSongId={track.id} />
     </I18nProvider></QueryClientProvider>));
     await flush();
     await flush();
-    const section = host.querySelector<HTMLElement>('section[aria-label="Voice replacement"]')!;
-    expect(section.textContent).toContain(track.title);
+    const section = host;
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Apply to a track');
+    expect(host.querySelector<HTMLInputElement>('input[role="combobox"]')?.value).toBe(track.title);
     const button = [...section.querySelectorAll('button')]
       .find(button => button.textContent === 'Save a new take with this voice')!;
     expect(button.disabled).toBe(false);

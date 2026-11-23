@@ -129,6 +129,8 @@ import { EngineStarting } from './components/EngineStarting';
 import { StudioOffline } from './components/StudioOffline';
 import { StudioToolsPanel } from './components/StudioToolsPanel';
 import { AdaptersPage } from './components/AdaptersPage';
+import { VoicesPage } from './components/VoicesPage';
+import { voicesPageStrings } from './i18n/voicesPage';
 import { PlayerExtras } from './components/player/PlayerExtras';
 import { registerPlayer } from './services/audioGraph';
 import { loadLibraryTrack, setLibraryPlaybackRate } from './services/playerTempo';
@@ -233,7 +235,7 @@ function AppContent() {
     return () => { stopped = true; window.clearTimeout(timer); };
   }, []);
   // A track sent here from a menu's "separate into stems".
-  const [focusRvc, setFocusRvc] = useState(false);
+  const [rvcSongId, setRvcSongId] = useState<string | null>(null);
   const [stemsSongId, setStemsSongId] = useState<string | null>(null);
   // Which of the three situations the studio is in. It starts unknown, and
   // unknown must not look like "nothing is installed": showing the download
@@ -257,8 +259,13 @@ function AppContent() {
   }, [setupQuery.data, setupQuery.isError]);
   useEffect(() => {
     const open = (event: Event) => {
-      setFocusRvc(event.type === 'yue:open-rvc');
-      setStemsSongId((event as CustomEvent<string>).detail);
+      const songId = (event as CustomEvent<string>).detail;
+      if (event.type === 'yue:open-rvc') {
+        setRvcSongId(songId ?? null);
+        setCurrentView('voices');
+        return;
+      }
+      setStemsSongId(songId);
       setCurrentView('tools');
     };
     const openSettings = (event: Event) => {
@@ -736,6 +743,8 @@ function AppContent() {
         setCurrentView('search');
       } else if (path === '/news') {
         setCurrentView('news');
+      } else if (path === '/tools' || path === '/adapters' || path === '/voices') {
+        setCurrentView(path.slice(1) as View);
       }
     };
 
@@ -1071,7 +1080,7 @@ function AppContent() {
   };
 
   // An agent connected over MCP works this window like a user
-  const VIEWS: View[] = ['create', 'library', 'tools', 'adapters', 'playlist', 'search', 'news'];
+  const VIEWS: View[] = ['create', 'library', 'tools', 'adapters', 'voices', 'playlist', 'search', 'news'];
   const songById = (id: unknown) => {
     const song = librarySongs.find(entry => entry.id === id);
     if (!song) throw new Error(`No song ${String(id)} in the library; library_songs_list gives the ids.`);
@@ -1450,12 +1459,13 @@ function AppContent() {
   // page shows: leaving it for the library used to throw away the style, the
   // lyrics, the score and every setting typed into it.
   const createKept = nativeModels !== 'offline' && (nativeSetupReady || enteredOtherEditor);
-  const showingCreate = !['tools', 'adapters', 'library', 'playlist', 'search', 'news'].includes(currentView);
+  const showingCreate = !['tools', 'adapters', 'voices', 'library', 'playlist', 'search', 'news'].includes(currentView);
   const pageTitle = {
     create: t('createMusic'),
     library: t('library'),
     tools: t('toolsHeading'),
     adapters: t('adaptersNav'),
+    voices: voicesPageStrings[language].nav,
     playlist: playlists.find(playlist => playlist.id === viewingPlaylistId)?.name ?? t('playlist'),
     search: t('search'),
     news: t('news'),
@@ -1492,11 +1502,14 @@ function AppContent() {
   const renderContent = (view: typeof currentView = currentView) => {
     switch (view) {
       case 'tools':
-        return <StudioToolsPanel initialSongId={stemsSongId} focusRvc={focusRvc} onRvcFocused={() => setFocusRvc(false)}
+        return <StudioToolsPanel initialSongId={stemsSongId}
           onGenerateEffect={generations.generate} generationBusy={generations.queueBusy} />;
 
       case 'adapters':
         return <AdaptersPage />;
+
+      case 'voices':
+        return <VoicesPage key={rvcSongId ?? ''} initialSongId={rvcSongId ?? undefined} onSaved={libraryChanged} />;
 
       case 'library': {
         return (
@@ -1766,8 +1779,8 @@ function AppContent() {
               window.history.pushState({}, '', '/search');
             } else if (v === 'news') {
               window.history.pushState({}, '', '/news');
-            } else if (v === 'tools') {
-              window.history.pushState({}, '', '/tools');
+            } else if (v === 'tools' || v === 'adapters' || v === 'voices') {
+              window.history.pushState({}, '', `/${v}`);
             }
             if (isMobile) setShowLeftSidebar(false);
           }}

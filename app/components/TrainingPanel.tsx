@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { voicesPageStrings } from '../i18n/voicesPage';
 import { karaokeStatusChanged, playlistsChanged, useSystemResources } from '../services/studioQueries';
 import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
@@ -617,7 +618,7 @@ const SongsStep: React.FC<{
   if (dataset.items.length === 0 && !adding) {
     return (
       <div className="space-y-3">
-        <DropZone large onPicked={onAdd} title={t('trainingDropTitle')} hint={t('trainingDropHint')} />
+        <TrainingDropZone onPicked={onAdd} />
         <div className="flex justify-center"><button type="button" onClick={() => setPicking(value => !value)} className={OUTLINE}><Library size={13} />{t('trainingAddLibrary')}</button></div>
         {picking && <LibraryPicker exclude={exclude} onAdd={ids => { setPicking(false); onAddLibrary(ids); }} onClose={() => setPicking(false)} />}
       </div>
@@ -767,12 +768,12 @@ const SongsStep: React.FC<{
 };
 
 /** Step two: what will be trained, checked, and the button that starts it. */
-const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (recipe: Recipe) => void; baseId: string; setBaseId: (id: string) => void; dataset: Dataset; job: PrepareStatus | null; onBack: () => void; onStarted: () => void; onChanged: (dataset: Dataset) => void; onRefresh: () => void; onError: (message: string) => void }> = ({ state, recipe, setRecipe, baseId, setBaseId, dataset, job, onBack, onStarted, onChanged, onRefresh, onError }) => {
+const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (recipe: Recipe) => void; baseId: string; setBaseId: (id: string) => void; dataset: Dataset; job: PrepareStatus | null; onBack: () => void; onStarted: () => void; onChanged: (dataset: Dataset) => void; onRefresh: () => void; onError: (message: string) => void; voices: boolean }> = ({ state, recipe, setRecipe, baseId, setBaseId, dataset, job, onBack, onStarted, onChanged, onRefresh, onError, voices }) => {
   const { t, songs } = useStrings();
   const [advanced, setAdvanced] = useState(false);
   const [starting, setStarting] = useState(false);
   const { language } = useI18n();
-  const [trainingEngine, setTrainingEngine] = useState<'yue2' | 'sa3' | 'heartmula' | 'rvc'>('yue2');
+  const [trainingEngine, setTrainingEngine] = useState<'yue2' | 'sa3' | 'heartmula' | 'rvc'>(voices ? 'rvc' : 'yue2');
   const [installingBase, setInstallingBase] = useState(false);
   const base = state.training_bases?.find(option => option.id === baseId);
   const alternateBase = Boolean(base && base.id !== 'stock');
@@ -820,15 +821,14 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
   );
   return (
     <div className="space-y-3">
-      <label className="block max-w-sm">
+      {!voices && <label className="block max-w-sm">
         <span className={LABEL}>{(sa3TrainingText[language] ?? sa3TrainingText.en)[0]}</span>
-        <select className={`${CONTROL} mt-1`} value={trainingEngine} onChange={event => setTrainingEngine(event.target.value === 'rvc' ? 'rvc' : event.target.value === 'heartmula' ? 'heartmula' : event.target.value === 'sa3' ? 'sa3' : 'yue2')}>
+        <select className={`${CONTROL} mt-1`} value={trainingEngine} onChange={event => setTrainingEngine(event.target.value === 'heartmula' ? 'heartmula' : event.target.value === 'sa3' ? 'sa3' : 'yue2')}>
           <option value="yue2">YuE2</option>
           <option value="heartmula">HeartMuLa 3B · HOT-Step</option>
           <option value="sa3">Stable Audio 3 Medium · HOT-Step</option>
-          <option value="rvc">RVC · Burn CUDA</option>
         </select>
-      </label>
+      </label>}
       {trainingEngine === 'rvc' ? <>
         <RvcBurnTraining key={dataset.id} dataset={dataset} busy={Boolean(state.active || preparing)}
           card={CARD} control={CONTROL} primary={PRIMARY} onStarted={onStarted} onError={onError} />
@@ -927,7 +927,7 @@ const DatasetList: React.FC<{ state: TrainingState; busy: boolean; onOpen: (id: 
   const job = state.prepare;
   return (
     <div className="space-y-4">
-      <DropZone large onPicked={onNew} disabled={busy} title={t('trainingDropTitle')} hint={t('trainingDropHint')} />
+      <TrainingDropZone onPicked={onNew} disabled={busy} />
       {state.datasets.length > 0 && (
         <div className="flex items-center justify-between">
           <p className={LABEL}>{t('trainingDatasets')}</p>
@@ -1205,8 +1205,22 @@ const RunCard: React.FC<{ run: TrainingRun; onChanged: () => void; onError: (mes
 
 type Step = 'songs' | 'train' | 'result';
 
-export const TrainingPanel: React.FC = () => {
+const VoicesTraining = React.createContext(false);
+
+/** The first drop of a dataset: songs for a LoRA, recordings of one voice in the Voices section. */
+function TrainingDropZone({ onPicked, disabled }: { onPicked: (files: PickedFile[]) => void; disabled?: boolean }) {
   const { t } = useStrings();
+  const { language } = useI18n();
+  const voices = React.useContext(VoicesTraining);
+  return <DropZone large onPicked={onPicked} disabled={disabled}
+    title={voices ? voicesPageStrings[language].trainingDropTitle : t('trainingDropTitle')}
+    hint={voices ? voicesPageStrings[language].trainingDropHint : t('trainingDropHint')} />;
+}
+
+/** `voices` is the RVC section's copy: the same datasets, trained into a voice. */
+export const TrainingPanel: React.FC<{ voices?: boolean }> = ({ voices = false }) => {
+  const { t } = useStrings();
+  const { language } = useI18n();
   const [state, setState] = useState<TrainingState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -1343,6 +1357,7 @@ export const TrainingPanel: React.FC = () => {
   ];
 
   return (
+    <VoicesTraining.Provider value={voices}>
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         {dataset ? (
@@ -1377,10 +1392,10 @@ export const TrainingPanel: React.FC = () => {
         ) : (
           <>
             <p className="min-w-0 flex-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {t('trainingIntro')}
-              {ownModel && <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel.split(/[\\/]/).pop()!.replace(/\.gguf$/i, ''))}</span>}
+              {voices ? voicesPageStrings[language].trainingIntro : t('trainingIntro')}
+              {!voices && ownModel && <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">{(t as unknown as (key: string) => string)('trainingOnSetModel').replace('{file}', ownModel.split(/[\\/]/).pop()!.replace(/\.gguf$/i, ''))}</span>}
             </p>
-            <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>
+            {!voices && <button type="button" onClick={() => setGuideOpen(value => !value)} className={OUTLINE} aria-pressed={guideOpen}><BookOpen size={13} />{t('trainingGuideOpen')}</button>}
           </>
         )}
       </div>
@@ -1405,7 +1420,7 @@ export const TrainingPanel: React.FC = () => {
           onError={setError}
         />
       )}
-      {dataset && step === 'train' && <TrainStep state={state} recipe={recipes[dataset.id] ?? state.recipe_defaults} setRecipe={next => setRecipes(current => ({ ...current, [dataset.id]: next }))} baseId={bases[dataset.id] ?? 'stock'} setBaseId={next => setBases(current => ({ ...current, [dataset.id]: next }))} dataset={dataset} job={job} onBack={() => setStep('songs')} onStarted={() => { setStep('result'); void refresh(); }} onChanged={replace} onRefresh={() => void refresh()} onError={setError} />}
+      {dataset && step === 'train' && <TrainStep state={state} recipe={recipes[dataset.id] ?? state.recipe_defaults} setRecipe={next => setRecipes(current => ({ ...current, [dataset.id]: next }))} baseId={bases[dataset.id] ?? 'stock'} setBaseId={next => setBases(current => ({ ...current, [dataset.id]: next }))} dataset={dataset} job={job} onBack={() => setStep('songs')} onStarted={() => { setStep('result'); void refresh(); }} onChanged={replace} onRefresh={() => void refresh()} onError={setError} voices={voices} />}
       {dataset && step === 'result' && (
         <div className="space-y-3">
           {runs.length === 0 && <p className="text-sm text-zinc-500">{t('trainingNoRuns')}</p>}
@@ -1430,5 +1445,6 @@ export const TrainingPanel: React.FC = () => {
         onCancel={() => setDeleting(null)}
       />
     </div>
+    </VoicesTraining.Provider>
   );
 };

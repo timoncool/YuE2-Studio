@@ -19,7 +19,6 @@ import type { TranslationKey } from '../i18n/translations';
 import { stemOf } from '../services/songStems';
 import { derivedBy, libraryFailure, restoredOf, shownSongs, toolsSongOnOpen, type ToolRun } from '../services/toolsSong';
 import { RestoreTool } from './RestoreTool';
-import { RvcVoiceCatalog } from './RvcVoiceCatalog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MidiTool } from './midi/MidiTool';
 import { MidiEditor } from './midi/MidiEditor';
@@ -70,10 +69,8 @@ const CONTROL =
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 
-export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGenerateEffect, generationBusy }: {
+export function StudioToolsPanel({ initialSongId, onGenerateEffect, generationBusy }: {
   initialSongId?: string | null;
-  focusRvc?: boolean;
-  onRvcFocused?: () => void;
   onGenerateEffect?: (request: YueRequest) => void;
   generationBusy?: boolean;
 } = {}): React.ReactElement {
@@ -85,13 +82,6 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGene
   const [status, setStatus] = useState<SeparationStatus | null>(null);
   const [stems, setStems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const rvcSection = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (focusRvc && rvcSection.current) {
-      rvcSection.current.focus();
-      onRvcFocused?.();
-    }
-  }, [focusRvc, onRvcFocused]);
   const settingsRevision = useRef(0);
   // separating again replaces the stems the song has: asked first
   const [confirmReplace, setConfirmReplace] = useState(false);
@@ -486,12 +476,6 @@ export function StudioToolsPanel({ initialSongId, focusRvc, onRvcFocused, onGene
           card={CARD}
           onDone={() => void loadSongs()}
         />
-
-        <div ref={rvcSection} tabIndex={-1} className="scroll-m-4 rounded-lg focus-visible:outline-2 focus-visible:outline-pink-500">
-          <RvcVoiceCatalog card={CARD} control={CONTROL}
-            song={songId ? { id: songId, title: songs.find(song => song.id === songId)?.title ?? '', stems } : undefined}
-            onSaved={() => void loadSongs()} />
-        </div>
 
         {onGenerateEffect && <SoundEffectsTool card={CARD} control={CONTROL} busy={Boolean(generationBusy)} onGenerate={onGenerateEffect} />}
 

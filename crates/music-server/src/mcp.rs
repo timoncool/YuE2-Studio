@@ -1136,7 +1136,9 @@ fn song_create_schema(mut properties: Value) -> Value {
         "description": "After successful generation, save a separate RVC take with this voice and backend. Use rvc_quick_list for progress.",
         "properties": {
             "voice_id": { "type": "string", "description": "An installed RVC voice ID" },
-            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] }
+            "backend": { "type": "string", "enum": ["auto", "vocal-fast-rs", "vocal-fast-metal", "burn-cuda", "audio.cpp"] },
+            "semitone_shift": { "type": "integer", "minimum": -24, "maximum": 24, "description": "Pitch of the new voice, in semitones" },
+            "retrieval_blend": { "type": "number", "minimum": 0, "maximum": 1, "description": "Closeness to the original voice through its retrieval index; 0 for a voice without one" }
         },
         "required": ["voice_id"]
     });

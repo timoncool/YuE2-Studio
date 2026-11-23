@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useOpenRouterSettings, useSetupStatus } from '../services/studioQueries';
-import { Cpu, Disc, Layers, Library, Moon, Newspaper, ScrollText, Search, SlidersHorizontal, Sun } from 'lucide-react';
+import { Cpu, Disc, Layers, Library, Mic, Moon, Newspaper, ScrollText, Search, SlidersHorizontal, Sun } from 'lucide-react';
 import { enginePageStrings } from '../i18n/enginePage';
+import { voicesPageStrings } from '../i18n/voicesPage';
 import { View } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { setupLabel } from '../services/modelCatalog';
@@ -139,6 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <NavItem icon={<Library size={20} />} label={t('library')} active={currentView === 'library'} onClick={() => onNavigate('library')} isExpanded={isOpen} />
           <NavItem icon={<Search size={20} />} label={t('search')} active={currentView === 'search'} onClick={() => onNavigate('search')} isExpanded={isOpen} />
           <NavItem icon={<Layers size={20} />} label={t('adaptersNav')} active={currentView === 'adapters'} onClick={() => onNavigate('adapters')} isExpanded={isOpen} />
+          <NavItem icon={<Mic size={20} />} label={voicesPageStrings[language].nav} active={currentView === 'voices'} onClick={() => onNavigate('voices')} isExpanded={isOpen} />
           <NavItem icon={<SlidersHorizontal size={20} />} label={t('studioTools')} active={currentView === 'tools'} onClick={() => onNavigate('tools')} isExpanded={isOpen} />
           {onOpenEngines && <NavItem icon={<Cpu size={20} />} label={enginePageStrings[language][0]} active={false} onClick={onOpenEngines} isExpanded={isOpen} />}
           <NavItem icon={<Newspaper size={20} />} label={t('news')} active={currentView === 'news'} onClick={() => onNavigate('news')} isExpanded={isOpen} />

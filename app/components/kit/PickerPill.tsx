@@ -26,7 +26,7 @@ export function PickerPill({ label, value, status, children, className = '', ico
   showLabel?: boolean;
   kind?: 'menu' | 'dialog';
   /** `split` is the second half of a split button, as tall as the main action beside it. */
-  look?: 'field' | 'split' | 'primary';
+  look?: 'field' | 'split' | 'primary' | 'add';
 }) {
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState<Place | null>(null);
@@ -98,17 +98,19 @@ export function PickerPill({ label, value, status, children, className = '', ico
         onClick={() => setOpen(value => !value)}
         onKeyDown={event => { if (kind === 'menu' && (event.key === 'ArrowDown' || event.key === 'ArrowUp') && !open) { event.preventDefault(); setOpen(true); } }}
         aria-label={icon ? label : undefined} title={icon ? label : undefined}
-        className={look === 'primary'
-          ? `flex h-12 w-11 items-center justify-center rounded-r-xl bg-pink-600 text-white shadow-lg transition hover:brightness-110 ${open ? 'brightness-110' : ''}`
+        className={look === 'add'
+          ? `flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-xs font-semibold transition-colors max-md:min-h-11 ${open ? 'border-pink-500 text-pink-600 dark:text-pink-300' : 'border-zinc-300 text-zinc-600 hover:border-pink-400 hover:text-pink-600 dark:border-white/15 dark:text-zinc-300'}`
+          : look === 'primary'
+          ? `flex h-12 w-11 items-center justify-center rounded-r-xl border-l border-white/30 bg-pink-600 text-white transition hover:brightness-110 ${open ? 'brightness-110' : ''}`
           : look === 'split'
-          ? `flex h-12 min-w-0 items-center gap-1.5 rounded-xl border text-left text-xs font-semibold transition-colors ${icon ? 'w-11 justify-center' : 'w-full px-3'} ${open ? 'border-pink-500 bg-pink-500/5 text-pink-600 dark:text-pink-300' : 'border-zinc-300 bg-white text-zinc-700 hover:border-pink-400 dark:border-white/15 dark:bg-white/5 dark:text-zinc-200'}`
+          ? `flex h-12 min-w-0 items-center justify-center gap-2 rounded-xl border text-sm font-semibold transition-colors ${icon ? 'w-11' : 'w-full px-3'} ${open ? 'border-pink-500 bg-pink-500/5 text-pink-600 dark:text-pink-300' : 'border-zinc-300 bg-white text-zinc-700 hover:border-pink-400 dark:border-white/15 dark:bg-white/5 dark:text-zinc-200'}`
           : `flex min-h-9 min-w-0 items-center gap-2 rounded-lg border text-left transition-colors max-md:min-h-11 ${icon ? 'w-9 justify-center max-md:w-11' : 'w-full px-2.5 py-2'} ${open ? 'border-pink-500 bg-pink-500/5' : 'border-zinc-200 bg-zinc-50 hover:border-pink-300 dark:border-white/10 dark:bg-black/25'}`}>
         {icon ?? <>
           {showLabel ? <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{label}</span>
-            : <span className="sr-only">{label}: </span>}
+            : look !== 'add' && <span className="sr-only">{label}: </span>}
           {status}
-          <span className={look === 'split' ? 'min-w-0 truncate' : 'min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-white'}>{value}</span>
-          <ChevronDown size={14} aria-hidden className={`shrink-0 text-zinc-500 transition-transform dark:text-zinc-400 ${open ? 'rotate-180' : ''}`} />
+          <span className={look === 'split' || look === 'add' ? 'min-w-0 truncate' : 'min-w-0 flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-white'}>{value}</span>
+          {look !== 'add' && <ChevronDown size={14} aria-hidden className={`shrink-0 text-zinc-500 transition-transform dark:text-zinc-400 ${open ? 'rotate-180' : ''}`} />}
         </>}
       </button>
       {open && place && createPortal(

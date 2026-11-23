@@ -235,7 +235,7 @@ export function RvcCuratedVoices({ onInstalled, onChoose, disabled, installedIds
                       voice.metadata?.sample_rate_hz ? `${voice.metadata.sample_rate_hz / 1000} ${labels.khz}` : null,
                       voice.metadata?.training_epochs ? labels.epochs.replace('{n}', voice.metadata.training_epochs.toLocaleString(language)) : null,
                     ].filter(Boolean).join(' · ') || undefined}
-                    note={<p className="mt-1 line-clamp-1 text-[11px] text-zinc-500 dark:text-zinc-400" title={voice.license ?? undefined}>{voice.license ? `${labels.license}: ${voice.license}` : labels.licenseUnknown}</p>}
+                    note={voice.license ? <p className="mt-1 line-clamp-1 text-[11px] text-zinc-500 dark:text-zinc-400" title={voice.license}>{labels.license}: {voice.license}</p> : undefined}
                     page={voice.source_url} pageLabel={voice.source_repo} onOpenPage={openExternal}
                     footer={voice.sample_audio_url && (playingSample === voice.id && !sampleError
                       ? <SourceDemo key={voice.id} url={apiUrl(voice.sample_audio_url)} name={voice.name} onError={() => setSampleError(true)} />

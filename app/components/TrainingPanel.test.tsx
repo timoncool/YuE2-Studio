@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest';
 import { TrainingPanel } from './TrainingPanel';
 
 vi.mock('../context/I18nContext', () => ({
-  useI18n: () => ({ t: (key: string) => key, songCount: String }),
+  useI18n: () => ({ t: (key: string) => key, songCount: String, language: 'en' }),
 }));
 
 it.each([false, true])('uses the selected recipe after revisiting songs (automatic start: %s)', async automatic => {
@@ -221,11 +221,13 @@ it.each(['sa3', 'heartmula', 'rvc'])('starts %s training with its native default
     await act(async () => button!.click());
   };
   try {
-    await act(async () => root.render(<TrainingPanel />));
+    await act(async () => root.render(<TrainingPanel voices={target === 'rvc'} />));
     await press('Instrumentals');
     await press('2 · trainingStepTrain');
-    const engine = host.querySelector<HTMLSelectElement>('select:has(option[value="sa3"])')!;
-    await act(async () => {
+    const engine = host.querySelector<HTMLSelectElement>('select:has(option[value="sa3"])');
+    expect(Boolean(engine), 'the Voices section trains only voices').toBe(target !== 'rvc');
+    expect(host.querySelector('option[value="rvc"]')).toBeNull();
+    if (engine) await act(async () => {
       engine.value = target;
       engine.dispatchEvent(new Event('change', { bubbles: true }));
     });
