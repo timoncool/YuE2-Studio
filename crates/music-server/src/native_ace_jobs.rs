@@ -67,7 +67,7 @@ async fn submit_inner(
     if options.source_song_id.is_none() {
         options.source_song_id = request.cover_of.clone();
     }
-    let input = match engine_request(&request, &options, replay.is_some()) {
+    let input = match engine_request(&request, &options) {
         Ok(input) => input,
         Err(error) => return reject(StatusCode::BAD_REQUEST, format!("{error:#}")),
     };
@@ -293,7 +293,6 @@ pub(super) async fn understand(State(state): State<AppState>, Json(input): Json<
 fn engine_request(
     request: &CreateMusicJobRequest,
     options: &AceOptions,
-    replay: bool,
 ) -> anyhow::Result<Value> {
     let mut fields = options.fields.clone();
     for (key, value) in [
@@ -342,11 +341,10 @@ fn engine_request(
     );
     anyhow::ensure!(
         !ace::base_model_only(task)
-            || (replay
-                && input["synth_model"]
-                    .as_str()
-                    .is_some_and(|name| name.contains("-base-"))),
-        "ACE-Step task {task} needs the original base DiT"
+            || input["synth_model"]
+                .as_str()
+                .is_some_and(|name| name.contains("-base-")),
+        "ACE-Step task {task} needs a base DiT: pick Base or Base XL in the DiT list"
     );
     Ok(input)
 }
@@ -506,7 +504,7 @@ fn replay_request(
         "fade_in":fade_in,
         "fade_out":fade_out,
     }))?;
-    engine_request(&create, &options, true)?;
+    engine_request(&create, &options)?;
     Ok((profile, create))
 }
 
@@ -866,6 +864,21 @@ mod tests {
         assert_eq!(result.await.unwrap(), Ok(()));
         assert!(polled_after_cancel.load(Ordering::SeqCst));
         server.abort();
+    }
+
+    #[test]
+    fn a_new_song_runs_the_base_model_tasks_on_a_base_dit_it_picked() {
+        let request = |dit: &str| -> CreateMusicJobRequest {
+            serde_json::from_value(json!({
+                "music_source":{"kind":"native","engine":ace::ENGINE_ID,"model":"balanced"},
+                "style":"folk", "lyrics":"",
+                "ace":{"task_type":"lego", "source_song_id":"s1", "track":"guitar", "synth_model":dit}
+            })).unwrap()
+        };
+        let base = request("acestep-v15-base-Q4_K_M.gguf");
+        assert!(engine_request(&base, base.ace.as_ref().unwrap()).is_ok());
+        let turbo = request("acestep-v15-xl-turbo-Q6_K.gguf");
+        assert!(engine_request(&turbo, turbo.ace.as_ref().unwrap()).is_err(), "a turbo DiT was never trained for lego");
     }
 
     #[test]
