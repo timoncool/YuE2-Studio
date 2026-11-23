@@ -261,6 +261,30 @@ pub(crate) const ENGINES: ChannelTarget = ChannelTarget {
     name: "music-engine-catalog.json", cache: "music-engines", limit: 1024 * 1024,
 };
 
+/// tough's `FilesystemTransport` turns a Windows `file://` URL into a path without
+/// percent-decoding it, so a data folder with a space or a non-ASCII letter is never found.
+#[derive(Debug, Clone, Copy)]
+struct LocalFiles;
+
+#[async_trait::async_trait]
+impl tough::Transport for LocalFiles {
+    async fn fetch(&self, url: reqwest::Url) -> Result<tough::TransportStream, tough::TransportError> {
+        use tough::{TransportError, TransportErrorKind};
+        let Ok(path) = url.to_file_path() else {
+            return Err(TransportError::new(TransportErrorKind::UnsupportedUrlScheme, url));
+        };
+        let bytes = tokio::fs::read(&path).await.map_err(|error| {
+            let kind = if error.kind() == std::io::ErrorKind::NotFound {
+                TransportErrorKind::FileNotFound
+            } else {
+                TransportErrorKind::Other
+            };
+            TransportError::new_with_cause(kind, url.clone(), error)
+        })?;
+        Ok(Box::pin(futures_util::stream::once(std::future::ready(Ok(bytes::Bytes::from(bytes))))))
+    }
+}
+
 async fn read_snapshot(
     target: ChannelTarget,
     root: &[u8],
@@ -268,7 +292,7 @@ async fn read_snapshot(
     refreshing: Option<&tough::Repository>,
 ) -> Result<Vec<u8>> {
     use futures_util::TryStreamExt;
-    use tough::{ExpirationEnforcement, FilesystemTransport, RepositoryLoader, TargetName};
+    use tough::{ExpirationEnforcement, RepositoryLoader, TargetName};
 
     let base = |folder| {
         reqwest::Url::from_directory_path(snapshot.join(folder))
@@ -276,7 +300,7 @@ async fn read_snapshot(
     };
     // Offline use rechecks signatures and target hashes. Only a refresh can accept new metadata.
     let repo = RepositoryLoader::new(&root, base("metadata")?, base("targets")?)
-        .transport(FilesystemTransport)
+        .transport(LocalFiles)
         .expiration_enforcement(ExpirationEnforcement::from(refreshing.is_some()))
         .load()
         .await?;
@@ -437,6 +461,21 @@ mod tests {
             assert_eq!(packaged_channel(&bin, os), channel);
         }
         assert_eq!(packaged_channel(root.path(), "windows"), root.path().join("component-channel"));
+    }
+
+    #[tokio::test]
+    async fn cached_metadata_is_read_from_a_folder_with_a_space_and_cyrillic() {
+        use futures_util::TryStreamExt;
+        use tough::Transport;
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join("YuE2 Studio").join("данные");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("timestamp.json"), b"{}").unwrap();
+        let url = reqwest::Url::from_directory_path(&folder).unwrap().join("timestamp.json").unwrap();
+        let bytes: Vec<u8> = LocalFiles.fetch(url).await.unwrap()
+            .try_fold(Vec::new(), |mut all, chunk| { all.extend_from_slice(&chunk); std::future::ready(Ok(all)) })
+            .await.unwrap();
+        assert_eq!(bytes, b"{}");
     }
 
     #[tokio::test]

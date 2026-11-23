@@ -2092,6 +2092,7 @@ dependencies = [
  "audio-post",
  "axum",
  "base64 0.23.1",
+ "bytes",
  "chrono",
  "dicebear-core",
  "dicebear-styles",
