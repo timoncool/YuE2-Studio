@@ -32,6 +32,7 @@ import {
     FileOutput,
 } from 'lucide-react';
 import { openExport } from './ExportDialog';
+import { songMenuStrings } from '../i18n/songMenu';
 
 /** The one menu of a song. Its actions come from the app through
  *  SongActionsContext, so every place that opens it offers the same items. */
@@ -81,6 +82,10 @@ const MenuDivider: React.FC = () => (
     <div className="h-px bg-white/10 my-1 mx-2" />
 );
 
+const MenuHeading: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <p className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{children}</p>
+);
+
 /// Karaoke timings for one track, made on demand. The menu asks the service
 /// whether karaoke is configured at all; with it off nothing is shown.
 function useKaraoke(song: Song, onSongUpdate?: (song: Song) => void) {
@@ -126,6 +131,7 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
     at,
 }) => {
     const { t, language } = useI18n();
+    const menuText = songMenuStrings[language];
     const rvcVoice = useLastRvcVoice();
     const { user } = useAuth();
     const actions = useSongActions();
@@ -252,106 +258,6 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
         >
-            {/* Creative Actions */}
-            {isOwner && (
-                <MenuItem
-                    icon={<Edit3 size={14} />}
-                    label={t('editAudio')}
-                    onClick={handleEditAudio}
-                />
-            )}
-            {actions.exportVideo && (
-                <MenuItem
-                    icon={<Clapperboard size={14} />}
-                    label={t('videoExport')}
-                    onClick={() => handleAction(() => actions.exportVideo?.(song))}
-                    disabled={!song.audioUrl}
-                />
-            )}
-            <MenuItem
-                icon={<Scissors size={14} />}
-                label={t('stemsTitle')}
-                onClick={() => handleAction(() => openStems(song))}
-                disabled={!song.audioUrl || stemOf(song) !== null}
-                hint={stemOf(song) !== null ? t('stemOfStem') : undefined}
-            />
-            {song.audioUrl && (
-                <>
-                    <MenuItem
-                        icon={<Wand2 size={14} />}
-                        label={t('processMenu')}
-                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:process-song', { detail: song })))}
-                    />
-                    <MenuItem
-                        icon={<Mic2 size={14} />}
-                        label={rvcVoiceStrings[language].title}
-                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:open-rvc', { detail: song.id })))}
-                    />
-                    {rvcVoice && stemOf(song) === null && (
-                        <MenuItem
-                            icon={<Mic2 size={14} />}
-                            label={rvcQuickStrings[language].quick}
-                            onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent(RVC_QUICK_EVENT, {
-                                detail: { songId: song.id, voiceId: rvcVoice },
-                            })))}
-                        />
-                    )}
-                    <MenuItem
-                        icon={<Piano size={14} />}
-                        label={t('midiMenu')}
-                        onClick={() => handleAction(() => openMidi(song))}
-                    />
-                    <MenuItem
-                        icon={<FileMusic size={14} />}
-                        label={`${t('transcribeToScore')}: ${t('transcribeMelody')}`}
-                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:transcribe-song', { detail: { song, melodyOnly: true } })))}
-                    />
-                    <MenuItem
-                        icon={<FileMusic size={14} />}
-                        label={`${t('transcribeToScore')}: ${t('transcribeFull')}`}
-                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:transcribe-song', { detail: { song, melodyOnly: false } })))}
-                    />
-                </>
-            )}
-            {actions.reusePrompt && (
-                <MenuItem
-                    icon={<Repeat size={14} />}
-                    label={t('reusePrompt')}
-                    onClick={() => handleAction(() => actions.reusePrompt?.(song))}
-                />
-            )}
-            {actions.reusePrompt && typeof (song.generationParams as Record<string, unknown> | undefined)?.abc === 'string' && (
-                <MenuItem
-                    icon={<Repeat size={14} />}
-                    label={t('resingNewLyrics' as never)}
-                    onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:resing', { detail: { song } })))}
-                />
-            )}
-            {actions.replay && song.nativeReplayAvailable && (
-                <MenuItem
-                    icon={<Repeat size={14} />}
-                    label={t('replayTitle')}
-                    onClick={() => handleAction(() => actions.replay?.(song))}
-                />
-            )}
-
-            {/* Karaoke: only offered once it is switched on in Settings, and
-                only for a track that has both audio and written lyrics. */}
-            {karaokeReady && song.audioUrl && hasSungLines(song.lyrics) && (
-                <MenuItem
-                    icon={karaokeBusy ? <Loader2 size={14} className="animate-spin" /> : <Mic2 size={14} />}
-                    label={karaokeBusy ? t('karaokeMaking') : song.lrcContent ? t('karaokeReady') : t('karaokeMake')}
-                    onClick={() => void makeKaraoke()}
-                    disabled={karaokeBusy}
-                />
-            )}
-            {karaokeFailed && (
-                <p className="px-3 py-1.5 text-[11px] leading-4 text-rose-600 dark:text-rose-300">{karaokeFailed}</p>
-            )}
-
-            <MenuDivider />
-
-            {/* Library Actions */}
             {actions.queue && (
                 <>
                     <MenuItem
@@ -374,11 +280,10 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 onClick={() => handleAction(() => actions.addToPlaylist?.(song))}
             />
             {actions.addToAlbum && <MenuItem
-                icon={<ListPlus size={16} />}
+                icon={<ListPlus size={14} />}
                 label={t('addToAlbum')}
                 onClick={() => handleAction(() => actions.addToAlbum?.(song))}
             />}
-
             <MenuItem
                 icon={<Download size={14} />}
                 label={t('download')}
@@ -389,6 +294,113 @@ export const SongDropdownMenu: React.FC<SongDropdownMenuProps> = ({
                 label={t('exportMenu')}
                 onClick={() => handleAction(() => openExport(song))}
             />
+
+            <MenuDivider />
+            <MenuHeading>{menuText.sound}</MenuHeading>
+            {isOwner && (
+                <MenuItem
+                    icon={<Edit3 size={14} />}
+                    label={t('editAudio')}
+                    onClick={handleEditAudio}
+                />
+            )}
+            {song.audioUrl && (
+                <MenuItem
+                    icon={<Wand2 size={14} />}
+                    label={t('processMenu')}
+                    onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:process-song', { detail: song })))}
+                />
+            )}
+            <MenuItem
+                icon={<Scissors size={14} />}
+                label={t('stemsTitle')}
+                onClick={() => handleAction(() => openStems(song))}
+                disabled={!song.audioUrl || stemOf(song) !== null}
+                hint={stemOf(song) !== null ? t('stemOfStem') : undefined}
+            />
+            {song.audioUrl && (
+                <>
+                    <MenuItem
+                        icon={<Mic2 size={14} />}
+                        label={rvcVoiceStrings[language].title}
+                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:open-rvc', { detail: song.id })))}
+                    />
+                    {rvcVoice && stemOf(song) === null && (
+                        <MenuItem
+                            icon={<Mic2 size={14} />}
+                            label={rvcQuickStrings[language].quick}
+                            onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent(RVC_QUICK_EVENT, {
+                                detail: { songId: song.id, voiceId: rvcVoice },
+                            })))}
+                        />
+                    )}
+                </>
+            )}
+
+            {song.audioUrl && (
+                <>
+                    <MenuDivider />
+                    <MenuHeading>{menuText.notes}</MenuHeading>
+                    <MenuItem
+                        icon={<Piano size={14} />}
+                        label={t('midiMenu')}
+                        onClick={() => handleAction(() => openMidi(song))}
+                    />
+                    <MenuItem
+                        icon={<FileMusic size={14} />}
+                        label={`${menuText.score}: ${t('transcribeMelody').toLowerCase()}`}
+                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:transcribe-song', { detail: { song, melodyOnly: true } })))}
+                    />
+                    <MenuItem
+                        icon={<FileMusic size={14} />}
+                        label={`${menuText.score}: ${t('transcribeFull').toLowerCase()}`}
+                        onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:transcribe-song', { detail: { song, melodyOnly: false } })))}
+                    />
+                </>
+            )}
+
+            <MenuDivider />
+            <MenuHeading>{menuText.again}</MenuHeading>
+            {actions.reusePrompt && (
+                <MenuItem
+                    icon={<Repeat size={14} />}
+                    label={t('reusePrompt')}
+                    onClick={() => handleAction(() => actions.reusePrompt?.(song))}
+                />
+            )}
+            {actions.reusePrompt && typeof (song.generationParams as Record<string, unknown> | undefined)?.abc === 'string' && (
+                <MenuItem
+                    icon={<Repeat size={14} />}
+                    label={t('resingNewLyrics' as never)}
+                    onClick={() => handleAction(() => window.dispatchEvent(new CustomEvent('yue:resing', { detail: { song } })))}
+                />
+            )}
+            {actions.replay && song.nativeReplayAvailable && (
+                <MenuItem
+                    icon={<Repeat size={14} />}
+                    label={t('replayTitle')}
+                    onClick={() => handleAction(() => actions.replay?.(song))}
+                />
+            )}
+            {karaokeReady && song.audioUrl && hasSungLines(song.lyrics) && (
+                <MenuItem
+                    icon={karaokeBusy ? <Loader2 size={14} className="animate-spin" /> : <Mic2 size={14} />}
+                    label={karaokeBusy ? t('karaokeMaking') : song.lrcContent ? t('karaokeReady') : t('karaokeMake')}
+                    onClick={() => void makeKaraoke()}
+                    disabled={karaokeBusy}
+                />
+            )}
+            {karaokeFailed && (
+                <p className="px-3 py-1.5 text-[11px] leading-4 text-rose-600 dark:text-rose-300">{karaokeFailed}</p>
+            )}
+            {actions.exportVideo && (
+                <MenuItem
+                    icon={<Clapperboard size={14} />}
+                    label={t('videoExport')}
+                    onClick={() => handleAction(() => actions.exportVideo?.(song))}
+                    disabled={!song.audioUrl}
+                />
+            )}
 
             {/* Owner-only Actions */}
             {isOwner && (
