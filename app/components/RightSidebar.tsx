@@ -124,6 +124,19 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({ song, onClose, onOpe
     const [paramsJsonOpen, setParamsJsonOpen] = useState(false);
 
     useEffect(() => {
+        if (!onClose) return;
+        const close = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+            if (document.querySelector('[role="dialog"][aria-modal="true"], [role="menu"]')) return;
+            onClose();
+        };
+        document.addEventListener('keydown', close);
+        return () => document.removeEventListener('keydown', close);
+    }, [onClose]);
+
+    useEffect(() => {
         if (song) {
             setIsOwner(user?.id === song.userId);
         }

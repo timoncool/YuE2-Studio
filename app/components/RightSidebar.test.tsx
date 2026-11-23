@@ -80,3 +80,18 @@ describe('song details lyrics', () => {
     expect(writeText).toHaveBeenCalledWith(lyrics);
   });
 });
+
+it('closes on Escape, but not while a field is being edited', () => {
+  const closed = vi.fn();
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  const song: Song = { id: 'song', title: 'Title', lyrics: '', style: '', coverUrl: '', duration: '1:00', createdAt: new Date(), isPublic: false, tags: [] };
+  act(() => root.render(<RightSidebar song={song} onClose={closed} />));
+  const field = document.createElement('input');
+  host.append(field);
+  act(() => { field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  expect(closed).not.toHaveBeenCalled();
+  act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  expect(closed).toHaveBeenCalledOnce();
+});
