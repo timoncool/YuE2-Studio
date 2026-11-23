@@ -165,6 +165,8 @@ export const pt = {
     stageOpenRouterFinalizing: 'A interpretar a resposta do modelo…',
     stageStartingTrack: 'A iniciar a faixa…',
     stageGeneratingTrack: 'A gerar a faixa…',
+    stagePlanningTrack: 'A escrever o plano da música…',
+    stageRenderingTrack: 'A gerar o som…',
     stageEncodingTrack: 'A codificar áudio…',
     stageGeneratingCover: 'A gerar a capa…',
     queued: 'Em fila...',

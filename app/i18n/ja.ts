@@ -184,6 +184,8 @@ export const ja = {
   stageOpenRouterFinalizing: 'モデル応答を解析中…',
   stageStartingTrack: 'トラック開始中…',
   stageGeneratingTrack: 'トラック生成中…',
+  stagePlanningTrack: '曲の構成を作成中…',
+  stageRenderingTrack: '音を生成中…',
   stageEncodingTrack: '音声をエンコード中…',
   stageGeneratingCover: 'カバー生成中…',
   queued: 'キュー待ち...',

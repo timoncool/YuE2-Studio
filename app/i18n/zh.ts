@@ -184,6 +184,8 @@ export const zh = {
     stageOpenRouterFinalizing: '正在解析模型响应…',
     stageStartingTrack: '启动音轨…',
     stageGeneratingTrack: '生成音轨…',
+    stagePlanningTrack: '正在写歌曲规划…',
+    stageRenderingTrack: '正在生成声音…',
     stageEncodingTrack: '正在编码音频…',
     stageGeneratingCover: '生成封面…',
     queued: '排队中...',

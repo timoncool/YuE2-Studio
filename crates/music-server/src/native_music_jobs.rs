@@ -341,12 +341,7 @@ async fn submit(
         generation_settings: settings,
         song: None,
         songs: vec![],
-        message: if replay.is_some() {
-            "Submitted MiniMax replay with saved audio codes."
-        } else {
-            "Submitted to MiniMax."
-        }
-        .into(),
+        message: String::new(),
         code: None,
         params: None,
         playlist_id: request.playlist_id.clone(),

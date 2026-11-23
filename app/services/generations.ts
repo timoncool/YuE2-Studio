@@ -96,6 +96,9 @@ function withJobStatus(entry: Song, job: YueJob): Song {
   if (job.status === 'running' && job.engine_id === 'audio.cpp') {
     if (job.phase === 'preparing') stage = 'stageStartingTrack';
     if (job.phase === 'encoding') stage = 'stageEncodingTrack';
+  } else if (job.status === 'running') {
+    if (job.phase === 'preparing') stage = 'stagePlanningTrack';
+    if (job.phase === 'synthesizing') stage = 'stageRenderingTrack';
   }
   const detail = job.message?.trim() || undefined;
   return current.stage === stage && current.stageDetail === detail && current.progress === undefined

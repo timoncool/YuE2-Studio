@@ -185,6 +185,8 @@ export const en = {
     stageOpenRouterFinalizing: 'Parsing model response…',
     stageStartingTrack: 'Starting track…',
     stageGeneratingTrack: 'Generating track…',
+    stagePlanningTrack: 'Writing the song plan…',
+    stageRenderingTrack: 'Rendering the sound…',
     stageEncodingTrack: 'Encoding audio…',
     stageGeneratingCover: 'Generating cover…',
     queued: 'Queued...',

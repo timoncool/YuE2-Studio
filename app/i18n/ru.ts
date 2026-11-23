@@ -186,6 +186,8 @@ export const ru = {
     stageOpenRouterFinalizing: 'Разбираю ответ модели…',
     stageStartingTrack: 'Запускаю трек…',
     stageGeneratingTrack: 'Генерирую трек…',
+    stagePlanningTrack: 'Пишу план песни…',
+    stageRenderingTrack: 'Создаю звук…',
     stageEncodingTrack: 'Кодирую аудио…',
     stageGeneratingCover: 'Генерирую обложку…',
     queued: 'В очереди...',

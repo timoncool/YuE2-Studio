@@ -139,7 +139,7 @@ async fn submit_inner(
         }),
         song: None,
         songs: Vec::new(),
-        message: "Submitted to ACE-Step.".into(),
+        message: String::new(),
         code: None,
         params: None,
         playlist_id: request.playlist_id.clone(),
@@ -470,7 +470,7 @@ async fn watch(
     let wants_plan = options.think.unwrap_or(true);
     let mut plan = vec![input.clone()];
     if is_song && !has_codes && (wants_plan || !has_duration(&input)) {
-        running(state, &job.id, "ACE-Step is planning the song.").await;
+        running(state, &job.id, MusicJobPhase::Preparing).await;
         let mut lm = input.clone();
         lm["lm_mode"] = json!(if wants_plan { "generate" } else { "format" });
         let remote = client.submit_lm(&[lm]).await?;
@@ -511,7 +511,7 @@ async fn watch(
             }
         }
     }
-    running(state, &job.id, "ACE-Step is rendering the song.").await;
+    running(state, &job.id, MusicJobPhase::Synthesizing).await;
     let remote = client.submit_synth(&requests, sources).await?;
     if !wait_for_job(client, &remote, &mut rx).await? {
         return Ok(None);
@@ -572,11 +572,11 @@ fn cancel_between_steps(rx: &mut mpsc::Receiver<CancelReply>) -> bool {
     false
 }
 
-async fn running(state: &AppState, id: &str, message: &str) {
+async fn running(state: &AppState, id: &str, phase: MusicJobPhase) {
     if let Some(job) = state.jobs.write().await.get_mut(id) {
         job.status = MusicJobStatus::Running;
-        job.phase = MusicJobPhase::Running;
-        job.message = message.into();
+        job.phase = phase;
+        job.message.clear();
     }
 }
 
