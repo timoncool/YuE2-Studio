@@ -185,7 +185,8 @@ export const ResourceMonitor: React.FC<{ isOpen?: boolean }> = ({ isOpen = true 
         <span className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           {gpu ? gpu.name.replace(/NVIDIA GeForce /i, '') : 'Resources'}
         </span>
-        <button type="button" onClick={() => setFloating(true)} title={t('popOutMonitor')} className="text-zinc-400 hover:text-pink-500">
+        <button type="button" onClick={() => setFloating(true)} title={t('popOutMonitor')} aria-label={t('popOutMonitor')}
+          className="-m-1.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-pink-500 dark:hover:bg-white/5">
           <PictureInPicture2 size={12} />
         </button>
       </div>

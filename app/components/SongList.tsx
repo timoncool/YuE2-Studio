@@ -1029,7 +1029,7 @@ export const SongItem: React.FC<SongItemProps> = ({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); startEditingTitle(); }}
-                                className="shrink-0 rounded-sm p-1 text-zinc-400 opacity-0 transition-opacity hover:text-black focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-white"
+                                className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-zinc-400 opacity-0 transition-opacity hover:text-black focus-visible:opacity-100 group-hover:opacity-100 dark:hover:text-white"
                                 title={t('renameSong')}
                                 aria-label={t('renameSong')}
                             >

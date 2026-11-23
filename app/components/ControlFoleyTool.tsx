@@ -92,7 +92,7 @@ export function ControlFoleyTool({ card, control, busy, onGenerate }: {
         language={language} onInstalled={() => void model.refetch()} secondary />}
       {!status.ready && !(status.missing_bytes > 0 && status.installable) && !status.missing.includes('FFmpeg') &&
         <p role="status">{modelText.unavailable}</p>}
-      <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-block text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{modelText.modelLicense} ↗</a>
+      <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{modelText.modelLicense} ↗</a>
     </div>}
     <div className="mt-3 grid gap-2 text-xs">
       <div className="grid gap-1">

@@ -195,7 +195,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string; card: strin
         {missing > 0 && !running && (
           <p className="mt-2 text-[11px] leading-4 text-zinc-500">
             {t('midiFirstUse').replace('{size}', gigabytes(missing))}{' '}
-            <button type="button" onClick={() => void post('/v1/midi/install', { size: chosen })} disabled={busy || Boolean(download)} className="font-semibold text-pink-600 hover:underline disabled:opacity-50 dark:text-pink-400">
+            <button type="button" onClick={() => void post('/v1/midi/install', { size: chosen })} disabled={busy || Boolean(download)} className="inline-flex min-h-6 items-center font-semibold text-pink-600 hover:underline disabled:opacity-50 dark:text-pink-400">
               {t('midiInstallNow')}
             </button>
           </p>
@@ -207,7 +207,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string; card: strin
         {download && !running && (
           <p className="mt-2 text-[11px] tabular-nums text-zinc-500">
             {t('midiDownloading')} {gigabytes(download.downloaded_bytes)} / {gigabytes(download.total_bytes)}
-            <button type="button" disabled={busy} onClick={() => void post('/v1/midi/cancel', {})} className="ml-2 font-semibold text-pink-600 hover:underline disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={() => void post('/v1/midi/cancel', {})} className="ml-2 inline-flex min-h-6 items-center font-semibold text-pink-600 hover:underline disabled:opacity-50">
               {t('cancelDownload')}
             </button>
           </p>

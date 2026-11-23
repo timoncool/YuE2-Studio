@@ -75,7 +75,7 @@ export function SoundEffectsTool({ card, control, busy, onGenerate }: {
           target={{ catalogue: '/v1/tools/sound-effects/model', installPath: '/v1/music/audio-cpp/models/install', label: status.name }}
           language={language} onInstalled={() => refresh(value => value + 1)} secondary />
           : !status.ready && <p role="status">{model.unavailable}</p>}
-        <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-block text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{model.modelLicense} ↗</a>
+        <a href={status.license_url} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center text-[11px] text-zinc-500 hover:text-pink-600 dark:text-zinc-400">{model.modelLicense} ↗</a>
       </div>}
     <div className="mt-3 grid gap-2 text-xs">
       <label className="grid gap-1">

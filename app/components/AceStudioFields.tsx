@@ -175,7 +175,7 @@ const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; l
       {hint && <p className="mt-0.5 text-[11px] leading-4 text-zinc-500">{hint}</p>}
     </div>
     <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
-      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}>
+      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors after:absolute after:inset-x-0 after:-inset-y-0.5 after:content-[''] ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}>
       <span className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-xs transition-all ${checked ? 'left-[22px]' : 'left-[2px]'}`} />
     </button>
   </div>
@@ -214,7 +214,7 @@ const Stage: React.FC<{ title: string; hint: string; children: React.ReactNode }
 
 const PlanButton: React.FC<{ mode: 'inspire' | 'format'; label: string; disabled: boolean; planning: 'inspire' | 'format' | null; ready: boolean; onClick: () => void }> = ({ mode, label, disabled, planning, ready, onClick }) => (
   <button type="button" onClick={onClick} disabled={disabled || planning !== null || !ready}
-    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 disabled:opacity-40 dark:text-pink-300">
+    className="inline-flex min-h-6 items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 disabled:opacity-40 dark:text-pink-300">
     {planning === mode ? <Loader2 size={12} className="animate-spin" /> : mode === 'inspire' ? <Sparkles size={12} /> : <ListChecks size={12} />}
     {label}
   </button>
@@ -336,7 +336,7 @@ export function AceStudioFields({ value, onChange, kind, task, adapters, card, p
         </div>
       )}
       <p className="text-[11px] leading-4 text-zinc-500">{tt(`aceModelKind_${kind}`)}</p>
-    </div>, <button type="button" onClick={reset} className="rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">{t('resetToDefaults')}</button>)}
+    </div>, <button type="button" onClick={reset} className="min-h-6 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">{t('resetToDefaults')}</button>)}
 
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-suno-card">
       <button type="button" aria-expanded={advanced} onClick={() => setAdvanced(current => !current)}

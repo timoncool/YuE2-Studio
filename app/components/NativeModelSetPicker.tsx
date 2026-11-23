@@ -195,7 +195,7 @@ export function NativeModelSetPicker({ engine, name, profiles, selected, engineI
         ))}
       </div>
       {advanced.length > 0 && !showAll && (
-        <button type="button" className="text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400" onClick={() => setShowAll(true)}>
+        <button type="button" className="min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400" onClick={() => setShowAll(true)}>
           {text.allVariants}
         </button>
       )}

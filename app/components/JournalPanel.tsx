@@ -103,7 +103,7 @@ export const JournalPanel: React.FC<{ open: boolean; onClose: () => void }> = ({
                     type="button"
                     onClick={() => void removeJournalLine(line.id).catch(report)}
                     {...named(t('journalRemove'))}
-                    className="shrink-0 rounded-md p-1 text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-200 hover:text-black focus-visible:opacity-100 group-hover:opacity-100 dark:hover:bg-white/10 dark:hover:text-white"
+                    className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-zinc-400 opacity-0 transition-opacity hover:bg-zinc-200 hover:text-black focus-visible:opacity-100 group-hover:opacity-100 dark:hover:bg-white/10 dark:hover:text-white"
                   >
                     <X size={13} />
                   </button>

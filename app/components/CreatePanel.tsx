@@ -340,7 +340,7 @@ const Switch: React.FC<{ checked: boolean; onChange: (value: boolean) => void; l
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+      className={`relative h-5 w-10 shrink-0 rounded-full transition-colors after:absolute after:inset-x-0 after:-inset-y-0.5 after:content-[''] disabled:cursor-not-allowed ${checked ? 'bg-pink-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}
     >
       <span className={`absolute top-[2px] h-4 w-4 rounded-full bg-white shadow-xs transition-all ${checked ? 'left-[22px]' : 'left-[2px]'}`} />
     </button>
@@ -407,7 +407,7 @@ const Card: React.FC<{ title: string; icon?: React.ReactNode; actions?: React.Re
             type="button"
             onClick={toggle}
             aria-expanded={!folded}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
+            className="flex min-h-6 min-w-0 flex-1 items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-zinc-500 transition-colors hover:text-black dark:text-zinc-400 dark:hover:text-white"
           >
             <ChevronDown size={14} className={folded ? '-rotate-90 transition-transform' : 'transition-transform'} />
             {icon}{title}
@@ -2161,7 +2161,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                 </details>
               )}
               {speedProfile && <CreateSpeedReference profile={speedProfile} id={speedReferenceId} />}
-              {onOpenEngines && !nativeEngine && <button type="button" className="block text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
+              {onOpenEngines && !nativeEngine && <button type="button" className="block min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
                 onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
             </div>
           )}
@@ -2189,11 +2189,11 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
               })}
               {(pair.error || pair.status?.error) && <p role="alert">{pair.error ?? pair.status?.error}</p>}
               {waitingJobId && onCancelJob && (
-                <button type="button" className="mr-2 text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
+                <button type="button" className="mr-2 inline-flex min-h-6 items-center text-pink-600 underline disabled:opacity-50 dark:text-pink-300"
                   disabled={cancellingPairJob || pair.sending} onClick={() => void cancelPairJob(waitingJobId)}>{pairText.cancelSong}</button>
               )}
               {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && pairSource && (
-                <button type="button" className="mr-2 text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={pair.select}>{pairText.retry}</button>
+                <button type="button" className="mr-2 inline-flex min-h-6 items-center text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={pair.select}>{pairText.retry}</button>
               )}
               {(pair.error || pair.status?.stage === 'error' || pair.status?.stage === 'needs_install') && pair.status?.active && (
                 <button type="button" className="text-pink-600 underline disabled:opacity-50 dark:text-pink-300" disabled={pair.sending} onClick={returnToActivePair}>{pairText.back}</button>
@@ -2268,7 +2268,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
                       <AudioCppModelInstall key={audioFamily} model={audioFamily} bytes={native.profile.missing_bytes ?? native.profile.total_bytes}
                         target={{ catalogue: '/v1/music/audio-cpp/models', installPath: '/v1/music/audio-cpp/models/install', label: native.profile.label.split(' · ')[0] }}
                         licenseUrl={mulaCover ? undefined : native.profile.license_url} language={language} onInstalled={refreshNativeChoice} />}
-                    {onOpenEngines && <button type="button" className="text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
+                    {onOpenEngines && <button type="button" className="min-h-6 text-xs font-medium text-zinc-500 hover:text-pink-600 dark:text-zinc-400"
                       onClick={() => onOpenEngines(musicEngine)}>{enginePageStrings[language][0]}</button>}
                   </div>
                 </Card>
@@ -3081,7 +3081,7 @@ export const CreatePanel: React.FC<CreatePanelProps> = ({ onGenerate, onCancelJo
             title={t('quality')}
             fold="quality"
             actions={
-              <button type="button" onClick={() => resetParameters()} className="rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">
+              <button type="button" onClick={() => resetParameters()} className="min-h-6 rounded-md px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200 hover:text-black dark:hover:bg-white/10 dark:hover:text-white">
                 {t('resetToDefaults')}
               </button>
             }
