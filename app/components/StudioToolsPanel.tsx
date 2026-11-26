@@ -29,7 +29,17 @@ import { Select } from './kit/Select';
 import Combobox from './kit/Combobox';
 import { FieldLabel } from './kit/FieldLabel';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
-import { LibrarySongPicker } from './LibrarySongPicker';
+import { SoundSource, type SoundPick } from './kit/SoundSource';
+import { soundSourceStrings } from '../i18n/soundSource';
+
+/** A library track's sound as a file, for a service that takes a file (the cloud recogniser). */
+async function trackFile(songId: string, title: string): Promise<File> {
+  const response = await fetch(`/v1/library/media/${encodeURIComponent(songId)}`);
+  if (!response.ok) throw new Error(`${title}: ${response.status}`);
+  const blob = await response.blob();
+  const extension = ({ 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/mpeg': 'mp3', 'audio/flac': 'flac', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a' } as Record<string, string>)[blob.type] ?? 'wav';
+  return new File([blob], `${title}.${extension}`, { type: blob.type || 'audio/wav' });
+}
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
@@ -100,6 +110,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
   const [songs, setSongs] = useState<NativeLibrarySong[]>([]);
   const [midiEditorOpen, setMidiEditorOpen] = useState(false);
   const [songId, setSongId] = useState('');
+  const [trackPick, setTrackPick] = useState<SoundPick | null>(null);
   const [status, setStatus] = useState<SeparationStatus | null>(null);
   const [stems, setStems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -109,8 +120,6 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
   const [error, setError] = useState<string | null>(null);
   const [asrError, setAsrError] = useState<string | null>(null);
   const [processError, setProcessError] = useState<string | null>(null);
-  const [asrSource, setAsrSource] = useState<'song' | 'file'>('song');
-  const [restoreFromFile, setRestoreFromFile] = useState(false);
   const [tool, setTool] = useState<ToolId>(() => initialTool ?? rememberedTool());
   const [listOnly, setListOnly] = useState(!initialTool);
   useEffect(() => { if (initialTool) { setTool(initialTool); setListOnly(false); } }, [initialTool]);
@@ -123,7 +132,6 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
 
   const [asrModels, setAsrModels] = useState<CatalogModel[]>([]);
   const [asrModel, setAsrModel] = useState('');
-  const [asrFile, setAsrFile] = useState<File | null>(null);
   const [asrLanguage, setAsrLanguage] = useState('');
   const [asrBusy, setAsrBusy] = useState(false);
   const [asrText, setAsrText] = useState('');
@@ -134,7 +142,6 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
   // the karaoke recogniser hears the file on this computer when one is chosen; OpenRouter otherwise
   const asrWay = chosenWay ?? (karaokeRecogniser ? 'karaoke' : 'openrouter');
   const [copied, setCopied] = useState(false);
-  const filePicker = useRef<HTMLInputElement | null>(null);
 
   // an empty list before the library has answered is not "no songs"
   const [songsLoaded, setSongsLoaded] = useState(false);
@@ -273,9 +280,8 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
     }
   };
 
-  const fromSong = asrWay === 'karaoke' && asrSource === 'song';
   const transcribe = async () => {
-    if (fromSong ? !songId : !asrFile) return;
+    if (!songId) return;
     if (asrWay === 'openrouter' && !asrModel) return;
     setAsrBusy(true);
     setAsrError(null);
@@ -283,8 +289,8 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
     try {
       const language = asrLanguage || undefined;
       setAsrText(asrWay === 'karaoke'
-        ? await recogniseLyrics(fromSong ? { songId } : { file: asrFile! }, language)
-        : await transcribeWithNativeOpenRouter(asrModel, asrFile!, language));
+        ? await recogniseLyrics({ songId }, language)
+        : await transcribeWithNativeOpenRouter(asrModel, await trackFile(songId, chosen?.title ?? 'track'), language));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       setAsrError(karaokeReason(t, message) ?? message);
@@ -325,7 +331,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
   const asrReason = asrWay === 'karaoke' && !karaokeRecogniser ? t('karaokeNoRecogniser')
     : asrWay === 'openrouter' && !cloudReady ? page.cloudKey
       : asrWay === 'openrouter' && asrModels.length === 0 ? t('noSpeechModel')
-      : fromSong ? (!songId ? page.chooseTrack : null) : !asrFile ? page.chooseFile : null;
+      : !songId ? page.chooseTrack : null;
 
   const tools: { id: ToolId; group: 'track' | 'new'; icon: React.ReactNode; title: string; hint: string }[] = [
     { id: 'stems', group: 'track', icon: <Scissors size={16} />, title: t('stemsTitle'), hint: page.navStems },
@@ -341,15 +347,16 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
     { id: 'midi-editor', group: 'new', icon: <KeyboardMusic size={16} />, title: t('midiEdTitle'), hint: page.navMidiEditor },
   ];
   const current = tools.find(entry => entry.id === tool) ?? tools[0];
-  const needsTrack = current.group === 'track' && !(current.id === 'recognise' && !fromSong) && !(current.id === 'restore' && restoreFromFile);
+  const needsTrack = current.group === 'track';
 
   const trackBar = (
     <div className="sticky top-0 z-10 -mx-1 mb-4 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-zinc-950">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <FieldLabel hidden>{page.track}</FieldLabel>
         <div className="min-w-0 flex-1 basis-64">
-          <LibrarySongPicker label={page.track} value={songId} placeholder={t('searchYourSongs')} showLabel={false} controlClassName={CONTROL}
-            onChange={id => setSongId(id)} />
+          <SoundSource place="tools-track" label={page.track} hint={page.trackHint}
+            value={trackPick?.songId === songId ? trackPick : songId ? { songId, title: chosen?.title ?? '', origin: 'library' } : null}
+            onChange={pick => { setTrackPick(pick); setSongId(pick?.songId ?? ''); if (pick && pick.origin !== 'library') void loadSongs(); }}
+            titleFor={() => `${soundSourceStrings[language].recordingTitle} · ${new Date().toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`} />
         </div>
         {facts && <span className="text-xs text-zinc-600 dark:text-zinc-300">{facts}</span>}
       </div>
@@ -455,7 +462,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
       );
       case 'midi': return <MidiTool songId={songId} songTitle={chosen?.title ?? ''} />;
       case 'restore': return <RestoreTool songId={songId} songTitle={chosen?.title ?? ''} restoredId={restoredOf(songs, songId)}
-        chosenIsRestored={derivedBy(chosen, 'restore')} onDone={() => void loadSongs()} onSourceChange={from => setRestoreFromFile(from === 'file')} />;
+        chosenIsRestored={derivedBy(chosen, 'restore')} onDone={() => void loadSongs()} />;
       case 'recognise': return (
           <ToolCard icon={<FileAudio size={17} />} title={page.recognise}
           description={page.recogniseIntro}
@@ -473,7 +480,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
               <textarea readOnly value={asrText} rows={8} className={`${CONTROL} resize-y font-mono text-[13px] leading-5`} />
               <div className="flex flex-wrap gap-2">
                 <SecondaryButton onClick={() => void copyText()}>{copied ? <Check size={13} /> : <Copy size={13} />} {copied ? t('copied') : t('copy')}</SecondaryButton>
-                <SecondaryButton onClick={() => void saveFile(`${(fromSong ? chosen?.title : asrFile?.name?.replace(/\.[^.]+$/, '')) || 'lyrics'}.txt`, { blob: new Blob([asrText], { type: 'text/plain;charset=utf-8' }) })}>
+                <SecondaryButton onClick={() => void saveFile(`${chosen?.title || 'lyrics'}.txt`, { blob: new Blob([asrText], { type: 'text/plain;charset=utf-8' }) })}>
                   <Download size={13} /> {page.saveText}</SecondaryButton>
               </div>
             </div>
@@ -490,22 +497,6 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
               <FieldLabel hidden>{page.model}</FieldLabel>
               <Select label={page.model} value={asrModel} onChange={setAsrModel} inputClassName={CONTROL}
                 options={asrModels.map(model => ({ value: model.id, label: model.name }))} />
-            </div>
-          )}
-          <div className="grid">
-          <FieldLabel>{page.source}</FieldLabel>
-          {asrWay === 'karaoke' ? (
-            <CatalogSegments<'song' | 'file'> fill label={page.source} value={asrSource} onChange={setAsrSource}
-              options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
-          ) : <p className="text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{page.cloudFileOnly}</p>}
-        </div>
-          {!fromSong && (
-            <div>
-              <SecondaryButton aria-label={`${page.fromFile}: ${asrFile?.name ?? t('chooseAudioFile')}`} onClick={() => filePicker.current?.click()}>
-                <FileAudio size={13} aria-hidden />{asrFile?.name ?? t('chooseAudioFile')}
-              </SecondaryButton>
-              <input ref={filePicker} type="file" accept="audio/*" className="hidden"
-                onChange={event => { setAsrFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
             </div>
           )}
           <div className="grid text-xs">

@@ -344,7 +344,7 @@ export function SoundSource({ place, label, hint, checklist, sources = ['library
         </div>
       )}
 
-      {value && phase === 'idle' && (
+      {value && value.origin !== 'library' && phase === 'idle' && (
         <div className="mt-2 flex min-w-0 items-center gap-2 rounded-lg border border-zinc-200 px-2 py-1.5 dark:border-white/10">
           <button type="button" onClick={listen} aria-label={playing ? text.stopListening : text.listen(value.title)}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/10">

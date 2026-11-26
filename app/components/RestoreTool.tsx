@@ -1,16 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, FileAudio, Loader2, Play, Sparkles, Square } from 'lucide-react';
+import { Download, Loader2, Play, Sparkles, Square } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { apiUrl } from '../services/apiBase';
 import { saveFile } from '../services/saveFile';
 import { SELF_READ } from '../services/studioQueries';
-import { audioFormatFor, base64For } from '../services/nativeOpenRouter';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
-import { CatalogSegments } from './kit/Catalog';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
 import { ToolModelPicker } from './ToolModelPicker';
 import { toolsPageStrings } from '../i18n/toolsPage';
@@ -51,19 +49,14 @@ export const RestoreTool: React.FC<{
   chosenIsRestored: boolean;
   /** A run ended: the library has a new track. */
   onDone: () => void;
-  /** The page shows the track picker only while the chosen track is the source. */
-  onSourceChange?: (from: 'song' | 'file') => void;
-}> = ({ songId, songTitle, restoredId, chosenIsRestored, onDone, onSourceChange }) => {
+}> = ({ songId, songTitle, restoredId, chosenIsRestored, onDone }) => {
   const { t, language } = useI18n();
   const page = toolsPageStrings[language];
   const size = (bytes: number) => formatSize(bytes, language);
   const [status, setStatus] = useState<RestoreStatus | null>(null);
-  const [from, setFrom] = useState<'song' | 'file'>('song');
-  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmReplace, setConfirmReplace] = useState(false);
-  const picker = useRef<HTMLInputElement | null>(null);
   const finished = useRef(onDone);
   finished.current = onDone;
 
@@ -102,26 +95,13 @@ export const RestoreTool: React.FC<{
     }
   };
 
-  const start = async () => {
-    if (from === 'song') return post('/v1/restore/start', { song_id: songId });
-    if (!file) return;
-    setBusy(true);
-    let encoded: string;
-    try {
-      encoded = await base64For(file);
-    } catch (problem) {
-      setBusy(false);
-      setError(problem instanceof Error ? problem.message : String(problem));
-      return;
-    }
-    await post('/v1/restore/start', { audio_base64: encoded, audio_format: audioFormatFor(file), audio_name: file.name });
-  };
+  const start = () => post('/v1/restore/start', { song_id: songId });
 
   const run = status?.run ?? null;
   const running = Boolean(run && !run.done);
   const download = status?.download && !status.download.done ? status.download : null;
-  const replaces = from === 'song' && Boolean(restoredId);
-  const reason = from === 'song' ? (!songId ? page.chooseTrack : chosenIsRestored ? t('restoreOfRestored') : null) : !file ? page.chooseFile : null;
+  const replaces = Boolean(restoredId);
+  const reason = !songId ? page.chooseTrack : chosenIsRestored ? t('restoreOfRestored') : null;
   const canStart = Boolean(status?.ready) && !running && !busy && !reason;
   const resultUrl = run?.library_song ? apiUrl(`/v1/library/media/${encodeURIComponent(run.library_song)}`) : null;
   const failure = run?.error || error || status?.error || status?.download?.error;
@@ -183,17 +163,6 @@ export const RestoreTool: React.FC<{
       footer={<>{page.model}: Apollo (JusperLee) · {page.license} CC BY-SA 4.0</>}>
       <ToolModelPicker tool="restore" value="apollo" disabled={running}
         models={[{ id: 'apollo', name: 'Apollo', hint: page.navRestore, bytes: status?.model.bytes, installed: status?.model.installed }]} />
-      <CatalogSegments<'song' | 'file'> fill label={t('restoreFrom')} value={from} onChange={next => { setFrom(next); onSourceChange?.(next); }}
-        options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
-      {from === 'file' && (
-        <div>
-          <SecondaryButton aria-label={`${page.fromFile}: ${file?.name ?? t('chooseAudioFile')}`} onClick={() => picker.current?.click()}>
-            <FileAudio size={13} aria-hidden />{file?.name ?? t('chooseAudioFile')}
-          </SecondaryButton>
-          <input ref={picker} type="file" accept="audio/*" className="hidden"
-            onChange={event => { setFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
-        </div>
-      )}
     </ToolCard>
   );
 };
