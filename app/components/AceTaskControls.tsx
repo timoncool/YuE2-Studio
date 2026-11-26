@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { LibrarySongPicker } from './LibrarySongPicker';
-import { Ear, ListChecks, Loader2, Pause, Play, Upload } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { SoundSource } from './kit/SoundSource';
+import { soundSourceStrings } from '../i18n/soundSource';
+import { Ear, ListChecks, Loader2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { apiUrl } from '../services/apiBase';
-import { useLibrarySongs } from '../services/studioQueries';
 import { CHOICE, CONTROL, Field, LABEL, SliderRow, ditKind } from './AceStudioFields';
 import { splitDit } from './AceDitSwitcher';
 import { Select } from './kit/Select';
@@ -91,9 +91,7 @@ const local = {
   pt: { invalid: 'Selecione uma origem e use valores válidos para a tarefa.', installBase: 'Esta tarefa precisa de um DiT base. Baixe um na lista de DiT acima (Base ou Base XL) e escolha-o aqui.' },
 };
 
-const ICON = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 transition-colors hover:border-pink-400 hover:text-pink-600 dark:border-white/10 dark:text-zinc-300';
 const ACTION = 'inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-600 hover:border-pink-400 hover:text-pink-600 disabled:opacity-50 dark:border-white/10 dark:text-zinc-300';
-const AUDIO_ACCEPT = 'audio/*,.flac,.wav,.mp3,.ogg,.m4a';
 
 export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit, listening, onListen, card }: {
   value: AceTaskDraft;
@@ -109,18 +107,11 @@ export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit,
   const { t, language } = useI18n();
   const tt = t as unknown as (key: string) => string;
   const own = local[language];
-  const { data, refetch } = useLibrarySongs();
-  const songs = (data ?? []).filter(song => song.audioUrl && !song.isGenerating);
-  const [playing, setPlaying] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<'source' | 'reference' | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [baseDits, setBaseDits] = useState<string[] | null>(null);
-  const player = useRef<HTMLAudioElement | null>(null);
   const task = value.task;
   const kind = ditKind(dit);
   const needsBase = baseOnly(task) && kind !== 'base';
 
-  useEffect(() => () => player.current?.pause(), []);
   useEffect(() => {
     if (!needsBase) return;
     void fetch(apiUrl('/v1/ace/dits'))
@@ -129,59 +120,8 @@ export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit,
       .catch(() => setBaseDits([]));
   }, [needsBase]);
 
+  const recordingTitle = () => `${soundSourceStrings[language].recordingTitle} · ${new Date().toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
   const chooseSource = (id: string) => onChange({ ...value, source: id, task: id ? (task === 'text2music' ? 'cover' : task) : 'text2music' });
-
-  const togglePreview = (songId: string) => {
-    if (playing === songId) {
-      player.current?.pause();
-      setPlaying(null);
-      return;
-    }
-    player.current?.pause();
-    const audio = new Audio(apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`));
-    audio.onended = () => setPlaying(null);
-    player.current = audio;
-    void audio.play().then(() => setPlaying(songId)).catch(() => setPlaying(null));
-  };
-
-  const upload = async (target: 'source' | 'reference', file: File) => {
-    setUploading(target);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append('audio', file);
-      const response = await fetch(apiUrl('/v1/library/import'), { method: 'POST', body: form });
-      const body = await response.json().catch(() => null) as { id?: string; error?: string } | null;
-      if (!response.ok || !body?.id) throw new Error(body?.error || String(response.status));
-      await refetch();
-      window.dispatchEvent(new CustomEvent('studio:library-changed'));
-      if (target === 'source') chooseSource(body.id);
-      else onChange({ ...value, reference: body.id });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const songOptions = (chosen: string, choose: (id: string) => void, empty: string, target: 'source' | 'reference') => (
-    <div className="flex items-center gap-1.5">
-      <div className="min-w-0 flex-1">
-        <LibrarySongPicker label={target === 'source' ? tt('aceSource') : tt('aceReference')} value={chosen} placeholder={empty} none={empty}
-          showLabel={false} controlClassName={CONTROL} onChange={id => choose(id)} />
-      </div>
-      {chosen && (
-        <button type="button" onClick={() => togglePreview(chosen)} className={ICON} title={tt('acePreview')} aria-label={tt('acePreview')}>
-          {playing === chosen ? <Pause size={14} /> : <Play size={14} />}
-        </button>
-      )}
-      <label className={`${ICON} cursor-pointer`} title={tt('aceUpload')}>
-        {uploading === target ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-        <input type="file" accept={AUDIO_ACCEPT} className="hidden" aria-label={tt('aceUpload')}
-          onChange={event => { const file = event.target.files?.[0]; if (file) void upload(target, file); event.target.value = ''; }} />
-      </label>
-    </div>
-  );
 
   const tracks = value.tracks ?? [];
   const setTracks = (track: string) => {
@@ -192,7 +132,8 @@ export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit,
   const invalid = profileReady && (task === 'text2music' || value.source) && !aceTaskOptions(value);
 
   return <>{card(tt('aceSourceSection'), <div className="space-y-3">
-    <Field label={tt('aceSource')}>{songOptions(value.source, chooseSource, tt('aceChooseTrack'), 'source')}</Field>
+    <SoundSource place="ace-source" label={tt('aceSource')} none={tt('aceChooseTrack')} value={value.source ? { songId: value.source, title: '', origin: 'library' } : null}
+      onChange={pick => chooseSource(pick?.songId ?? '')} titleFor={recordingTitle} />
     {!value.source ? (
       <p className="text-[11px] leading-4 text-zinc-500">{tt('aceSourceEmpty')}</p>
     ) : (
@@ -253,10 +194,11 @@ export function AceTaskControls({ value, onChange, profileReady, dit, onPickDit,
       </>
     )}
     <div className="border-t border-zinc-100 pt-3 dark:border-white/5">
-      <Field label={tt('aceReference')} hint={tt('aceReferenceHint')}>{songOptions(value.reference, id => onChange({ ...value, reference: id }), tt('aceNoReference'), 'reference')}</Field>
+      <SoundSource place="ace-reference" label={tt('aceReference')} hint={tt('aceReferenceHint')} none={tt('aceNoReference')}
+        value={value.reference ? { songId: value.reference, title: '', origin: 'library' } : null}
+        onChange={pick => onChange({ ...value, reference: pick?.songId ?? '' })} titleFor={recordingTitle} />
     </div>
     {baseOnly(task) && value.source && tracks.length === 0 && <p role="alert" className="text-[11px] text-amber-700 dark:text-amber-300">{tt('aceTrackRequired')}</p>}
     {invalid && !(baseOnly(task) && tracks.length === 0) && <p role="alert" className="text-[11px] text-rose-600 dark:text-rose-300">{own.invalid}</p>}
-    {error && <p role="alert" className="text-[11px] text-rose-600 dark:text-rose-300">{error}</p>}
   </div>)}</>;
 }

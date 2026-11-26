@@ -381,7 +381,7 @@ const enableRecogniser = () =>
     karaokeStatusChanged();
   });
 
-function songState(item: DatasetItem, job: PrepareStatus | null, datasetId: string, t: (key: string) => string): SongState {
+function songState(item: DatasetItem, job: PrepareStatus | null, datasetId: string, t: (key: string) => string, voice = false): SongState {
   const mine = job && job.dataset === datasetId ? job : null;
   const failure = mine?.failures.find(entry => entry.item === item.id);
   const at = mine && !mine.finished ? mine.stages.find(stage => stage.current === item.id) : undefined;
@@ -390,6 +390,7 @@ function songState(item: DatasetItem, job: PrepareStatus | null, datasetId: stri
     return { kind: 'queued', text: t('trainingQueued') };
   }
   if (failure) return { kind: 'failed', text: karaokeReason(t, failure.error) ?? failure.error };
+  if (voice) return { kind: 'ready', text: t('trainingSongReady') };
   const lacks = [
     item.lyrics_state === 'wanted' ? t('trainingLacksLyrics') : '',
     item.lyrics_state === 'found' ? t('trainingLacksSections') : '',
@@ -407,7 +408,7 @@ const StateIcon: React.FC<{ state: SongState }> = ({ state }) => {
 };
 
 /** A place to drop a folder of songs or single files, or click to choose them. */
-const DropZone: React.FC<{ onPicked: (files: PickedFile[]) => void; disabled?: boolean; large?: boolean; title: string; hint?: string }> = ({ onPicked, disabled, large, title, hint }) => {
+const DropZone: React.FC<{ onPicked: (files: PickedFile[]) => void; disabled?: boolean; large?: boolean; title: string; hint?: string; children?: React.ReactNode }> = ({ onPicked, disabled, large, title, hint, children }) => {
   const { t } = useStrings();
   const [over, setOver] = useState(false);
   const folderInput = useRef<HTMLInputElement | null>(null);
@@ -438,6 +439,7 @@ const DropZone: React.FC<{ onPicked: (files: PickedFile[]) => void; disabled?: b
       <div className={`${large ? 'mt-4' : 'mt-2'} flex flex-wrap justify-center gap-2`}>
         <button type="button" onClick={() => folderInput.current?.click()} className={OUTLINE}><FolderOpen size={13} />{t('trainingDropFolder')}</button>
         <button type="button" onClick={() => fileInput.current?.click()} className={OUTLINE}><Music size={13} />{t('trainingDropFiles')}</button>
+        {children}
       </div>
       <input ref={folderInput} type="file" multiple className="hidden" onChange={event => { take(pickedFromInput(event.target.files)); event.target.value = ''; }} />
       <input ref={fileInput} type="file" multiple accept={`${AUDIO_ACCEPT},.txt,.lrc,.cue`} className="hidden" onChange={event => { take(pickedFromInput(event.target.files)); event.target.value = ''; }} />
@@ -600,7 +602,8 @@ const SongsStep: React.FC<{
   const mine = job && job.dataset === dataset.id ? job : null;
   const jobBusy = Boolean(job && !job.finished) || Boolean(state.active);
   const listenReady = Boolean(state.listen?.ready);
-  const states = dataset.items.map(item => songState(item, job, dataset.id, tt));
+  const voices = React.useContext(VoicesTraining);
+  const states = dataset.items.map(item => songState(item, job, dataset.id, tt, voices));
   const ready = states.filter(entry => entry.kind === 'ready').length;
   const total = dataset.items.reduce((sum, item) => sum + item.seconds, 0);
   const exclude = dataset.items.map(item => item.source.replace(/^song:/, ''));
@@ -623,11 +626,10 @@ const SongsStep: React.FC<{
   if (dataset.items.length === 0 && !adding) {
     return (
       <div className="space-y-3">
-        <TrainingDropZone onPicked={onAdd} />
-        <div className="flex flex-wrap justify-center gap-2">
-          <button type="button" onClick={() => setPicking(value => !value)} className={OUTLINE}><Library size={13} />{t('trainingAddLibrary')}</button>
-          <button type="button" onClick={() => setRecordingMic(value => !value)} className={OUTLINE}><Mic size={13} />{t('trainingRecordMic')}</button>
-        </div>
+        <TrainingDropZone onPicked={onAdd}>
+          <button type="button" onClick={() => setPicking(value => !value)} aria-expanded={picking} className={OUTLINE}><Library size={13} />{t('trainingAddLibrary')}</button>
+          <button type="button" onClick={() => setRecordingMic(value => !value)} aria-expanded={recordingMic} className={OUTLINE}><Mic size={13} />{t('trainingRecordMic')}</button>
+        </TrainingDropZone>
         {recordingMic && (
           <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
             <SoundSource place="training-mic" label={t('trainingRecordMic')} sources={['mic']} need={{ min: 3, good: 30, max: 600 }} value={null}
@@ -642,7 +644,7 @@ const SongsStep: React.FC<{
 
   return (
     <div className="space-y-3">
-      {!listenReady && <ListenCard state={state} onError={onError} onChanged={onRefresh} />}
+      {!listenReady && !voices && <ListenCard state={state} onError={onError} onChanged={onRefresh} />}
       {mine?.notices.filter(notice => notice !== 'listen_missing').map(notice => (
         <div key={notice} className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
           <p className="min-w-0 flex-1 text-xs text-amber-700 dark:text-amber-300">{tt(`trainingNotice_${notice}`)}</p>
@@ -684,17 +686,19 @@ const SongsStep: React.FC<{
             <p className="text-[11px] text-zinc-500">{t('trainingSongsTotal').replace('{songs}', songs(dataset.items.length)).replace('{time}', clock(total))}</p>
           </div>
           {working && <button type="button" onClick={() => void cancelPrepare().then(onRefresh)} className={OUTLINE}><X size={13} />{t('trainingStop')}</button>}
-          {!working && !adding && ready < dataset.items.length && (
+          {!working && !adding && !voices && ready < dataset.items.length && (
             <button type="button" onClick={() => onPrepare({ lyrics: 'missing', style: 'missing' })} disabled={jobBusy} className={OUTLINE}><Wand2 size={13} />{t('trainingFillMissing')}</button>
           )}
           <MoreMenu
             items={[
               { label: t('trainingAddLibrary'), icon: <Library size={14} />, onClick: () => setPicking(true), disabled: Boolean(adding) },
               { label: t('trainingRecordMic'), icon: <Mic size={14} />, onClick: () => setRecordingMic(true), disabled: Boolean(adding) },
-              { label: t('trainingFillWithoutAsr'), icon: <Wand2 size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'missing', skip_asr: true }), disabled: jobBusy },
-              { label: t('trainingAutofillAll'), icon: <Mic2 size={14} />, onClick: () => onPrepare({ lyrics: 'all', style: 'missing' }), disabled: jobBusy },
-              ...(listenReady ? [{ label: t('trainingListenAll'), icon: <Headphones size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'all' }), disabled: jobBusy }] : []),
-              ...(state.item_style === 'caption' && !listenReady ? [{ label: t('trainingDescribeAll'), icon: <Wand2 size={14} />, onClick: () => void describe(dataset.items.map(item => item.id)), disabled: describing.length > 0 }] : []),
+              ...(voices ? [] : [
+                { label: t('trainingFillWithoutAsr'), icon: <Wand2 size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'missing', skip_asr: true }), disabled: jobBusy },
+                { label: t('trainingAutofillAll'), icon: <Mic2 size={14} />, onClick: () => onPrepare({ lyrics: 'all', style: 'missing' }), disabled: jobBusy },
+              ]),
+              ...(listenReady && !voices ? [{ label: t('trainingListenAll'), icon: <Headphones size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'all' }), disabled: jobBusy }] : []),
+              ...(state.item_style === 'caption' && !listenReady && !voices ? [{ label: t('trainingDescribeAll'), icon: <Wand2 size={14} />, onClick: () => void describe(dataset.items.map(item => item.id)), disabled: describing.length > 0 }] : []),
             ]}
           />
         </div>
@@ -949,10 +953,9 @@ const DatasetList: React.FC<{ state: TrainingState; busy: boolean; onOpen: (id: 
   const job = state.prepare;
   return (
     <div className="space-y-4">
-      <TrainingDropZone onPicked={onNew} disabled={busy} />
-      <div className="flex justify-center">
-        <button type="button" onClick={() => setRecordingMic(value => !value)} disabled={busy} className={OUTLINE}><Mic size={13} />{t('trainingRecordMic')}</button>
-      </div>
+      <TrainingDropZone onPicked={onNew} disabled={busy}>
+        <button type="button" onClick={() => setRecordingMic(value => !value)} aria-expanded={recordingMic} className={OUTLINE}><Mic size={13} />{t('trainingRecordMic')}</button>
+      </TrainingDropZone>
       {recordingMic && (
         <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
           <SoundSource place="training-mic" label={t('trainingRecordMic')} sources={['mic']} need={{ min: 3, good: 30, max: 600 }} value={null}
@@ -1240,13 +1243,13 @@ type Step = 'songs' | 'train' | 'result';
 const VoicesTraining = React.createContext(false);
 
 /** The first drop of a dataset: songs for a LoRA, recordings of one voice in the Voices section. */
-function TrainingDropZone({ onPicked, disabled }: { onPicked: (files: PickedFile[]) => void; disabled?: boolean }) {
+function TrainingDropZone({ onPicked, disabled, children }: { onPicked: (files: PickedFile[]) => void; disabled?: boolean; children?: React.ReactNode }) {
   const { t } = useStrings();
   const { language } = useI18n();
   const voices = React.useContext(VoicesTraining);
   return <DropZone large onPicked={onPicked} disabled={disabled}
     title={voices ? voicesPageStrings[language].trainingDropTitle : t('trainingDropTitle')}
-    hint={voices ? voicesPageStrings[language].trainingDropHint : t('trainingDropHint')} />;
+    hint={voices ? voicesPageStrings[language].trainingDropHint : t('trainingDropHint')}>{children}</DropZone>;
 }
 
 /** `voices` is the RVC section's copy: the same datasets, trained into a voice. */
@@ -1303,7 +1306,8 @@ export const TrainingPanel: React.FC<{ voices?: boolean }> = ({ voices = false }
       const next = await addPicked(id, files, (done, total) => setAdding({ done, total }));
       if (next) replace(next);
       setAdding(null);
-      await prepareDataset(id, { lyrics: 'missing', style: 'missing' });
+      // a voice is learned from the recordings alone: words and style are a song model's, not RVC's
+      if (!voices) await prepareDataset(id, { lyrics: 'missing', style: 'missing' });
       await refresh();
     } catch (problem) {
       setAdding(null);
@@ -1442,7 +1446,7 @@ export const TrainingPanel: React.FC<{ voices?: boolean }> = ({ voices = false }
           job={job}
           adding={adding}
           onAdd={files => void addAndPrepare(dataset.id, files)}
-          onAddLibrary={ids => void addLibrarySongs(dataset.id, ids).then(next => { replace(next); return prepareDataset(dataset.id, { lyrics: 'missing', style: 'missing' }); }).then(refresh).catch(problem => setError(errorText(problem)))}
+          onAddLibrary={ids => void addLibrarySongs(dataset.id, ids).then(next => { replace(next); return voices ? undefined : prepareDataset(dataset.id, { lyrics: 'missing', style: 'missing' }); }).then(refresh).catch(problem => setError(errorText(problem)))}
           onPrepare={request => void prepare(request)}
           onNext={() => setStep('train')}
           onTrainAfter={on => void trainAfter(on)}

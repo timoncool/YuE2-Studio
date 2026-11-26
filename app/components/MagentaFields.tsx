@@ -1,5 +1,6 @@
 import React from 'react';
 import { useI18n } from '../context/I18nContext';
+import { SoundSource } from './kit/SoundSource';
 import { LibrarySongPicker } from './LibrarySongPicker';
 
 export const magentaModel = 'magenta_realtime_2';
@@ -37,8 +38,9 @@ export function MagentaFields({ value, onChange, tracks, controlClassName }: {
   const missing = Boolean(reference) && !tracks.some(track => track.id === reference);
 
   return <div className="grid gap-1 text-xs text-zinc-700 dark:text-zinc-300">
-    <LibrarySongPicker label={label} value={reference} placeholder={textMode} none={textMode} missing={unavailable} showLabel={false}
-      controlClassName={controlClassName ?? ''} onChange={id => onChange(id ? { reference_song_id: id } : {})} />
+    <SoundSource place="magenta" label={label} showLabel={false} none={textMode} missing={unavailable}
+      value={reference ? { songId: reference, title: '', origin: 'library' } : null}
+      onChange={pick => onChange(pick ? { reference_song_id: pick.songId } : {})} />
     {reference && !missing && <span className="text-zinc-500 dark:text-zinc-400">{audioMode}</span>}
   </div>;
 }

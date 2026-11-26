@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useI18n } from '../context/I18nContext';
+import { SoundSource } from './kit/SoundSource';
 import { LibrarySongPicker } from './LibrarySongPicker';
 
 export const mulaCoverTitle = (language: string) => (strings[language as keyof typeof strings] ?? strings.en).original;
@@ -46,10 +47,11 @@ export function MuLaCoverFields({ value, onChange, onInstall, missingSoxr, contr
 
   return (
     <div className="space-y-2">
-      <LibrarySongPicker label={text.original} value={value} placeholder={text.choose} showLabel={false} controlClassName={controlClassName}
-        onChange={(id, song) => {
-          const score = song?.generationParams?.abc;
-          onChange(id, typeof score === 'string' ? score : '');
+      <SoundSource place="mulacover" label={text.original} showLabel={false}
+        value={value ? { songId: value, title: '', origin: 'library' } : null}
+        onChange={pick => {
+          const score = pick?.song?.generationParams?.abc;
+          onChange(pick?.songId ?? '', typeof score === 'string' ? score : '');
         }} />
       <a className="text-xs underline" target="_blank" rel="noreferrer"
         href="https://github.com/HeartMuLa/MuLaCover/blob/e27fa7fa0da7c9817879cc6210cc5693f9327946/MODEL_LICENSE">{text.license}</a>

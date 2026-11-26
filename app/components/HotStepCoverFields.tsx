@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Song } from '../types';
 import { useI18n } from '../context/I18nContext';
 import { transcribe } from '../services/transcription';
+import { SoundSource } from './kit/SoundSource';
 import { LibrarySongPicker, useFinishedSongs } from './LibrarySongPicker';
 import { FieldLabel } from './kit/FieldLabel';
 
@@ -68,8 +69,8 @@ export function HotStepCoverFields({ draft, onChange, ready, refresh, controlCla
   };
 
   return <div className="space-y-2">
-    <LibrarySongPicker label={text.original} value={draft.original} placeholder={text.choose} showLabel={false} controlClassName={controlClassName}
-      onChange={id => choose(id)} />
+    <SoundSource place="hotstep-cover" label={text.original} showLabel={false}
+      value={draft.original ? { songId: draft.original, title: '', origin: 'library' } : null} onChange={pick => choose(pick?.songId ?? '')} />
     <button type="button" disabled={!draft.original || listening} className="text-xs underline disabled:opacity-50"
       onClick={() => void hear()}>{listening ? text.listening : text.transcribe}</button>
     <label className="grid">

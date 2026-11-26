@@ -5,6 +5,7 @@ import { SecondaryButton } from './kit/Buttons';
 import { FieldLabel } from './kit/FieldLabel';
 import { formCardStrings } from '../i18n/formCards';
 import { useI18n } from '../context/I18nContext';
+import { SoundSource } from './kit/SoundSource';
 import { LibrarySongPicker } from './LibrarySongPicker';
 
 export type SoulXInputs = {
@@ -41,8 +42,9 @@ export function SoulXSingerFields({ conversion, value, onChange, controlClassNam
   const [invalid, setInvalid] = useState<Partial<Record<'reference_metadata' | 'target_metadata', boolean>>>({});
 
   function recording(label: string, field: 'reference_song_id' | 'source_song_id') {
-    return <LibrarySongPicker label={label} value={value[field] ?? ''} placeholder={choose} controlClassName={controlClassName}
-      onChange={id => onChange(current => ({ ...current, [field]: id }))} />;
+    return <SoundSource place={`soulx-${field}`} label={label} defaultSource={field === 'reference_song_id' ? 'mic' : 'library'}
+      value={value[field] ? { songId: value[field] ?? '', title: '', origin: 'library' } : null}
+      onChange={pick => onChange(current => ({ ...current, [field]: pick?.songId ?? '' }))} />;
   }
 
   const files = useRef<Partial<Record<'reference_metadata' | 'target_metadata', HTMLInputElement | null>>>({});

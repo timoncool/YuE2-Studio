@@ -5,6 +5,7 @@ import { soundSourceStrings } from '../../i18n/soundSource';
 import { apiUrl } from '../../services/apiBase';
 import { PERSON_ONLY, byPerson } from '../../services/person';
 import { LibrarySongPicker, useFinishedSongs } from '../LibrarySongPicker';
+import type { Song } from '../../types';
 import { SecondaryButton } from './Buttons';
 import { CatalogSegments } from './Catalog';
 import { FieldHint, FieldLabel } from './FieldLabel';
@@ -18,6 +19,8 @@ export interface SoundPick {
   title: string;
   origin: SoundSourceKind;
   seconds?: number;
+  /** The library song itself, when it was chosen from the list. */
+  song?: Song;
 }
 
 /** Seconds the place needs: the least it takes at all, enough for a good result, and the most it uses (a recording stops there). */
@@ -50,7 +53,7 @@ type Problem = { code: string; detail: string };
  * every place, Speech Studio's recorder underneath; whatever the person gives lands in the library, so every other
  * tool takes it from there too. The microphone turns on only by the person's own click.
  */
-export function SoundSource({ place, label, hint, checklist, sources = ['library', 'mic', 'file'], defaultSource, need, titleFor, value, onChange, disabled }: {
+export function SoundSource({ place, label, hint, checklist, sources = ['library', 'mic', 'file'], defaultSource, need, titleFor, value, onChange, disabled, none, showLabel = true, missing }: {
   /** The place's name, for the source it remembers. */
   place: string;
   label: string;
@@ -66,10 +69,17 @@ export function SoundSource({ place, label, hint, checklist, sources = ['library
   value: SoundPick | null;
   onChange: (pick: SoundPick | null) => void;
   disabled?: boolean;
+  /** The library list's first entry for choosing nothing, where the place works without a sound too. */
+  none?: string;
+  /** False where the form names the field itself. */
+  showLabel?: boolean;
+  /** The list's words for a chosen song that is no longer in the library. */
+  missing?: string;
 }) {
   const { language } = useI18n();
   const text = soundSourceStrings[language];
-  const [source, setSourceState] = useState<SoundSourceKind>(() => remembered(place, sources, defaultSource ?? sources[0]));
+  // a sound already chosen opens where it is; otherwise the place's last source, or its default
+  const [source, setSourceState] = useState<SoundSourceKind>(() => value && sources.includes(value.origin) ? value.origin : remembered(place, sources, defaultSource ?? sources[0]));
   const setSource = (next: SoundSourceKind) => {
     setSourceState(next);
     try { localStorage.setItem(`studio.soundSource.${place}`, next); } catch { /* the choice is only a convenience */ }
@@ -112,7 +122,7 @@ export function SoundSource({ place, label, hint, checklist, sources = ['library
     try {
       const response = await fetch(apiUrl('/v1/mic/stop'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ discard, title: titleFor?.() ?? text.recordingTitle, min_seconds: need?.min }),
+        body: JSON.stringify({ discard, title: titleFor?.() ?? `${text.recordingTitle} · ${new Date().toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`, min_seconds: need?.min }),
       });
       const body = await response.json().catch(() => null) as { song_id?: string; title?: string; seconds?: number; code?: string; error?: string } | null;
       if (!response.ok) {
@@ -245,7 +255,7 @@ export function SoundSource({ place, label, hint, checklist, sources = ['library
 
   return (
     <div className="grid text-xs">
-      <FieldLabel>{label}</FieldLabel>
+      {showLabel && <FieldLabel>{label}</FieldLabel>}
       {hint && <FieldHint>{hint}</FieldHint>}
       {sources.length > 1 && (
         <fieldset disabled={disabled || busy} className="mb-2">
@@ -263,9 +273,9 @@ export function SoundSource({ place, label, hint, checklist, sources = ['library
           {text.emptyLibrary[4]}
         </p>
       ) : (
-        <LibrarySongPicker label={label} showLabel={false} value={value?.origin === 'library' ? value.songId : ''} placeholder={text.findTrack}
+        <LibrarySongPicker label={label} showLabel={false} value={value?.origin === 'library' ? value.songId : ''} placeholder={text.findTrack} none={none} missing={missing}
           controlClassName="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
-          onChange={(id, song) => onChange(id ? { songId: id, title: song?.title ?? '', origin: 'library' } : null)} />
+          onChange={(id, song) => onChange(id ? { songId: id, title: song?.title ?? '', origin: 'library', song } : null)} />
       ))}
 
       {source === 'mic' && (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiUrl } from '../services/apiBase';
 import { useI18n } from '../context/I18nContext';
+import { SoundSource } from './kit/SoundSource';
 import { LibrarySongPicker, useFinishedSongs } from './LibrarySongPicker';
 import { FieldLabel } from './kit/FieldLabel';
 import { SecondaryButton } from './kit/Buttons';
@@ -87,12 +88,12 @@ export function Vevo2SingingFields({ value, onChange, controlClassName }: Props)
 
   return (
     <div className="grid gap-3">
-      <LibrarySongPicker label={strings.voice} value={value.voice_song_id} placeholder={strings.choose} controlClassName={controlClassName}
-        onChange={id => onChange({ ...value, voice_song_id: id })} />
-      <LibrarySongPicker label={strings.melody} value={value.melody_song_id ?? ''} placeholder={strings.none} none={strings.none}
-        controlClassName={controlClassName} onChange={id => onChange({ ...value, melody_song_id: id || undefined })} />
-      {loaded && !songs.length &&
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{strings.empty}</p>}
+      <SoundSource place="vevo2-voice" label={strings.voice} defaultSource="mic"
+        value={value.voice_song_id ? { songId: value.voice_song_id, title: '', origin: 'library' } : null}
+        onChange={pick => onChange({ ...value, voice_song_id: pick?.songId ?? '' })} />
+      <SoundSource place="vevo2-melody" label={strings.melody} none={strings.none}
+        value={value.melody_song_id ? { songId: value.melody_song_id, title: '', origin: 'library' } : null}
+        onChange={pick => onChange({ ...value, melody_song_id: pick?.songId || undefined })} />
     </div>
   );
 }
