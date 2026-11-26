@@ -12,7 +12,7 @@ import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { CatalogSegments } from './kit/Catalog';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
-import { ToolDevice } from './ToolDevice';
+import { ToolModelPicker } from './ToolModelPicker';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
 
@@ -181,6 +181,8 @@ export const RestoreTool: React.FC<{
         {status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={page.download('Apollo', size(status.missing_bytes))} />}
       </>}
       footer={<>{page.model}: Apollo (JusperLee) · {page.license} CC BY-SA 4.0</>}>
+      <ToolModelPicker tool="restore" value="apollo" disabled={running}
+        models={[{ id: 'apollo', name: 'Apollo', hint: page.navRestore, bytes: status?.model.bytes, installed: status?.model.installed }]} />
       <CatalogSegments<'song' | 'file'> fill label={t('restoreFrom')} value={from} onChange={next => { setFrom(next); onSourceChange?.(next); }}
         options={[{ value: 'song', label: page.fromTrack }, { value: 'file', label: page.fromFile }]} />
       {from === 'file' && (
@@ -192,7 +194,6 @@ export const RestoreTool: React.FC<{
             onChange={event => { setFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
         </div>
       )}
-      <ToolDevice tool="restore" disabled={running} />
     </ToolCard>
   );
 };

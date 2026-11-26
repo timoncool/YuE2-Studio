@@ -12,7 +12,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { PrimaryButton, SecondaryButton } from '../kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from '../kit/ToolCard';
 import { FieldLabel } from '../kit/FieldLabel';
-import { ToolDevice } from '../ToolDevice';
+import { ToolModelPicker } from '../ToolModelPicker';
 import { toolsPageStrings } from '../../i18n/toolsPage';
 import { formatSize } from '../../services/fileSize';
 
@@ -246,19 +246,8 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
           {missing > 0 && status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={page.download(modelName, bytesText(missing))} />}
         </>}
         footer={<>{page.model}: MuScriptor (Kyutai, Mirelo) · {page.license} CC BY-NC 4.0 — <span className="text-zinc-700 dark:text-zinc-200">{page.nonCommercial}</span></>}>
-        <div role="radiogroup" aria-label={t('midiModel')} className="grid">
-          <FieldLabel hidden>{t('midiModel')}</FieldLabel>
-          <div className="flex gap-2">
-            {(status?.sizes ?? []).map(entry => (
-              <button key={entry.id} type="button" role="radio" aria-checked={entry.id === chosen} onClick={() => setSize(entry.id)}
-                className={`flex-1 rounded-lg border px-3 py-2 text-left text-xs ${entry.id === chosen ? 'border-pink-400 bg-pink-500/10 text-zinc-900 dark:text-white' : 'border-zinc-200 text-zinc-600 hover:border-pink-300 dark:border-white/10 dark:text-zinc-300'}`}>
-                <span className="block font-semibold">{tt(`midiSize_${entry.id}`)}</span>
-                <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">{entry.installed ? t('midiInstalled') : bytesText(entry.bytes)}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <ToolDevice tool="midi" disabled={running} />
+        <ToolModelPicker<MidiSize['id']> tool="midi" value={chosen} onChange={setSize} disabled={running}
+          models={(status?.sizes ?? []).map(entry => ({ id: entry.id, name: tt(`midiSize_${entry.id}`), bytes: entry.bytes, installed: entry.installed }))} />
       </ToolCard>
       <ConfirmDialog isOpen={confirmDelete} title={page.midiDeleteTitle} message={page.midiDeleteMessage} confirmLabel={page.midiDelete}
         onConfirm={() => { setConfirmDelete(false); void remove(); }} onCancel={() => setConfirmDelete(false)} />

@@ -7,6 +7,7 @@ import { poll } from '../services/poll';
 import { saveFile } from '../services/saveFile';
 import { tempoAndKey } from '../services/songDownload';
 import { ToolDevice } from './ToolDevice';
+import { ToolModelPicker } from './ToolModelPicker';
 import { transcribeWithNativeOpenRouter } from '../services/nativeOpenRouter';
 import { apiUrl } from '../services/apiBase';
 import { openAudioEditor } from '../services/audioEditor';
@@ -412,21 +413,17 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
             {status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} />}
           </>}
           footer={status && <>{page.model}: {status.model.label}</>}>
-<div role="radiogroup" aria-label={page.separationModel} className="grid">
-            <FieldLabel hidden>{page.separationModel}</FieldLabel>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {([['htdemucs', page.sepSix, page.sepSixHint], ['roformer', page.sepVocal, page.sepVocalHint]] as const).map(([id, name, hint]) => {
-                const on = (settings.engine ?? status?.engine ?? 'htdemucs') === id;
-                return (
-                  <button key={id} type="button" role="radio" aria-checked={on} disabled={busy || running || !status}
-                    onClick={() => !on && void saveSettings({ ...settings, engine: id })}
-                    className={`rounded-lg border px-3 py-2.5 text-left disabled:opacity-60 ${on ? 'border-pink-400 bg-pink-500/10' : 'border-zinc-200 hover:border-pink-300 dark:border-white/10'}`}>
-                    <span className="block text-sm font-semibold text-zinc-900 dark:text-white">{name}</span>
-                    <span className="block text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">{hint}</span>
-                  </button>
-                );
-              })}
-            </div>
+<div className="grid">
+            <ToolModelPicker<'htdemucs' | 'roformer'> tool="stems" value={settings.engine ?? status?.engine ?? 'htdemucs'}
+              onChange={engine => void saveSettings({ ...settings, engine })} disabled={busy || running || !status}
+              models={[{ id: 'htdemucs', name: page.sepSix, hint: page.sepSixHint }, { id: 'roformer', name: page.sepVocal, hint: page.sepVocalHint }]}
+              cardAvailable={Boolean(status?.card && status?.card_runtime_installed)}
+              onDeviceChange={() => { settingsRevision.current += 1; setStatus(null); void refresh(); }} />
+            {status?.card && !status?.card_runtime_installed && status?.engine !== 'roformer' && (
+              <button type="button" onClick={() => openSettings('models')} className="mt-1.5 justify-self-start text-left text-[13px] text-amber-700 underline underline-offset-2 dark:text-amber-300">
+                {t('separationInstallGpu')}{status?.card_missing_bytes ? ` · ${bytesText(status.card_missing_bytes)}` : ''}
+              </button>
+            )}
           </div>
           <div className="grid">
             <FieldLabel>{page.whichStems}</FieldLabel>
@@ -445,16 +442,6 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
                 );
               })}
             </div>
-          </div>
-          <div className="grid text-xs">
-            <ToolDevice tool="stems" disabled={busy || running || !status}
-              cardAvailable={Boolean(status?.card && status?.card_runtime_installed)}
-              onChange={() => { settingsRevision.current += 1; setStatus(null); void refresh(); }} />
-            {status?.card && !status?.card_runtime_installed && status?.engine !== 'roformer' && (
-              <button type="button" onClick={() => openSettings('models')} className="mt-2 justify-self-start text-left text-[13px] text-amber-700 underline underline-offset-2 dark:text-amber-300">
-                {t('separationInstallGpu')}{status?.card_missing_bytes ? ` · ${bytesText(status.card_missing_bytes)}` : ''}
-              </button>
-            )}
           </div>
           <ConfirmDialog
             isOpen={confirmReplace}

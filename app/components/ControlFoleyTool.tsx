@@ -9,7 +9,7 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 import { Clapperboard, FileVideo } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
-import { ToolDevice } from './ToolDevice';
+import { ToolModelPicker } from './ToolModelPicker';
 import { FieldHint, FieldLabel } from './kit/FieldLabel';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
@@ -116,6 +116,8 @@ export function ControlFoleyTool({ control, busy, onGenerate }: {
       </>}
     error={error && <p role="alert" className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">{error}</p>}
     footer={status && <>{page.model}: {status.name} · <a href={status.license_url} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-pink-600 hover:underline">{page.license} ↗</a></>}>
+    {status && <ToolModelPicker tool="foley" value="controlfoley" disabled={uploading} onDeviceChange={() => void model.refetch()}
+      models={[{ id: 'controlfoley', name: status.name, hint: page.navFoley, bytes: status.ready ? undefined : status.missing_bytes, installed: status.ready }]} />}
     <div className="grid text-xs">
       <FieldLabel hidden>{text.source}</FieldLabel>
       <div className="flex min-w-0 items-center gap-2">
@@ -135,6 +137,5 @@ export function ControlFoleyTool({ control, busy, onGenerate }: {
       <input type="number" className={`${control} max-w-32`} value={duration} min={limits?.min} max={limits?.max}
         step={0.1} onChange={event => setDuration(event.target.value)} />
     </label>
-    <ToolDevice tool="foley" disabled={uploading} onChange={() => void model.refetch()} />
   </ToolCard>;
 }

@@ -8,7 +8,7 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 import { AudioWaveform } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
-import { ToolDevice } from './ToolDevice';
+import { ToolModelPicker } from './ToolModelPicker';
 import { FieldHint, FieldLabel } from './kit/FieldLabel';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
@@ -96,6 +96,8 @@ export function SoundEffectsTool({ control, busy, onGenerate }: {
         <ActionReason>{reason ?? page.inLibrary}</ActionReason>
       </>}
     footer={status && <>{page.model}: {status.name} · <a href={status.license_url} target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-pink-600 hover:underline">{page.license} ↗</a></>}>
+    {status && <ToolModelPicker tool="effects" value={status.id} onDeviceChange={() => refresh(value => value + 1)}
+      models={[{ id: status.id, name: status.name, hint: page.navEffects, bytes: status.ready ? undefined : status.missing_bytes, installed: status.ready }]} />}
     <label className="grid text-xs">
       <FieldLabel>{page.sfxPrompt}</FieldLabel>
       <FieldHint>{page.sfxPromptHint}</FieldHint>
@@ -107,6 +109,5 @@ export function SoundEffectsTool({ control, busy, onGenerate }: {
       <input type="number" className={`${control} max-w-32`} value={duration} min={limit?.min} max={limit?.max}
         step={0.1} onChange={event => setDuration(event.target.value)} />
     </label>
-    <ToolDevice tool="effects" onChange={() => refresh(value => value + 1)} />
   </ToolCard>;
 }
