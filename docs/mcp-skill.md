@@ -508,8 +508,10 @@ The window's Replace voice form has one Model choice: RVC (an installed voice, `
 SoulX-Singer (a voice from a sample, no training; `seed_vc_apply` with `model` `seed_vc` or `soulx_singer_svc`).
 Use `seed_vc_status` to find the model file and audio.cpp runtime status (`soulx` for SoulX-Singer); when
 Seed-VC is missing, `seed_vc_install` downloads it; SoulX-Singer installs as the audio.cpp model
-`soulx_singer_svc`. With an already separated song, send your 1–25 second target voice sample
-through `processing_set_reference`. Pass its `upload_id` and the library song ID
+`soulx_singer_svc`. With an already separated song, send your target voice sample through
+`processing_set_reference` (a file), or take it from a library song with `processing_reference_from_song` (its vocal
+stem when it has one); a sample longer than 25 seconds is held to its most sounding 25. The microphone is the
+person's: a recording reaches you as a library song, never by a tool. Pass its `upload_id` and the library song ID
 to `seed_vc_apply`. The new library take uses the original accompaniment and
 the source vocal's pauses. The original song is kept.
 

@@ -32,6 +32,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 rfd = "0.18"
 base64.workspace = true
 hound = "3.5"
+cpal = "0.18"
 axum.workspace = true
 fs2.workspace = true
 futures-util.workspace = true

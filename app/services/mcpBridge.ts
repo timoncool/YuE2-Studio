@@ -250,6 +250,9 @@ const builtIn: Record<string, Handler> = {
   console: () => ({ text: logged.length ? logged.map((entry) => `${entry.at} ${entry.level}: ${entry.text}`).join('\n') : 'Nothing logged.' }),
   async click(args) {
     const element = find(args);
+    if (element.closest('[data-person-only]')) {
+      throw new Error('The microphone is the person\'s: only their own click turns it on. Ask the person to press it.');
+    }
     element.scrollIntoView({ block: 'center' });
     const clicked = label(element) || element.tagName.toLowerCase();
     element.click();

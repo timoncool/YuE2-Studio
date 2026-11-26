@@ -25,6 +25,9 @@ use tower::ServiceExt;
 /// The studio's API router, set once the service has built it.
 static API: OnceLock<Router> = OnceLock::new();
 
+/// Marks a request the agent makes through a tool, so a route that is the person's alone (the microphone) refuses it.
+pub(crate) const AGENT_HEADER: &str = "x-studio-agent";
+
 pub fn install(api: Router) {
     let _ = API.set(api);
 }
@@ -3081,6 +3084,12 @@ fn tools() -> &'static [Tool] {
                 call: |args| post("/v1/rvc/preview".into(), args.clone()),
             },
             Tool {
+                name: "processing_reference_from_song",
+                description: "A voice sample from a library song for seed_vc_apply: its vocal stem when it has one, else the song itself, held to its most sounding 25 seconds. Answers upload_id, seconds and from (vocals or track).",
+                schema: || id_only("song_id", "library song id"),
+                call: |args| post("/v1/processing/reference/from-song".into(), json!({ "song_id": text(args, "song_id")? })),
+            },
+            Tool {
                 name: "seed_vc_status",
                 description: "Read Seed-VC model and audio.cpp runtime readiness for singing conversion.",
                 schema: nothing,
@@ -3711,7 +3720,7 @@ fn tools() -> &'static [Tool] {
 /// it answered, cut to a size an agent reads.
 async fn call_route(call: Call) -> Result<(StatusCode, String), String> {
     let api = API.get().ok_or("the studio is still starting")?.clone();
-    let builder = Request::builder().method(call.method).uri(&call.path);
+    let builder = Request::builder().method(call.method).uri(&call.path).header(AGENT_HEADER, "1");
     let request = match call.payload {
         Payload::None | Payload::Window { .. } => builder.body(Body::empty()),
         Payload::Json(body) => builder.header(header::CONTENT_TYPE, "application/json").body(Body::from(body.to_string())),
@@ -4396,6 +4405,8 @@ mod tests {
             "song_prompt_check",
             // A temporary download is staged without changing the library.
             "song_export_zip",
+            // a voice sample staged for seed_vc_apply, whose take is the journaled change
+            "processing_reference_from_song",
             // the journal itself
             "journal_clear",
             "journal_remove",
@@ -4492,6 +4503,9 @@ mod tests {
 
     /// Routes an agent is not given, and why.
     const NOT_TOOLS: &[(&str, &str, &str)] = &[
+        ("GET", "/v1/mic", "the person's microphone: an agent never turns it on; a recording reaches it as a library song"),
+        ("POST", "/v1/mic/start", "the person's microphone: an agent never turns it on, and the route refuses one"),
+        ("POST", "/v1/mic/stop", "the person's microphone: an agent never turns it on, and the route refuses one"),
         ("GET", "/v1/rvc/preview/{id}/{side}", "binary audio from the before_url and after_url answered by rvc_preview"),
         ("GET", "/v1/rvc/catalog/sample/{id}", "binary verified demo audio addressed by sample_audio_url in rvc_catalog_list"),
         ("GET", "/health", "the service's identity for the desktop shell: initialize names the server and its version"),

@@ -83,6 +83,7 @@ mod resources;
 #[cfg(windows)]
 mod gpu_memory;
 mod tool_device;
+mod mic;
 // The video memory of an Intel card on Linux, whose driver publishes none.
 #[cfg(not(any(windows, target_os = "macos")))]
 mod vulkan_mem;
@@ -1913,6 +1914,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/separation/status", get(separation_status))
         .route("/v1/separation/settings", get(read_separation_settings).put(write_separation_settings))
         .route("/v1/tools/devices", get(read_tool_devices))
+        .route("/v1/mic", get(mic_state))
+        .route("/v1/mic/start", post(mic_start))
+        .route("/v1/mic/stop", post(mic_stop))
         .route("/v1/tools/devices/{tool}", axum::routing::put(write_tool_device))
         .route("/v1/separation/install", post(install_separation_model))
         .route("/v1/separation/remove", post(remove_separation_model))
@@ -1942,6 +1946,7 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/processing/keep", post(keep_processing))
         .route("/v1/processing/discard", post(discard_processing))
         .route("/v1/processing/reference", post(upload_processing_reference))
+        .route("/v1/processing/reference/from-song", post(reference_from_song))
         .route("/v1/training", get(read_training))
         .route("/v1/training/pack/install", post(install_training_pack))
         .route("/v1/training/pack/cancel", post(cancel_training_pack))
@@ -3618,6 +3623,40 @@ async fn upload_processing_reference(
 }
 
 #[derive(Debug, Deserialize)]
+struct ReferenceFromSong {
+    song_id: String,
+}
+
+/// A voice sample taken from a library song: its vocal stem when it has one, else the song itself, held to its most
+/// sounding 25 seconds; the answer is the upload a voice conversion takes.
+async fn reference_from_song(State(state): State<AppState>, Json(request): Json<ReferenceFromSong>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    let song = state.library.get_song(&request.song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("Song {} not found", request.song_id)))?;
+    refuse_trashed(&song)?;
+    let vocals = stem_path(&state, &song.id, "vocals");
+    let (source, from) = if vocals.is_file() {
+        (vocals, "vocals")
+    } else {
+        let media = state.library.media_path_for_song(&song).filter(|path| path.is_file())
+            .ok_or_else(|| api_error(StatusCode::CONFLICT, "The song's audio is unavailable.".into()))?;
+        (media, "track")
+    };
+    let folder = processing::workspace(state.library.media_dir());
+    let upload_id = format!("reference-{}.wav", uuid::Uuid::now_v7().simple());
+    let target = folder.join(&upload_id);
+    let seconds = tokio::task::spawn_blocking(move || -> anyhow::Result<f64> {
+        std::fs::create_dir_all(&folder)?;
+        let sample = seed_vc::loudest_window(audio_pcm::decode_stereo(&source)?, seed_vc::LONGEST_SAMPLE);
+        std::fs::write(&target, audio_pcm::wav_f32_bytes(&sample)?)?;
+        Ok(sample.frames() as f64 / f64::from(sample.rate))
+    })
+    .await
+    .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+    .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    Ok(Json(serde_json::json!({ "upload_id": upload_id, "name": song.title, "seconds": seconds, "from": from })))
+}
+
+#[derive(Debug, Deserialize)]
 struct SelectVersionRequest {
     /// `original`, or the id of one of the track's versions.
     version: String,
@@ -4778,6 +4817,77 @@ async fn restore_download(state: &AppState) -> Option<downloads::DownloadProgres
         (Some(model), Some(server)) if model.done && !server.done => Some(server),
         (model, server) => model.or(server),
     }
+}
+
+/// The microphones, the level the recording hears and how long it has run.
+async fn mic_state() -> Json<Value> {
+    let devices = tokio::task::spawn_blocking(mic::input_devices).await.unwrap_or_default();
+    Json(serde_json::json!({
+        "devices": devices,
+        "recording": mic::in_use().is_some(),
+        "seconds": mic::in_use().map(|since| since.as_secs_f64()),
+        "level": mic::level(),
+    }))
+}
+
+#[derive(Deserialize, Default)]
+struct MicStart {
+    device: Option<String>,
+}
+
+fn mic_take_path(state: &AppState) -> PathBuf {
+    state.library.media_dir().join("recording.wav")
+}
+
+/// Starts recording from the microphone: the person's button only; a tool's request is refused.
+async fn mic_start(State(state): State<AppState>, headers: axum::http::HeaderMap, body: Option<Json<MicStart>>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if headers.contains_key(mcp::AGENT_HEADER) {
+        return Err(api_error(StatusCode::FORBIDDEN, "The microphone is the person's: only their button turns it on.".into()));
+    }
+    let device = body.and_then(|Json(body)| body.device).filter(|device| !device.trim().is_empty());
+    let path = mic_take_path(&state);
+    tokio::task::spawn_blocking(move || mic::start(&path, device))
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| api_error(StatusCode::CONFLICT, error))?;
+    Ok(Json(serde_json::json!({ "recording": true })))
+}
+
+#[derive(Deserialize, Default)]
+struct MicStop {
+    title: Option<String>,
+}
+
+/// Stops recording and keeps the take as a library song, which every tool takes from there.
+async fn mic_stop(State(state): State<AppState>, headers: axum::http::HeaderMap, body: Option<Json<MicStop>>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if headers.contains_key(mcp::AGENT_HEADER) {
+        return Err(api_error(StatusCode::FORBIDDEN, "The microphone is the person's: only their button turns it off.".into()));
+    }
+    let path = tokio::task::spawn_blocking(mic::stop)
+        .await
+        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| api_error(StatusCode::CONFLICT, error))?;
+    let (peak, seconds) = mic::measure(&path).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+    if peak < mic::SILENT_PEAK {
+        let _ = std::fs::remove_file(&path);
+        return Err(api_error(StatusCode::BAD_REQUEST, "The recording is silent: the microphone is muted or closed to the studio in the system's privacy settings.".into()));
+    }
+    let audio = std::fs::read(&path).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{}: {error}", path.display())))?;
+    let _ = std::fs::remove_file(&path);
+    let title = body.and_then(|Json(body)| body.title).map(|title| title.trim().to_string()).filter(|title| !title.is_empty()).unwrap_or_else(|| "Voice recording".into());
+    let song = state.library.import_audio_song(library::AudioImportInput {
+        title,
+        caption: String::new(),
+        lyrics: String::new(),
+        metadata: serde_json::json!({ "duration_seconds": seconds, "recorded": true }),
+        generation_settings: Value::Null,
+        engine_id: "mic".into(),
+        profile_id: None,
+        source: "mic".into(),
+        audio_extension: "wav".into(),
+        audio,
+    }).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")))?.song;
+    Ok(Json(serde_json::json!({ "song_id": song.id, "title": song.title, "seconds": seconds, "peak": peak })))
 }
 
 /// Restoring after compression: the model, the server it runs in (the restoration's device), what is still to

@@ -208,13 +208,13 @@ pub(super) async fn apply(
         let source_audio = audio_pcm::decode_stereo(&source)?;
         let (frames, rate) = (source_audio.frames(), source_audio.rate);
         drop(source_audio);
-        let reference_audio = audio_pcm::decode_stereo(&reference)?;
+        let reference_audio = loudest_window(audio_pcm::decode_stereo(&reference)?, LONGEST_SAMPLE);
         let seconds = reference_audio.frames() as f64 / f64::from(reference_audio.rate);
-        if !(1.0..=25.0).contains(&seconds) {
+        if seconds < 1.0 {
             return Ok((
                 StatusCode::BAD_REQUEST,
                 Json(json!({
-                    "error": "Choose a voice sample from 1 to 25 seconds."
+                    "error": "The voice sample is shorter than a second: record or choose at least 3 seconds of the voice."
                 })),
             ));
         }
@@ -243,7 +243,9 @@ pub(super) async fn apply(
             Converter::SoulX => {
                 let dir = soulx_dir.context("The studio data folder is unavailable.")?;
                 let source_clip = stage.path().join("vocals.wav");
-                audio_cpp_soulx::prepare_audio(&reference, &reference_clip).context("Preparing the SoulX-Singer voice sample")?;
+                let held = stage.path().join("sample.wav");
+                std::fs::write(&held, audio_pcm::wav_f32_bytes(&reference_audio)?)?;
+                audio_cpp_soulx::prepare_audio(&held, &reference_clip).context("Preparing the SoulX-Singer voice sample")?;
                 audio_cpp_soulx::prepare_audio(&vocal, &source_clip).context("Preparing the vocals for SoulX-Singer")?;
                 (audio_cpp_soulx::Variant::Conversion.entry(dir), json!({
                     "audio": source_clip, "voice_ref": reference_clip, "seed": 2026, "options": {"seed": "2026"}
@@ -314,6 +316,31 @@ pub(super) async fn apply(
     .await
     .map_err(rvc_voices::internal)?;
     result.map_err(|error| api_error(StatusCode::BAD_GATEWAY, format!("{error:#}")))
+}
+
+/// The longest voice sample the converters take, in seconds.
+pub(super) const LONGEST_SAMPLE: f64 = 25.0;
+
+/// The `seconds` of a recording that sound the most (the loudest by energy, one-second steps); a shorter recording is
+/// kept whole. A long sample is held to what the converters take instead of being refused.
+pub(super) fn loudest_window(audio: audio_post::Stereo, seconds: f64) -> audio_post::Stereo {
+    let rate = audio.rate as usize;
+    let length = (seconds * audio.rate as f64) as usize;
+    if audio.frames() <= length || rate == 0 {
+        return audio;
+    }
+    let energy: Vec<f64> = audio.left.iter().zip(&audio.right).map(|(l, r)| f64::from(l * l + r * r)).collect();
+    let mut sum: f64 = energy[..length].iter().sum();
+    let (mut best, mut best_at) = (sum, 0usize);
+    let mut at = 0;
+    while at + rate + length <= energy.len() {
+        sum += energy[at + length..at + length + rate].iter().sum::<f64>() - energy[at..at + rate].iter().sum::<f64>();
+        at += rate;
+        if sum > best {
+            (best, best_at) = (sum, at);
+        }
+    }
+    audio_post::Stereo::new(audio.left[best_at..best_at + length].to_vec(), audio.right[best_at..best_at + length].to_vec(), audio.rate)
 }
 
 /// Use the original vocal's activity on its original timeline. Keep note tails
