@@ -67,7 +67,7 @@ interface SongMidi {
   notes: HeardNote[];
 }
 
-export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ songId, songTitle }) => {
+export const MidiTool: React.FC<{ songId: string; songTitle: string; recorded?: boolean }> = ({ songId, songTitle, recorded }) => {
   const { t, language } = useI18n();
   const page = toolsPageStrings[language];
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -251,7 +251,13 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
         footer={sung ? <>{page.model}: ROSVOT (Ruiqi Li), RMVPE · {page.license} MIT, Apache 2.0</>
           : <>{page.model}: MuScriptor (Kyutai, Mirelo) · {page.license} CC BY-NC 4.0 — <span className="text-zinc-700 dark:text-zinc-200">{page.nonCommercial}</span></>}>
         <ToolModelPicker<MidiSize['id']> tool="midi" value={chosen} onChange={setSize} disabled={running}
-          models={(status?.sizes ?? []).map(entry => ({ id: entry.id, name: tt(`midiSize_${entry.id}`), hint: tt(entry.id === 'vocal' ? 'midiHint_vocal' : 'midiHint_all'), bytes: entry.bytes, installed: entry.installed }))} />
+          models={(status?.sizes ?? []).map(entry => ({ id: entry.id, name: tt(`midiSize_${entry.id}`), hint: tt(entry.id === 'vocal' ? 'midiHint_vocal' : 'midiHint_all'), bytes: entry.bytes, installed: entry.installed }))}
+          note={recorded && chosen !== 'vocal' && status?.sizes.some(entry => entry.id === 'vocal') && (
+          <p className="flex flex-wrap items-center gap-2 text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">
+            {tt('midiPickVocal')}
+            <SecondaryButton disabled={running} onClick={() => setSize('vocal')}>{tt('midiPickVocalAction')}</SecondaryButton>
+          </p>
+        )} />
       </ToolCard>
       <ConfirmDialog isOpen={confirmDelete} title={page.midiDeleteTitle} message={page.midiDeleteMessage} confirmLabel={page.midiDelete}
         onConfirm={() => { setConfirmDelete(false); void remove(); }} onCancel={() => setConfirmDelete(false)} />

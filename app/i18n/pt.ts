@@ -1587,6 +1587,8 @@ export const pt = {
     midiSize_vocal: 'Melodia da voz',
     midiHint_vocal: 'A melodia cantada em notas, alinhada às sílabas da letra · ROSVOT. Mais limpa num stem de voz.',
     midiHint_all: 'Todos os instrumentos e a bateria, cada um no seu canal · MuScriptor',
+    midiPickVocal: 'Para uma melodia cantarolada ou cantada, o modelo Melodia da voz é mais preciso.',
+    midiPickVocalAction: 'Escolher',
     midiInstalled: 'instalado',
     midiFirstUse: 'A primeira vez descarrega este modelo e, se ainda não existir, o motor de áudio partilhado ({size}).',
     midiInstallNow: 'Descarregar agora',

@@ -38,6 +38,8 @@ export interface Song {
   audioUrl?: string;
   /** The thumbs-up, kept with the song in the library. */
   liked?: boolean;
+  /** Recorded in the studio from the microphone: a voice, a hummed melody, a sample. */
+  recorded?: boolean;
   /** The person's own note on the song, kept in the library. */
   note?: string;
   /** When it was liked: the liked list is read from the latest. */

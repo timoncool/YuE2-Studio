@@ -1692,6 +1692,8 @@ export const ko = {
     midiSize_vocal: '보컬 멜로디',
     midiHint_vocal: '부른 멜로디를 가사 음절에 맞춰 음표로 · ROSVOT. 보컬 스템에서 가장 깨끗합니다.',
     midiHint_all: '모든 악기와 드럼을 각각 별도 채널로 · MuScriptor',
+    midiPickVocal: '흥얼거리거나 부른 멜로디에는 ‘보컬 멜로디’ 모델이 더 정확합니다.',
+    midiPickVocalAction: '선택하기',
     midiInstalled: '설치됨',
     midiFirstUse: '처음 실행할 때 이 모델과, 아직 없다면 공용 오디오 엔진을 내려받습니다({size}).',
     midiInstallNow: '지금 내려받기',

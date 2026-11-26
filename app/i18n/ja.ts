@@ -1692,6 +1692,8 @@ export const ja = {
     midiSize_vocal: 'ボーカルのメロディ',
     midiHint_vocal: '歌のメロディを歌詞の音節に合わせて音符に · ROSVOT。ボーカルのステムで最もきれいに取れます。',
     midiHint_all: 'すべての楽器とドラムを、それぞれ別のチャンネルに · MuScriptor',
+    midiPickVocal: '口ずさんだ・歌ったメロディには「ボーカルのメロディ」モデルのほうが正確です。',
+    midiPickVocalAction: 'それを選ぶ',
     midiInstalled: 'インストール済み',
     midiFirstUse: '初回の実行でこのモデルと、まだなければ共通のオーディオエンジンをダウンロードします（{size}）。',
     midiInstallNow: '今すぐダウンロード',

@@ -1686,6 +1686,8 @@ export const en = {
     midiSize_vocal: 'Vocal melody',
     midiHint_vocal: 'The sung melody as notes, timed to the words · ROSVOT. Cleanest on a vocal stem.',
     midiHint_all: 'Every instrument and the drums, each on its own channel · MuScriptor',
+    midiPickVocal: 'For a hummed or sung melody the Vocal melody model is more accurate.',
+    midiPickVocalAction: 'Choose it',
     midiInstalled: 'installed',
     midiFirstUse: 'The first run downloads this model and, if it is not there yet, the shared audio engine ({size}).',
     midiInstallNow: 'Download now',

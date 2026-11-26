@@ -91,6 +91,7 @@ export function mapNativeLibrarySong(song: NativeLibrarySong): Song {
     createdAt: nativeDate(song.created_at),
     madeByJob: stringMetadata(metadata, 'job_id'),
     liked: metadata.liked === true,
+    recorded: metadata.recorded === true,
     note: stringMetadata(metadata, 'note'),
     likedAt: metadata.liked === true && typeof metadata.liked_at === 'string' ? nativeDate(metadata.liked_at) : undefined,
     tags,

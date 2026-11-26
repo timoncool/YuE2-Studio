@@ -1696,6 +1696,8 @@ export const ru = {
     midiSize_vocal: 'Мелодия вокала',
     midiHint_vocal: 'Спетая мелодия нотами, по слогам слов · ROSVOT. Чище всего на стеме вокала.',
     midiHint_all: 'Все инструменты и ударные, каждый на своём канале · MuScriptor',
+    midiPickVocal: 'Для напетой мелодии точнее модель «Мелодия вокала».',
+    midiPickVocalAction: 'Выбрать её',
     midiInstalled: 'установлена',
     midiFirstUse: 'При первом запуске скачается эта модель и, если его ещё нет, общий звуковой движок ({size}).',
     midiInstallNow: 'Скачать сейчас',

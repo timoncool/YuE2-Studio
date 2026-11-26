@@ -460,7 +460,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
           />
         </ToolCard>
       );
-      case 'midi': return <MidiTool songId={songId} songTitle={chosen?.title ?? ''} />;
+      case 'midi': return <MidiTool songId={songId} songTitle={chosen?.title ?? ''} recorded={chosen?.metadata?.recorded === true} />;
       case 'restore': return <RestoreTool songId={songId} songTitle={chosen?.title ?? ''} restoredId={restoredOf(songs, songId)}
         chosenIsRestored={derivedBy(chosen, 'restore')} onDone={() => void loadSongs()} />;
       case 'recognise': return (

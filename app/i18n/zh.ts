@@ -1692,6 +1692,8 @@ export const zh = {
     midiSize_vocal: '人声旋律',
     midiHint_vocal: '把唱出的旋律转成音符，按歌词音节对齐 · ROSVOT。用人声分轨效果最干净。',
     midiHint_all: '所有乐器和鼓，各占一个通道 · MuScriptor',
+    midiPickVocal: '哼唱或演唱的旋律用“人声旋律”模型更准确。',
+    midiPickVocalAction: '选择它',
     midiInstalled: '已安装',
     midiFirstUse: '首次运行会下载此模型，以及尚未安装的通用音频引擎（{size}）。',
     midiInstallNow: '立即下载',
