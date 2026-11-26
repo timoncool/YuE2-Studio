@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AudioLines, Check, Library, Loader2, Piano, Save, X } from 'lucide-react';
 import { useI18n } from '../../context/I18nContext';
@@ -49,7 +49,9 @@ export const MidiEditor: React.FC<{ source: MidiEditorSource; onClose: () => voi
   // dropped by a re-render
   const start = useRef({ source, untitled: say('midiEdUntitled') });
 
-  useEffect(() => {
+  // the frame announces itself as soon as its script runs: the ear has to be there before the frame is in the page,
+  // which a layout effect is and a passive effect is not
+  useLayoutEffect(() => {
     const element = frame.current;
     if (!element) return;
     const { source: opening, untitled } = start.current;
