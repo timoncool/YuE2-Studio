@@ -51,6 +51,13 @@ pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {
         "installing": installing,
         "install_path": "/v1/seed-vc/install",
         "download": acpp_download(&state, SCOPE).await,
+        "soulx": {
+            "id": audio_cpp_soulx::CONVERSION,
+            "ready": soulx_ready(&state) && runtime_ready,
+            "model_ready": studio_data_root().is_some_and(|root| audio_cpp_soulx::Variant::Conversion.missing(&audio_cpp_soulx::model_dir(&root)).is_empty()),
+            "soxr_ready": state.acpp.soxr_ready(),
+            "bytes": audio_cpp_soulx::Variant::Conversion.asset().0.bytes,
+        },
     }))
 }
 
@@ -81,6 +88,46 @@ pub(super) async fn install(State(state): State<AppState>) -> Result<Json<Value>
 pub(super) struct Apply {
     song_id: String,
     upload_id: String,
+    /// `seed_vc`, or `soulx_singer_svc` for SoulX-Singer's singing conversion; Seed-VC when absent.
+    #[serde(default)]
+    model: Option<String>,
+}
+
+/// A converter of a vocal to the voice of a sample: the model the studio runs and how it is asked.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Converter {
+    SeedVc,
+    SoulX,
+}
+
+impl Converter {
+    fn parse(id: Option<&str>) -> Option<Self> {
+        match id.map(str::trim).filter(|id| !id.is_empty()) {
+            None | Some(SET) => Some(Self::SeedVc),
+            Some(audio_cpp_soulx::CONVERSION) => Some(Self::SoulX),
+            Some(_) => None,
+        }
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::SeedVc => SET,
+            Self::SoulX => audio_cpp_soulx::CONVERSION,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::SeedVc => "Seed-VC",
+            Self::SoulX => "SoulX-Singer",
+        }
+    }
+}
+
+/// SoulX-Singer SVC's weights in the studio's audio.cpp models, and whether it can run here.
+fn soulx_ready(state: &AppState) -> bool {
+    studio_data_root().is_some_and(|root| audio_cpp_soulx::Variant::Conversion.missing(&audio_cpp_soulx::model_dir(&root)).is_empty())
+        && state.acpp.soxr_ready()
 }
 
 pub(super) async fn apply(
@@ -131,14 +178,21 @@ pub(super) async fn apply(
         .then(|| processing::workspace_file(state.library.media_dir(), &input.upload_id))
         .flatten()
         .ok_or_else(|| rvc_voices::invalid("Upload the reference voice audio first."))?;
+    let converter = Converter::parse(input.model.as_deref())
+        .ok_or_else(|| rvc_voices::invalid("Choose Seed-VC or SoulX-Singer."))?;
     let model = model(&state);
     let build = build(&state).await.map_err(rvc_voices::internal)?;
-    if !ready(&model) || !state.acpp.installed(build) {
+    let model_ready = match converter {
+        Converter::SeedVc => ready(&model),
+        Converter::SoulX => soulx_ready(&state),
+    };
+    if !model_ready || !state.acpp.installed(build) {
         return Err(api_error(
             StatusCode::CONFLICT,
-            "Install the Seed-VC model and audio.cpp runtime first.".into(),
+            format!("Install the {} model and audio.cpp runtime first.", converter.name()),
         ));
     }
+    let soulx_dir = studio_data_root().map(|root| audio_cpp_soulx::model_dir(&root));
     let lease = state.engine_use.clone().try_write_owned().map_err(|_| {
         api_error(
             StatusCode::CONFLICT,
@@ -166,33 +220,41 @@ pub(super) async fn apply(
         }
         let stage = tempfile::tempdir()?;
         let reference_clip = stage.path().join("reference.wav");
-        std::fs::write(&reference_clip, audio_pcm::wav_f32_bytes(&reference_audio)?)?;
-        let entry = acpp_server::ModelEntry {
-            id: "seed_vc".into(),
-            family: "seed_vc".into(),
-            task: "svc".into(),
-            mode: acpp_server::Mode::Offline,
-            path: model,
-            load_options: Default::default(),
-            session_options: Default::default(),
-            default_request_options: Default::default(),
-            busy_timeout_ms: None,
-            output_rate: None,
+        let (entry, request) = match converter {
+            Converter::SeedVc => {
+                std::fs::write(&reference_clip, audio_pcm::wav_f32_bytes(&reference_audio)?)?;
+                let entry = acpp_server::ModelEntry {
+                    id: "seed_vc".into(),
+                    family: "seed_vc".into(),
+                    task: "svc".into(),
+                    mode: acpp_server::Mode::Offline,
+                    path: model,
+                    load_options: Default::default(),
+                    session_options: Default::default(),
+                    default_request_options: Default::default(),
+                    busy_timeout_ms: None,
+                    output_rate: None,
+                };
+                (entry, json!({
+                    "audio": vocal, "voice_ref": reference_clip, "num_inference_steps": 30, "seed": 42,
+                    "options": {"route": PROFILE, "duration_scale": "1.0"}
+                }))
+            }
+            Converter::SoulX => {
+                let dir = soulx_dir.context("The studio data folder is unavailable.")?;
+                let source_clip = stage.path().join("vocals.wav");
+                audio_cpp_soulx::prepare_audio(&reference, &reference_clip).context("Preparing the SoulX-Singer voice sample")?;
+                audio_cpp_soulx::prepare_audio(&vocal, &source_clip).context("Preparing the vocals for SoulX-Singer")?;
+                (audio_cpp_soulx::Variant::Conversion.entry(dir), json!({
+                    "audio": source_clip, "voice_ref": reference_clip, "seed": 2026, "options": {"seed": "2026"}
+                }))
+            }
         };
-        let reply = acpp::run(
-            &state.acpp,
-            build,
-            entry,
-            json!({
-                "audio": vocal, "voice_ref": reference_clip, "num_inference_steps": 30, "seed": 42,
-                "options": {"route": PROFILE, "duration_scale": "1.0"}
-            }),
-            &|| false,
-        )?;
+        let reply = acpp::run(&state.acpp, build, entry, request, &|| false)?;
         let artifact = acpp_server::task_audio(&reply)?
             .into_iter()
             .next()
-            .context("Seed-VC returned no audio.")?;
+            .with_context(|| format!("{} returned no audio.", converter.name()))?;
         let channels = artifact.channels as usize;
         anyhow::ensure!(
             (1..=2).contains(&channels)
@@ -200,7 +262,8 @@ pub(super) async fn apply(
                 && !artifact.samples.is_empty()
                 && artifact.samples.len() % channels == 0
                 && artifact.samples.iter().all(|sample| sample.is_finite()),
-            "Seed-VC returned invalid audio."
+            "{} returned invalid audio.",
+            converter.name()
         );
         let left = artifact.samples.iter().step_by(channels).copied().collect();
         let right = artifact
@@ -222,24 +285,24 @@ pub(super) async fn apply(
         }
         let protected = mix_protecting_pauses(&mut backing, &vocals, &converted)?;
         let song = state.library.import_audio_song(library::AudioImportInput {
-            title: format!("{} · Seed-VC", original.title),
+            title: format!("{} · {}", original.title, converter.name()),
             caption: original.caption.clone(),
             lyrics: original.lyrics.clone(),
             metadata: json!({
-                "derived": derivation(&original, "seed_vc", json!({
-                    "route": PROFILE, "reference_seconds": seconds, "protected_frames": protected
+                "derived": derivation(&original, converter.id(), json!({
+                    "model": converter.name(), "reference_seconds": seconds, "protected_frames": protected
                 })),
                 "duration_seconds": frames as f64 / f64::from(rate)
             }),
             generation_settings: Value::Null,
-            engine_id: "seed_vc".into(),
-            profile_id: Some(PROFILE.into()),
-            source: "seed_vc".into(),
+            engine_id: converter.id().into(),
+            profile_id: Some(match converter { Converter::SeedVc => PROFILE, Converter::SoulX => audio_cpp_soulx::PROFILE }.into()),
+            source: converter.id().into(),
             audio_extension: "wav".into(),
             audio: audio_pcm::wav_f32_bytes(&backing)?,
         })?.song;
         if let Err(error) = cover_like(&state, &original, &song.id) {
-            studio_log!("[Seed-VC] Could not copy the cover: {error:#}");
+            studio_log!("[{}] Could not copy the cover: {error:#}", converter.name());
         }
         Ok::<_, anyhow::Error>((
             StatusCode::CREATED,

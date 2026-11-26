@@ -15,7 +15,8 @@ import { LibrarySongPicker } from './LibrarySongPicker';
 import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 import { RvcApplyVoice } from './RvcApplyVoice';
-import { SeedVcApply } from './SeedVcApply';
+import { SeedVcApply, voiceModels, type Converter } from './SeedVcApply';
+import { ToolModelPicker } from './ToolModelPicker';
 import { TrainingPanel } from './TrainingPanel';
 
 const URL = '/v1/rvc/voices';
@@ -214,13 +215,15 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
     return () => controller.abort();
   }, [songId]);
   const song = songs.find(entry => entry.id === songId);
+  const [model, setModel] = useState<'rvc' | Converter>('rvc');
   return (
     <div className={`${CARD} space-y-3`}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="grid content-start text-xs">
-          {library.isSuccess && songs.length === 0 ? <><FieldLabel>{text.track}</FieldLabel><p className="text-zinc-500 dark:text-zinc-400">{text.noTracks}</p></>
-            : <LibrarySongPicker label={text.track} value={songId} placeholder={text.chooseTrack} controlClassName={CONTROL} onChange={setSongId} />}
-        </div>
+      <div className="grid content-start text-xs">
+        {library.isSuccess && songs.length === 0 ? <><FieldLabel>{text.track}</FieldLabel><p className="text-zinc-500 dark:text-zinc-400">{text.noTracks}</p></>
+          : <LibrarySongPicker label={text.track} value={songId} placeholder={text.chooseTrack} controlClassName={CONTROL} onChange={setSongId} />}
+      </div>
+      <ToolModelPicker<'rvc' | Converter> tool="voice" value={model} onChange={setModel} models={voiceModels(language)} showDevice={model !== 'rvc'} />
+      {model === 'rvc' && (
         <div className="grid content-start text-xs">
           <FieldLabel hidden>{labels.voice}</FieldLabel>
           <Combobox label={labels.voice} value={voice?.id ?? ''} placeholder={labels.none} onChange={id => chooseLastRvcVoice(id)}
@@ -229,12 +232,10 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
               hint: `${item.model_name} · ${item.index_name ? text.withIndex : text.withoutIndex}` }))} />
           <button type="button" onClick={onOpenCatalog} className="mt-1.5 justify-self-start text-xs font-semibold text-pink-600 hover:underline dark:text-pink-300">＋ {text.addVoice}</button>
         </div>
-      </div>
+      )}
       {stemsError && <p role="alert" className="text-xs text-rose-600 dark:text-rose-300">{stemsError}</p>}
-      {song && stems && <RvcApplyVoice key={song.id} song={{ id: song.id, title: song.title, stems }} voice={voice} control={CONTROL} onSaved={onSaved} />}
-      {song && stems && <Disclosure title={labels.seedVc} className="border-t border-zinc-200 pt-3 text-xs dark:border-white/10">
-        <SeedVcApply key={`seed-vc:${song.id}`} song={{ id: song.id, title: song.title, stems }} control={CONTROL} onSaved={onSaved} />
-      </Disclosure>}
+      {song && stems && model === 'rvc' && <RvcApplyVoice key={song.id} song={{ id: song.id, title: song.title, stems }} voice={voice} control={CONTROL} onSaved={onSaved} />}
+      {song && stems && model !== 'rvc' && <SeedVcApply key={`${model}:${song.id}`} song={{ id: song.id, title: song.title, stems }} converter={model} onSaved={onSaved} />}
     </div>
   );
 }

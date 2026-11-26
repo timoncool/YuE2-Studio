@@ -502,11 +502,13 @@ move around. Check the result with `ui_screenshot`.
 
 `rvc_catalog_list` reports `sample_audio_url` for a published source demo and null when none is recorded. Use `has_sample` to filter the same paginated results. Fetch the returned audio URL to play the verified demo before installing its voice.
 
-## Seed-VC vocal replacement
+## Voice replacement from a sample (Seed-VC, SoulX-Singer)
 
-Use `seed_vc_status` to find the model file and audio.cpp runtime status; when
-either is missing, `seed_vc_install` downloads them and `seed_vc_status` shows
-the progress. With an already separated song, send your 1–25 second target voice sample
+The window's Replace voice form has one Model choice: RVC (an installed voice, `rvc_apply`), Seed-VC or
+SoulX-Singer (a voice from a sample, no training; `seed_vc_apply` with `model` `seed_vc` or `soulx_singer_svc`).
+Use `seed_vc_status` to find the model file and audio.cpp runtime status (`soulx` for SoulX-Singer); when
+Seed-VC is missing, `seed_vc_install` downloads it; SoulX-Singer installs as the audio.cpp model
+`soulx_singer_svc`. With an already separated song, send your 1–25 second target voice sample
 through `processing_set_reference`. Pass its `upload_id` and the library song ID
 to `seed_vc_apply`. The new library take uses the original accompaniment and
 the source vocal's pauses. The original song is kept.

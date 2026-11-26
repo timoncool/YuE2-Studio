@@ -211,7 +211,8 @@ pub(super) fn task(
     })
 }
 
-fn prepare_audio(source: &Path, destination: &Path) -> Result<()> {
+/// A recording as SoulX-Singer takes it: a 24 kHz WAV.
+pub(super) fn prepare_audio(source: &Path, destination: &Path) -> Result<()> {
     let audio = audio_pcm::decode_stereo(source)?.resampled(24_000)?;
     std::fs::write(destination, audio_pcm::wav24_bytes(&audio)?)?;
     Ok(())

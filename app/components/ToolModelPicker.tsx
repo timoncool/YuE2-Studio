@@ -19,7 +19,7 @@ export type ToolModel<T extends string> = {
  * The first block of every tool: which model it runs and where it computes. One layout for all of them, so a tool with
  * one model today shows where a second one will appear, and the same choice looks the same in every card.
  */
-export function ToolModelPicker<T extends string>({ tool, models, value, onChange, disabled, cardAvailable, onDeviceChange }: {
+export function ToolModelPicker<T extends string>({ tool, models, value, onChange, disabled, cardAvailable, onDeviceChange, showDevice = true }: {
   tool: ToolId;
   models: ToolModel<T>[];
   value: T | undefined;
@@ -27,6 +27,8 @@ export function ToolModelPicker<T extends string>({ tool, models, value, onChang
   disabled?: boolean;
   cardAvailable?: boolean;
   onDeviceChange?: () => void;
+  /** False for a model that has one place to compute and says so itself (RVC's engines name their card). */
+  showDevice?: boolean;
 }) {
   const { t, language } = useI18n();
   const page = toolsPageStrings[language];
@@ -55,7 +57,7 @@ export function ToolModelPicker<T extends string>({ tool, models, value, onChang
           })}
         </div>
       </div>
-      <ToolDevice tool={tool} disabled={disabled} cardAvailable={cardAvailable} onChange={onDeviceChange} />
+      {showDevice && <ToolDevice tool={tool} disabled={disabled} cardAvailable={cardAvailable} onChange={onDeviceChange} />}
     </div>
   );
 }

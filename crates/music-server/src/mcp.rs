@@ -3094,10 +3094,11 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "seed_vc_apply",
-                description: "Replace a separated song's vocal timbre with Seed-VC using a 1–25 second voice sample. Upload it with processing_set_reference first and pass its upload_id. The original song stays and the result is a new take.",
-                schema: || object(json!({"song_id":{"type":"string"}, "upload_id":{"type":"string"}}), &["song_id","upload_id"]),
+                description: "Replace a separated song's voice with the voice of a 1–25 second sample, without training: model seed_vc (any voice, speech or singing; the default) or soulx_singer_svc (SoulX-Singer, made for singing: keeps melody and words; English, Chinese, Cantonese; needs libsoxr). Upload the sample with processing_set_reference first and pass its upload_id. Readiness of both is in seed_vc_status (soulx for SoulX-Singer). The original song stays and the result is a new take.",
+                schema: || object(json!({"song_id":{"type":"string"}, "upload_id":{"type":"string"}, "model":{"type":"string","enum":["seed_vc","soulx_singer_svc"]}}), &["song_id","upload_id"]),
                 call: |args| post("/v1/seed-vc".into(), json!({
-                    "song_id": text(args, "song_id")?, "upload_id": text(args, "upload_id")?
+                    "song_id": text(args, "song_id")?, "upload_id": text(args, "upload_id")?,
+                    "model": args.get("model").and_then(Value::as_str).unwrap_or("seed_vc")
                 })),
             },
             Tool {

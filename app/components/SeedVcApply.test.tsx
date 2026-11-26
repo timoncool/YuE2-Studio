@@ -19,12 +19,12 @@ it('uploads the sample, converts the selected source and exposes the separate ta
   const onSaved = vi.fn();
   try {
     await act(async () => root.render(<SeedVcApply song={{ id: 'original', title: 'Original', stems: ['vocals', 'instrumental'] }}
-      control="" onSaved={onSaved} />));
-    await act(async () => host.querySelector('details')?.setAttribute('open', ''));
-    const button = () => [...host.querySelectorAll('button')].find(item => item.textContent === 'Convert with Seed-VC')!;
+      converter="seed_vc" onSaved={onSaved} />));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    const button = () => [...host.querySelectorAll('button')].find(item => item.textContent === 'Replace the voice')!;
     expect(button().disabled).toBe(true);
     const file = new File(['sample audio'], 'voice.wav', { type: 'audio/wav' });
-    const input = host.querySelector('input')!;
+    const input = host.querySelector<HTMLInputElement>('input[type=file]')!;
     await act(async () => {
       Object.defineProperty(input, 'files', { value: [file] });
       input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -33,7 +33,7 @@ it('uploads the sample, converts the selected source and exposes the separate ta
     const upload = requests.mock.calls.find(([url]) => url.endsWith('/processing/reference'))!;
     expect(((upload[1]?.body as FormData).get('audio') as File).name).toBe('voice.wav');
     const conversion = requests.mock.calls.find(([url, init]) => url.endsWith('/seed-vc') && init?.method === 'POST')!;
-    expect(JSON.parse(String(conversion[1]?.body))).toEqual({ song_id: 'original', upload_id: 'reference-42.wav' });
+    expect(JSON.parse(String(conversion[1]?.body))).toEqual({ song_id: 'original', upload_id: 'reference-42.wav', model: 'seed_vc' });
     expect(host.querySelector('audio')?.getAttribute('src')).toMatch(/\/v1\/library\/media\/new-take$/);
     expect(onSaved).toHaveBeenCalledOnce();
   } finally {
