@@ -132,7 +132,6 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
   return (
     <div className="mt-3 space-y-2 text-xs">
       <p className="text-zinc-600 dark:text-zinc-300">{labels.keepOriginal}</p>
-      {!hasStems && <p role="status">{labels.stemsNeeded}</p>}
       {!setup && !error && <p role="status">{labels.checking}</p>}
       {candidate && backendStatus && backendStatus.ready && <p>{labels.effective.replace('{backend}', engineName(candidate))}</p>}
       {candidate && backendStatus && !backendStatus.ready && backendStatus.can_start && (

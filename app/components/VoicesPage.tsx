@@ -1,7 +1,8 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { FileUp, Mic, Trash2, Wand2 } from 'lucide-react';
+import { FileUp, Loader2, Mic, Trash2, Wand2 } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { rvcVoiceStrings } from '../i18n/rvcVoices';
+import { rvcApplyStrings } from '../i18n/rvcApply';
 import { voicesPageStrings } from '../i18n/voicesPage';
 import { responseJson, type Voice, voiceName } from '../services/rvcVoices';
 import { chooseLastRvcVoice, clearLastRvcVoice, useLastRvcVoice } from '../services/rvcQuick';
@@ -16,6 +17,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { RvcCuratedVoices } from './RvcCuratedVoices';
 import { RvcApplyVoice } from './RvcApplyVoice';
 import { SeedVcApply, voiceModels, type Converter } from './SeedVcApply';
+import { soundSourceStrings } from '../i18n/soundSource';
 import { ToolModelPicker } from './ToolModelPicker';
 import { TrainingPanel } from './TrainingPanel';
 
@@ -204,6 +206,9 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
   const [songId, setSongId] = useState(initialSongId ?? '');
   const [stems, setStems] = useState<string[] | null>(null);
   const [stemsError, setStemsError] = useState<string | null>(null);
+  const [stemsRevision, setStemsRevision] = useState(0);
+  const [splitting, setSplitting] = useState(false);
+  const take = soundSourceStrings[language];
   useEffect(() => {
     if (!songId) { setStems(null); return; }
     const controller = new AbortController();
@@ -213,7 +218,32 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
       .then(body => { if (!controller.signal.aborted) { setStems(body.stems); setStemsError(null); } })
       .catch((failure: Error) => { if (!controller.signal.aborted) setStemsError(failure.message); });
     return () => controller.abort();
-  }, [songId]);
+  }, [songId, stemsRevision]);
+  const hasVocals = Boolean(stems?.includes('vocals'));
+  // the form needs the song's vocal apart from its music, whichever model replaces it: separated here, not elsewhere
+  const split = async () => {
+    setSplitting(true);
+    setStemsError(null);
+    try {
+      const started = await fetch(`/v1/library/songs/${encodeURIComponent(songId)}/stems`, { method: 'POST' });
+      if (!started.ok) {
+        const body = await started.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error || String(started.status));
+      }
+      for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const body = await fetch(`/v1/library/songs/${encodeURIComponent(songId)}/stems`, { headers: SELF_READ }).then(responseJson<{ stems: string[] }>);
+        if (body.stems.includes('vocals')) break;
+        const run = await fetch('/v1/separation', { headers: SELF_READ }).then(response => response.json()).catch(() => null) as { run?: { done?: boolean; error?: string | null } } | null;
+        if (run?.run?.done && run.run.error) throw new Error(run.run.error);
+      }
+      setStemsRevision(value => value + 1);
+    } catch (failure) {
+      setStemsError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setSplitting(false);
+    }
+  };
   const song = songs.find(entry => entry.id === songId);
   const [model, setModel] = useState<'rvc' | Converter>('rvc');
   return (
@@ -222,6 +252,14 @@ function ApplyToTrack({ voices, voice, initialSongId, onSaved, onOpenCatalog }: 
         {library.isSuccess && songs.length === 0 ? <><FieldLabel>{text.track}</FieldLabel><p className="text-zinc-500 dark:text-zinc-400">{text.noTracks}</p></>
           : <LibrarySongPicker label={text.track} value={songId} placeholder={text.chooseTrack} controlClassName={CONTROL} onChange={setSongId} />}
       </div>
+      {song && stems && !hasVocals && (
+        <div className="flex flex-wrap items-center gap-2 text-[13px] leading-[18px] text-zinc-600 dark:text-zinc-400">
+          <span>{rvcApplyStrings[language].stemsNeeded}</span>
+          <SecondaryButton disabled={splitting} onClick={() => void split()}>
+            {splitting ? <><Loader2 size={13} className="animate-spin" />{take.splitting}</> : take.splitVocals}
+          </SecondaryButton>
+        </div>
+      )}
       <ToolModelPicker<'rvc' | Converter> tool="voice" value={model} onChange={setModel} models={voiceModels(language)} showDevice={model !== 'rvc'} />
       {model === 'rvc' && (
         <div className="grid content-start text-xs">
