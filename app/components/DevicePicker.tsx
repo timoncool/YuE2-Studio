@@ -18,7 +18,9 @@ export const DevicePicker: React.FC<{
   onChange: (value: Device) => void;
   /** The card is not offered when its runtime is not installed. */
   cardAvailable?: boolean;
-}> = ({ value, onChange, cardAvailable = true }) => {
+  /** What a choice becomes on this computer, after its name: `Graphics card · CUDA 13`. */
+  detail?: Partial<Record<Device, string>>;
+}> = ({ value, onChange, cardAvailable = true, detail }) => {
   const { t } = useI18n();
   // the card chosen without its runtime runs on the processor, the way auto does
   const shown = value === 'cuda' && !cardAvailable ? 'auto' : value;
@@ -37,6 +39,7 @@ export const DevicePicker: React.FC<{
           }`}
         >
           {t(device === 'auto' ? 'separationRuntimeAuto' : device === 'cuda' ? 'separationRuntimeGpu' : 'separationRuntimeCpu')}
+          {detail?.[device] && <span className="font-normal opacity-80"> · {detail[device]}</span>}
         </button>
       ))}
     </div>

@@ -17,8 +17,9 @@ pub enum Device {
     Cpu,
 }
 
-/// Every tool with a device of its own. Stems keep theirs in the separation settings (`runtime`), shown here too.
-pub const TOOLS: [&str; 6] = ["stems", "midi", "restore", "effects", "foley", "voice"];
+/// Every tool with a device of its own. Stems keep theirs in the separation settings and recognition in the karaoke
+/// recogniser's (`runtime`), shown here too.
+pub const TOOLS: [&str; 7] = ["stems", "midi", "restore", "recognise", "effects", "foley", "voice"];
 
 /// The choices made in the window, by tool; a tool not in it has never been set.
 pub type ToolDevices = BTreeMap<String, Device>;

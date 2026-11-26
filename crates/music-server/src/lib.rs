@@ -2749,6 +2749,9 @@ async fn tool_device_of(state: &AppState, tool: &str) -> tool_device::Device {
     if tool == "stems" {
         return stems;
     }
+    if tool == "recognise" {
+        return tool_device::Device::from_runtime(state.lyrics_sync_config.read().await.runtime);
+    }
     if let Some(device) = state.tool_devices.read().await.get(tool) {
         return *device;
     }
@@ -2769,17 +2772,34 @@ async fn tool_build(state: &AppState, tool: &str) -> anyhow::Result<acpp_server:
     tool_device::build(tool, tool_device_of(state, tool).await)
 }
 
+/// The name of the build a tool computes on for a device. Recognition names transcribe.cpp's build while Parakeet
+/// hears, audio.cpp's while Whisper does.
+fn tool_build_name(tool: &str, device: tool_device::Device, whisper: bool) -> anyhow::Result<&'static str> {
+    if tool == "recognise" && !whisper {
+        return match lyrics_sync::parakeet_build(device.runtime()) {
+            Some(dub_tcpp::Build::Cuda) => Ok("CUDA 13"),
+            Some(dub_tcpp::Build::Cuda12) => Ok("CUDA 12"),
+            Some(dub_tcpp::Build::Vulkan) => Ok("Vulkan"),
+            Some(dub_tcpp::Build::Cpu) => Ok("cpu"),
+            None => anyhow::bail!("transcribe.cpp has no build for this system"),
+        };
+    }
+    tool_device::build(tool, device).map(tool_device::build_name)
+}
+
 /// Every tool's device, the build it becomes on this computer, and what the card is here.
 async fn read_tool_devices(State(state): State<AppState>) -> Json<Value> {
+    let whisper = karaoke_on_whisper(&*state.lyrics_sync_config.read().await);
     let mut tools = serde_json::Map::new();
     for tool in tool_device::TOOLS {
         let device = tool_device_of(&state, tool).await;
-        let build = tool_device::build(tool, device);
+        let build = tool_build_name(tool, device, whisper);
         tools.insert(tool.into(), serde_json::json!({
             "device": device,
-            "build": build.as_ref().ok().map(|build| tool_device::build_name(*build)),
+            "build": build.as_ref().ok(),
             "error": build.as_ref().err().map(|error| format!("{error:#}")),
-            "card": tool_device::build(tool, tool_device::Device::Card).ok().map(tool_device::build_name),
+            "auto": tool_build_name(tool, tool_device::Device::Auto, whisper).ok(),
+            "card": tool_build_name(tool, tool_device::Device::Card, whisper).ok(),
         }));
     }
     Json(serde_json::json!({ "tools": tools }))
@@ -2802,6 +2822,8 @@ async fn write_tool_device(
     tool_device::build(&tool, request.device).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
     if tool == "stems" {
         state.separation_config.write().await.runtime = request.device.runtime();
+    } else if tool == "recognise" {
+        state.lyrics_sync_config.write().await.runtime = request.device.runtime();
     } else {
         state.tool_devices.write().await.insert(tool.clone(), request.device);
     }

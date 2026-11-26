@@ -2768,7 +2768,7 @@ fn tools() -> &'static [Tool] {
             },
             Tool {
                 name: "tool_devices_get",
-                description: "Where each tool computes: for stems, midi, restore, effects, foley and voice its device (auto, cuda for the card of any make, cpu), the audio.cpp build that becomes on this computer (CUDA 13, CUDA 12, Vulkan, Metal, cpu) and the card's build here.",
+                description: "Where each tool computes: for stems, midi, restore, recognise (the karaoke recogniser's device), effects, foley and voice its device (auto, cuda for the card of any make, cpu), the audio.cpp build that becomes on this computer (CUDA 13, CUDA 12, Vulkan, Metal, cpu) and the card's build here.",
                 schema: nothing,
                 call: |_| get("/v1/tools/devices".into()),
             },
@@ -2776,7 +2776,7 @@ fn tools() -> &'static [Tool] {
                 name: "tool_device_set",
                 description: "Choose where one tool computes: auto, cuda (the card of any make: CUDA, Vulkan or Metal) or cpu. Audio to MIDI on a non-NVIDIA card computes on the processor. A build not yet installed downloads on the tool's next use or its install action.",
                 schema: || object(json!({
-                    "tool": { "type": "string", "enum": ["stems", "midi", "restore", "effects", "foley", "voice"] },
+                    "tool": { "type": "string", "enum": ["stems", "midi", "restore", "recognise", "effects", "foley", "voice"] },
                     "device": { "type": "string", "enum": ["auto", "cuda", "cpu"] },
                 }), &["tool", "device"]),
                 call: |args| send(Method::PUT, format!("/v1/tools/devices/{}", segment(&text(args, "tool")?)), json!({ "device": text(args, "device")? })),

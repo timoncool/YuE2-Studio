@@ -50,7 +50,7 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
     'vocal-fast-rs': { ready: false, reason: 'Unavailable on this machine.' },
     'audio.cpp': { ready: true, missing_bytes: 0 },
   } };
-  const fetchRvc = vi.fn(async (url: string, _init?: RequestInit) => Response.json(url.endsWith('/setup') ? ready : {
+  const fetchRvc = vi.fn(async (url: string, _init?: RequestInit) => Response.json(url.endsWith('/setup') ? ready : url === '/v1/tools/devices' ? { tools: { voice: { device: 'auto', build: 'CUDA 13', error: null, auto: 'CUDA 13', card: 'CUDA 13' } } } : {
     song_id: 'new-take', audio_url: '/v1/library/media/new-take',
     requested_backend: 'audio.cpp', effective_backend: 'audio.cpp',
   }));
@@ -71,7 +71,7 @@ it('keeps explicit RVC backend selection and saves an audio.cpp take from the se
       act(() => { select.click(); });
       act(() => { [...document.querySelectorAll<HTMLElement>('[role="listbox"][aria-label="Voice engine"] [role="option"]')].find(option => option.textContent === label)!.click(); });
     };
-    choose('Fast, on the graphics card');
+    choose('Fast, on an NVIDIA card (CUDA)');
     expect(apply.disabled).toBe(true);
     expect(host.textContent).toContain('Unavailable on this machine.');
     choose('Spare (audio.cpp)');

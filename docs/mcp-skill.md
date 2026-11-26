@@ -479,7 +479,7 @@ move around. Check the result with `ui_screenshot`.
 - **karaoke**: `karaoke_make`, `karaoke_settings_get`, `karaoke_settings_set`, `recogniser_install`, `recogniser_remove`, `recogniser_cancel_download`, `karaoke_delete`, `karaoke_set` (the person's own .srt, .ass or .lrc, or edited LRC lines), `lyrics_recognise` (the lyrics a song or an audio file sings, heard by the karaoke recogniser).
 - **stems**: `stems_split`, `stems_get`.
 - **separator**: `separator_status`, `separator_runtime`, `separator_runtime_install`, `separator_cancel_download`, `separator_install`, `separator_remove`, `separator_settings_get`, `separator_settings_set`.
-- **where tools compute**: `tool_devices_get`, `tool_device_set` — one device per tool (stems, midi, restore, effects, foley, voice): auto, cuda (the card of any make: CUDA, Vulkan or Metal) or cpu, and the audio.cpp build it becomes here.
+- **where tools compute**: `tool_devices_get`, `tool_device_set` — one device per tool (stems, midi, restore, recognise, effects, foley, voice): auto, cuda (the card of any make: CUDA, Vulkan or Metal) or cpu, and the audio.cpp build it becomes here.
 - **midi**: `midi_status`, `midi_transcribe`, `midi_get`, `midi_delete`, `midi_install`, `midi_remove`, `midi_cancel`, `midi_set` (a .mid of your own).
 - **processing**: `processing_start`, `processing_get`, `processing_keep`, `processing_discard`, `processing_set_reference`.
 - **vst**: `vst_list`, `vst_scan`, `vst_open_editor`.

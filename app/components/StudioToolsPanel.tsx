@@ -6,7 +6,7 @@ import { useI18n } from '../context/I18nContext';
 import { poll } from '../services/poll';
 import { saveFile } from '../services/saveFile';
 import { tempoAndKey } from '../services/songDownload';
-import { DevicePicker } from './DevicePicker';
+import { ToolDevice } from './ToolDevice';
 import { transcribeWithNativeOpenRouter } from '../services/nativeOpenRouter';
 import { apiUrl } from '../services/apiBase';
 import { openAudioEditor } from '../services/audioEditor';
@@ -447,11 +447,9 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
             </div>
           </div>
           <div className="grid text-xs">
-            <FieldLabel>{t('separationRuntime')}</FieldLabel>
-            <fieldset disabled={busy || running || !status}>
-              <DevicePicker value={settings.runtime} onChange={choice => void saveSettings({ ...settings, runtime: choice })}
-                cardAvailable={Boolean(status?.card && status?.card_runtime_installed)} />
-            </fieldset>
+            <ToolDevice tool="stems" disabled={busy || running || !status}
+              cardAvailable={Boolean(status?.card && status?.card_runtime_installed)}
+              onChange={() => { settingsRevision.current += 1; setStatus(null); void refresh(); }} />
             {status?.card && !status?.card_runtime_installed && status?.engine !== 'roformer' && (
               <button type="button" onClick={() => openSettings('models')} className="mt-2 justify-self-start text-left text-[13px] text-amber-700 underline underline-offset-2 dark:text-amber-300">
                 {t('separationInstallGpu')}{status?.card_missing_bytes ? ` · ${bytesText(status.card_missing_bytes)}` : ''}
@@ -528,6 +526,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
             <Combobox label={page.language} value={asrLanguage} onChange={setAsrLanguage} className="max-w-xs" inputClassName={CONTROL}
               options={[{ value: '', label: page.autoLanguage }, ...languages.map(code => ({ value: code, label: languageName(code) }))]} />
           </div>
+          {asrWay === 'karaoke' && <ToolDevice tool="recognise" disabled={asrBusy} />}
         </ToolCard>
       );
       case 'process': return (
