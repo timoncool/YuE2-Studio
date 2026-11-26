@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { voicesPageStrings } from '../i18n/voicesPage';
 import { karaokeStatusChanged, playlistsChanged, useSystemResources } from '../services/studioQueries';
-import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, CheckSquare, ChevronDown, Clock, ChevronLeft, ChevronRight, Cpu, Download, FolderInput, FolderOpen, FolderOutput, Headphones, Library, Loader2, Mic, Mic2, MoreHorizontal, Music, Play, Plus, RotateCcw, Search, Square, Trash2, UploadCloud, Wand2, X } from 'lucide-react';
 import { useI18n } from '../context/I18nContext';
 import { trainingAssetLabel } from '../i18n/trainingAssets';
 import { poll } from '../services/poll';
@@ -12,6 +12,9 @@ import { ManualRuntimeArchive } from './ManualDownloads';
 import { StemPlayer } from './StemPlayer';
 import { TrainingGuide } from './TrainingGuide';
 import { Select } from './kit/Select';
+import { SoundSource } from './kit/SoundSource';
+import { libraryTrackFile } from '../services/libraryFile';
+import { soundSourceStrings } from '../i18n/soundSource';
 import { voiceTrainingGuide } from '../i18n/voiceTrainingGuide';
 import { RvcBurnTraining, rvcBurnText } from './RvcBurnTraining';
 import { HotStepSa3Training, sa3TrainingText } from './HotStepSa3Training';
@@ -591,6 +594,8 @@ const SongsStep: React.FC<{
     setPage(next);
   };
   const [picking, setPicking] = useState(false);
+  const [recordingMic, setRecordingMic] = useState(false);
+  const { language } = useI18n();
   const [describing, setDescribing] = useState<string[]>([]);
   const mine = job && job.dataset === dataset.id ? job : null;
   const jobBusy = Boolean(job && !job.finished) || Boolean(state.active);
@@ -619,7 +624,17 @@ const SongsStep: React.FC<{
     return (
       <div className="space-y-3">
         <TrainingDropZone onPicked={onAdd} />
-        <div className="flex justify-center"><button type="button" onClick={() => setPicking(value => !value)} className={OUTLINE}><Library size={13} />{t('trainingAddLibrary')}</button></div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <button type="button" onClick={() => setPicking(value => !value)} className={OUTLINE}><Library size={13} />{t('trainingAddLibrary')}</button>
+          <button type="button" onClick={() => setRecordingMic(value => !value)} className={OUTLINE}><Mic size={13} />{t('trainingRecordMic')}</button>
+        </div>
+        {recordingMic && (
+          <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+            <SoundSource place="training-mic" label={t('trainingRecordMic')} sources={['mic']} need={{ min: 3, good: 30, max: 600 }} value={null}
+              titleFor={() => `${soundSourceStrings[language].recordingTitle} · ${new Date().toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+              onChange={pick => { if (pick) onAddLibrary([pick.songId]); }} />
+          </div>
+        )}
         {picking && <LibraryPicker exclude={exclude} onAdd={ids => { setPicking(false); onAddLibrary(ids); }} onClose={() => setPicking(false)} />}
       </div>
     );
@@ -675,6 +690,7 @@ const SongsStep: React.FC<{
           <MoreMenu
             items={[
               { label: t('trainingAddLibrary'), icon: <Library size={14} />, onClick: () => setPicking(true), disabled: Boolean(adding) },
+              { label: t('trainingRecordMic'), icon: <Mic size={14} />, onClick: () => setRecordingMic(true), disabled: Boolean(adding) },
               { label: t('trainingFillWithoutAsr'), icon: <Wand2 size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'missing', skip_asr: true }), disabled: jobBusy },
               { label: t('trainingAutofillAll'), icon: <Mic2 size={14} />, onClick: () => onPrepare({ lyrics: 'all', style: 'missing' }), disabled: jobBusy },
               ...(listenReady ? [{ label: t('trainingListenAll'), icon: <Headphones size={14} />, onClick: () => onPrepare({ lyrics: 'missing', style: 'all' }), disabled: jobBusy }] : []),
@@ -691,6 +707,13 @@ const SongsStep: React.FC<{
           </div>
         )}
         {picking && <LibraryPicker exclude={exclude} onAdd={ids => { setPicking(false); onAddLibrary(ids); }} onClose={() => setPicking(false)} />}
+        {recordingMic && (
+          <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+            <SoundSource place="training-mic" label={t('trainingRecordMic')} sources={['mic']} need={{ min: 3, good: 30, max: 600 }} value={null}
+              titleFor={() => `${soundSourceStrings[language].recordingTitle} · ${new Date().toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+              onChange={pick => { if (pick) onAddLibrary([pick.songId]); }} />
+          </div>
+        )}
 
         <div className="mt-3 divide-y divide-zinc-200 dark:divide-white/10">
           {dataset.items.slice(offset, last).map((item, visibleIndex) => {
@@ -917,6 +940,8 @@ const TrainStep: React.FC<{ state: TrainingState; recipe: Recipe; setRecipe: (re
 /** The datasets as cards, and the drop zone that makes a new one. */
 const DatasetList: React.FC<{ state: TrainingState; busy: boolean; onOpen: (id: string) => void; onNew: (files: PickedFile[]) => void; onImport: (files: File[]) => void; importing: boolean }> = ({ state, busy, onOpen, onNew, onImport, importing }) => {
   const { t, songs } = useStrings();
+  const { language } = useI18n();
+  const [recordingMic, setRecordingMic] = useState(false);
   const importPicker = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     importPicker.current?.setAttribute('webkitdirectory', '');
@@ -925,6 +950,16 @@ const DatasetList: React.FC<{ state: TrainingState; busy: boolean; onOpen: (id: 
   return (
     <div className="space-y-4">
       <TrainingDropZone onPicked={onNew} disabled={busy} />
+      <div className="flex justify-center">
+        <button type="button" onClick={() => setRecordingMic(value => !value)} disabled={busy} className={OUTLINE}><Mic size={13} />{t('trainingRecordMic')}</button>
+      </div>
+      {recordingMic && (
+        <div className="rounded-xl border border-zinc-200 p-3 dark:border-white/10">
+          <SoundSource place="training-mic" label={t('trainingRecordMic')} sources={['mic']} need={{ min: 3, good: 30, max: 600 }} value={null}
+            titleFor={() => `${soundSourceStrings[language].recordingTitle} · ${new Date().toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+            onChange={pick => { if (pick) void libraryTrackFile(pick.songId, pick.title).then(file => onNew([{ file, folder: '' }])); }} />
+        </div>
+      )}
       {state.datasets.length > 0 && (
         <div className="flex items-center justify-between">
           <p className={LABEL}>{t('trainingDatasets')}</p>

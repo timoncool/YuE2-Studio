@@ -31,15 +31,7 @@ import { FieldLabel } from './kit/FieldLabel';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
 import { SoundSource, type SoundPick } from './kit/SoundSource';
 import { soundSourceStrings } from '../i18n/soundSource';
-
-/** A library track's sound as a file, for a service that takes a file (the cloud recogniser). */
-async function trackFile(songId: string, title: string): Promise<File> {
-  const response = await fetch(`/v1/library/media/${encodeURIComponent(songId)}`);
-  if (!response.ok) throw new Error(`${title}: ${response.status}`);
-  const blob = await response.blob();
-  const extension = ({ 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/mpeg': 'mp3', 'audio/flac': 'flac', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a' } as Record<string, string>)[blob.type] ?? 'wav';
-  return new File([blob], `${title}.${extension}`, { type: blob.type || 'audio/wav' });
-}
+import { libraryTrackFile } from '../services/libraryFile';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
 import { ManualRuntimeArchive, type RuntimeArchive } from './ManualDownloads';
@@ -290,7 +282,7 @@ export function StudioToolsPanel({ initialSongId, initialTool, onGenerateEffect,
       const language = asrLanguage || undefined;
       setAsrText(asrWay === 'karaoke'
         ? await recogniseLyrics({ songId }, language)
-        : await transcribeWithNativeOpenRouter(asrModel, await trackFile(songId, chosen?.title ?? 'track'), language));
+        : await transcribeWithNativeOpenRouter(asrModel, await libraryTrackFile(songId, chosen?.title ?? 'track'), language));
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason);
       setAsrError(karaokeReason(t, message) ?? message);

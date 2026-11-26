@@ -2348,6 +2348,7 @@ export const pt = {
     trainingTrigger: 'Palavra-chave',
     trainingTriggerHint: 'Uma palavra rara que liga a LoRA; escolher a LoRA na página Criar acrescenta-a automaticamente.',
     trainingAddLibrary: 'Da biblioteca',
+    trainingRecordMic: 'Do microfone',
     trainingStyle: 'Estilo',
     trainingLyrics: 'Letra',
     trainingInstrumental: 'Instrumental',
