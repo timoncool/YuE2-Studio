@@ -1,7 +1,7 @@
 {
  "product": "yue2-studio",
- "sequence": 15,
- "published": "2026-11-23",
+ "sequence": 16,
+ "published": "2026-11-26",
  "files": {
   "acestep-v15-base-Q4_K_M.gguf": {
    "label": "acestep-v15-base-Q4_K_M.gguf",
