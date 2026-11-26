@@ -324,10 +324,20 @@ pub(super) const LONGEST_SAMPLE: f64 = 25.0;
 /// The `seconds` of a recording that sound the most (the loudest by energy, one-second steps); a shorter recording is
 /// kept whole. A long sample is held to what the converters take instead of being refused.
 pub(super) fn loudest_window(audio: audio_post::Stereo, seconds: f64) -> audio_post::Stereo {
+    let start = loudest_start(&audio, seconds);
+    let length = ((seconds * audio.rate as f64) as usize).min(audio.frames());
+    if start == 0 && length == audio.frames() {
+        return audio;
+    }
+    audio_post::Stereo::new(audio.left[start..start + length].to_vec(), audio.right[start..start + length].to_vec(), audio.rate)
+}
+
+/// The first frame of [`loudest_window`]'s piece.
+pub(super) fn loudest_start(audio: &audio_post::Stereo, seconds: f64) -> usize {
     let rate = audio.rate as usize;
     let length = (seconds * audio.rate as f64) as usize;
     if audio.frames() <= length || rate == 0 {
-        return audio;
+        return 0;
     }
     let energy: Vec<f64> = audio.left.iter().zip(&audio.right).map(|(l, r)| f64::from(l * l + r * r)).collect();
     let mut sum: f64 = energy[..length].iter().sum();
@@ -340,7 +350,7 @@ pub(super) fn loudest_window(audio: audio_post::Stereo, seconds: f64) -> audio_p
             (best, best_at) = (sum, at);
         }
     }
-    audio_post::Stereo::new(audio.left[best_at..best_at + length].to_vec(), audio.right[best_at..best_at + length].to_vec(), audio.rate)
+    best_at
 }
 
 /// Use the original vocal's activity on its original timeline. Keep note tails

@@ -3625,10 +3625,14 @@ async fn upload_processing_reference(
 #[derive(Debug, Deserialize)]
 struct ReferenceFromSong {
     song_id: String,
+    /// The piece the person chose, in seconds of the song; the most sounding 25 seconds when absent.
+    start: Option<f64>,
+    end: Option<f64>,
 }
 
-/// A voice sample taken from a library song: its vocal stem when it has one, else the song itself, held to its most
-/// sounding 25 seconds; the answer is the upload a voice conversion takes.
+/// A voice sample taken from a library song: its vocal stem when it has one, else the song itself, held to the piece
+/// the person chose or its most sounding 25 seconds; the answer is the upload a voice conversion takes, the piece taken
+/// and the length of the whole.
 async fn reference_from_song(State(state): State<AppState>, Json(request): Json<ReferenceFromSong>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let song = state.library.get_song(&request.song_id).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
         .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("Song {} not found", request.song_id)))?;
@@ -3644,16 +3648,35 @@ async fn reference_from_song(State(state): State<AppState>, Json(request): Json<
     let folder = processing::workspace(state.library.media_dir());
     let upload_id = format!("reference-{}.wav", uuid::Uuid::now_v7().simple());
     let target = folder.join(&upload_id);
-    let seconds = tokio::task::spawn_blocking(move || -> anyhow::Result<f64> {
+    let (asked_start, asked_end) = (request.start, request.end);
+    let (start, end, total) = tokio::task::spawn_blocking(move || -> anyhow::Result<(f64, f64, f64)> {
         std::fs::create_dir_all(&folder)?;
-        let sample = seed_vc::loudest_window(audio_pcm::decode_stereo(&source)?, seed_vc::LONGEST_SAMPLE);
+        let whole = audio_pcm::decode_stereo(&source)?;
+        let rate = f64::from(whole.rate);
+        let total = whole.frames() as f64 / rate;
+        let (first, last) = match (asked_start, asked_end) {
+            (Some(start), Some(end)) if end > start => {
+                let first = ((start.max(0.0) * rate) as usize).min(whole.frames());
+                let last = ((end.min(start + seed_vc::LONGEST_SAMPLE) * rate) as usize).clamp(first, whole.frames());
+                (first, last)
+            }
+            _ => {
+                let first = seed_vc::loudest_start(&whole, seed_vc::LONGEST_SAMPLE);
+                (first, (first + (seed_vc::LONGEST_SAMPLE * rate) as usize).min(whole.frames()))
+            }
+        };
+        anyhow::ensure!(last > first, "The chosen piece of the song is empty.");
+        let sample = audio_post::Stereo::new(whole.left[first..last].to_vec(), whole.right[first..last].to_vec(), whole.rate);
         std::fs::write(&target, audio_pcm::wav_f32_bytes(&sample)?)?;
-        Ok(sample.frames() as f64 / f64::from(sample.rate))
+        Ok((first as f64 / rate, last as f64 / rate, total))
     })
     .await
     .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
     .map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
-    Ok(Json(serde_json::json!({ "upload_id": upload_id, "name": song.title, "seconds": seconds, "from": from })))
+    Ok(Json(serde_json::json!({
+        "upload_id": upload_id, "name": song.title, "from": from,
+        "start": start, "end": end, "seconds": end - start, "total_seconds": total,
+    })))
 }
 
 #[derive(Debug, Deserialize)]
@@ -4819,7 +4842,7 @@ async fn restore_download(state: &AppState) -> Option<downloads::DownloadProgres
     }
 }
 
-/// The microphones, the level the recording hears and how long it has run.
+/// The microphones, the level the recording hears, how long it has run and whether it reached its limit.
 async fn mic_state() -> Json<Value> {
     let devices = tokio::task::spawn_blocking(mic::input_devices).await.unwrap_or_default();
     Json(serde_json::json!({
@@ -4827,12 +4850,23 @@ async fn mic_state() -> Json<Value> {
         "recording": mic::in_use().is_some(),
         "seconds": mic::in_use().map(|since| since.as_secs_f64()),
         "level": mic::level(),
+        "full": mic::full(),
     }))
 }
+
+/// A refusal of the microphone: a code the window words in the person's language, and the system's words.
+fn mic_refusal(status: StatusCode, code: &str, detail: impl Into<String>) -> (StatusCode, Json<Value>) {
+    (status, Json(serde_json::json!({ "error": detail.into(), "code": code })))
+}
+
+/// The longest take the microphone records when the window names none, and the most it may name.
+const MIC_LIMIT_SECONDS: f64 = 600.0;
 
 #[derive(Deserialize, Default)]
 struct MicStart {
     device: Option<String>,
+    /// Seconds after which the take keeps what it has; at most ten minutes.
+    limit_seconds: Option<f64>,
 }
 
 fn mic_take_path(state: &AppState) -> PathBuf {
@@ -4840,41 +4874,58 @@ fn mic_take_path(state: &AppState) -> PathBuf {
 }
 
 /// Starts recording from the microphone: the person's button only; a tool's request is refused.
-async fn mic_start(State(state): State<AppState>, headers: axum::http::HeaderMap, body: Option<Json<MicStart>>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+async fn mic_start(State(state): State<AppState>, headers: axum::http::HeaderMap, body: Option<Json<MicStart>>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if headers.contains_key(mcp::AGENT_HEADER) {
-        return Err(api_error(StatusCode::FORBIDDEN, "The microphone is the person's: only their button turns it on.".into()));
+        return Err(mic_refusal(StatusCode::FORBIDDEN, "person_only", "The microphone is the person's: only their button turns it on."));
     }
-    let device = body.and_then(|Json(body)| body.device).filter(|device| !device.trim().is_empty());
+    let body = body.map(|Json(body)| body).unwrap_or_default();
+    let device = body.device.filter(|device| !device.trim().is_empty());
+    let limit = Some(body.limit_seconds.unwrap_or(MIC_LIMIT_SECONDS).clamp(1.0, MIC_LIMIT_SECONDS));
     let path = mic_take_path(&state);
-    tokio::task::spawn_blocking(move || mic::start(&path, device))
+    tokio::task::spawn_blocking(move || mic::start(&path, device, limit))
         .await
-        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        .map_err(|error| api_error(StatusCode::CONFLICT, error))?;
-    Ok(Json(serde_json::json!({ "recording": true })))
+        .map_err(|error| mic_refusal(StatusCode::INTERNAL_SERVER_ERROR, "unavailable", error.to_string()))?
+        .map_err(|refusal| mic_refusal(StatusCode::CONFLICT, refusal.code, refusal.detail))?;
+    Ok(Json(serde_json::json!({ "recording": true, "limit_seconds": limit })))
 }
 
 #[derive(Deserialize, Default)]
 struct MicStop {
+    /// The library song's name, in the person's language, given by the place that records.
     title: Option<String>,
+    /// Drops the take: a cancelled countdown, or a take to record again.
+    #[serde(default)]
+    discard: bool,
+    /// A take shorter than this is dropped with `too_short`.
+    min_seconds: Option<f64>,
 }
 
 /// Stops recording and keeps the take as a library song, which every tool takes from there.
-async fn mic_stop(State(state): State<AppState>, headers: axum::http::HeaderMap, body: Option<Json<MicStop>>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+async fn mic_stop(State(state): State<AppState>, headers: axum::http::HeaderMap, body: Option<Json<MicStop>>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if headers.contains_key(mcp::AGENT_HEADER) {
-        return Err(api_error(StatusCode::FORBIDDEN, "The microphone is the person's: only their button turns it off.".into()));
+        return Err(mic_refusal(StatusCode::FORBIDDEN, "person_only", "The microphone is the person's: only their button turns it off."));
     }
+    let body = body.map(|Json(body)| body).unwrap_or_default();
     let path = tokio::task::spawn_blocking(mic::stop)
         .await
-        .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
-        .map_err(|error| api_error(StatusCode::CONFLICT, error))?;
-    let (peak, seconds) = mic::measure(&path).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+        .map_err(|error| mic_refusal(StatusCode::INTERNAL_SERVER_ERROR, "unavailable", error.to_string()))?
+        .map_err(|error| mic_refusal(StatusCode::CONFLICT, "not_recording", error))?;
+    if body.discard {
+        let _ = std::fs::remove_file(&path);
+        return Ok(Json(serde_json::json!({ "discarded": true })));
+    }
+    let (peak, seconds) = mic::measure(&path).map_err(|error| mic_refusal(StatusCode::INTERNAL_SERVER_ERROR, "unavailable", error))?;
     if peak < mic::SILENT_PEAK {
         let _ = std::fs::remove_file(&path);
-        return Err(api_error(StatusCode::BAD_REQUEST, "The recording is silent: the microphone is muted or closed to the studio in the system's privacy settings.".into()));
+        return Err(mic_refusal(StatusCode::BAD_REQUEST, "silent", "The recording is silent: the microphone is muted or closed to the studio in the system's privacy settings."));
     }
-    let audio = std::fs::read(&path).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{}: {error}", path.display())))?;
+    if body.min_seconds.is_some_and(|least| seconds < least) {
+        let _ = std::fs::remove_file(&path);
+        return Err(mic_refusal(StatusCode::BAD_REQUEST, "too_short", format!("The recording is {seconds:.1} s, shorter than the {:.0} s needed.", body.min_seconds.unwrap_or_default())));
+    }
+    let audio = std::fs::read(&path).map_err(|error| mic_refusal(StatusCode::INTERNAL_SERVER_ERROR, "unavailable", format!("{}: {error}", path.display())))?;
     let _ = std::fs::remove_file(&path);
-    let title = body.and_then(|Json(body)| body.title).map(|title| title.trim().to_string()).filter(|title| !title.is_empty()).unwrap_or_else(|| "Voice recording".into());
+    let title = body.title.map(|title| title.trim().to_string()).filter(|title| !title.is_empty()).unwrap_or_else(|| "Voice recording".into());
     let song = state.library.import_audio_song(library::AudioImportInput {
         title,
         caption: String::new(),
@@ -4886,7 +4937,7 @@ async fn mic_stop(State(state): State<AppState>, headers: axum::http::HeaderMap,
         source: "mic".into(),
         audio_extension: "wav".into(),
         audio,
-    }).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("{error:#}")))?.song;
+    }).map_err(|error| mic_refusal(StatusCode::INTERNAL_SERVER_ERROR, "unavailable", format!("{error:#}")))?.song;
     Ok(Json(serde_json::json!({ "song_id": song.id, "title": song.title, "seconds": seconds, "peak": peak })))
 }
 

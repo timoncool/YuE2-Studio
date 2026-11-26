@@ -12,6 +12,43 @@ struct RecState {
     since: std::time::Instant,
 }
 
+/// Why the microphone did not record: a code the window words in the person's language, and the system's own words.
+#[derive(Debug, Clone)]
+pub struct Refusal {
+    pub code: &'static str,
+    pub detail: String,
+}
+
+impl Refusal {
+    fn new(code: &'static str, detail: impl Into<String>) -> Self {
+        Self { code, detail: detail.into() }
+    }
+}
+
+/// Samples the recording still takes before its limit; past it the take keeps what it has and `full` says so.
+fn room_cell() -> &'static std::sync::atomic::AtomicU64 {
+    static R: OnceLock<std::sync::atomic::AtomicU64> = OnceLock::new();
+    R.get_or_init(|| std::sync::atomic::AtomicU64::new(u64::MAX))
+}
+
+/// The recording reached the length it was started with and takes no more sound.
+pub fn full() -> bool {
+    room_cell().load(Ordering::Relaxed) == 0
+}
+
+/// Takes `count` samples from the room left, answering how many of them fit.
+fn take_room(count: usize) -> usize {
+    let room = room_cell();
+    let mut left = room.load(Ordering::Relaxed);
+    loop {
+        let taken = left.min(count as u64);
+        match room.compare_exchange_weak(left, left - taken, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return taken as usize,
+            Err(now) => left = now,
+        }
+    }
+}
+
 fn recorder() -> &'static Mutex<Option<RecState>> {
     static R: OnceLock<Mutex<Option<RecState>>> = OnceLock::new();
     R.get_or_init(|| Mutex::new(None))
@@ -63,27 +100,30 @@ pub fn in_use() -> Option<std::time::Duration> {
     recorder().lock().ok()?.as_ref().map(|st| st.since.elapsed())
 }
 
-/// Starts recording into a WAV at `path`; `device` is a microphone's name, none for the system's.
-pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), String> {
-    let mut guard = recorder().lock().map_err(|_| "the recorder is poisoned".to_string())?;
+/// Starts recording into a WAV at `path`; `device` is a microphone's name, none for the system's; `limit` is the
+/// longest the take may run, in seconds.
+pub fn start(path: &std::path::Path, device: Option<String>, limit: Option<f64>) -> Result<(), Refusal> {
+    let mut guard = recorder().lock().map_err(|_| Refusal::new("unavailable", "the recorder is poisoned"))?;
     if guard.is_some() {
-        return Err("The microphone is already recording.".into());
+        return Err(Refusal::new("busy", "The microphone is already recording."));
     }
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        std::fs::create_dir_all(parent).map_err(|e| Refusal::new("unavailable", format!("{}: {e}", parent.display())))?;
     }
+    let room = move |rate: u32| limit.map_or(u64::MAX, |seconds| (seconds.max(0.0) * f64::from(rate)) as u64);
     let path_buf = path.to_path_buf();
     let thread_path = path_buf.clone();
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<(), Refusal>>();
     if let Ok(file) = std::env::var("YUE2_STUDIO_MIC_FILE") {
         // a file in the microphone's place, for tests on a machine without one
-        let stereo = crate::audio_pcm::decode_stereo(std::path::Path::new(&file)).map_err(|e| format!("{file}: {e:#}"))?;
+        let stereo = crate::audio_pcm::decode_stereo(std::path::Path::new(&file)).map_err(|e| Refusal::new("unavailable", format!("{file}: {e:#}")))?;
         let sr = stereo.rate;
         let samples: Vec<f32> = stereo.left.iter().zip(&stereo.right).map(|(l, r)| (l + r) / 2.0).collect();
         let spec = hound::WavSpec { channels: 1, sample_rate: sr, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
-        let mut writer = hound::WavWriter::create(&thread_path, spec).map_err(|e| format!("{}: {e}", thread_path.display()))?;
+        let mut writer = hound::WavWriter::create(&thread_path, spec).map_err(|e| Refusal::new("unavailable", format!("{}: {e}", thread_path.display())))?;
         rate_cell().store(sr, Ordering::Relaxed);
+        room_cell().store(room(sr), Ordering::Relaxed);
         std::thread::spawn(move || {
             let step = (sr / 10).max(1) as usize;
             let silence = vec![0.0f32; step];
@@ -91,6 +131,7 @@ pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), Strin
             while stop_rx.try_recv().is_err() {
                 let chunk = if at < samples.len() { &samples[at..(at + step).min(samples.len())] } else { &silence[..] };
                 at += step;
+                let chunk = &chunk[..take_room(chunk.len())];
                 for &v in chunk {
                     let _ = writer.write_sample((v.clamp(-1.0, 1.0) * i16::MAX as f32) as i16);
                 }
@@ -113,15 +154,15 @@ pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), Strin
         };
         let Some(device) = device else {
             let missing = match &wanted {
-                Some(name) => format!("The microphone {name} is not connected."),
-                None => "No microphone was found on this computer.".to_string(),
+                Some(name) => Refusal::new("device_gone", format!("The microphone {name} is not connected.")),
+                None => Refusal::new("no_device", "No microphone was found on this computer."),
             };
             let _ = ready_tx.send(Err(missing));
             return;
         };
         let supported = match device.default_input_config() {
             Ok(c) => c,
-            Err(e) => { let _ = ready_tx.send(Err(format!("The microphone's settings could not be read: {e}"))); return; }
+            Err(e) => { let _ = ready_tx.send(Err(Refusal::new("unavailable", format!("The microphone's settings could not be read: {e}")))); return; }
         };
         let fmt = supported.sample_format();
         let ch = (supported.channels() as usize).max(1);
@@ -130,10 +171,11 @@ pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), Strin
         let spec = hound::WavSpec { channels: 1, sample_rate: sr, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
         let writer = match hound::WavWriter::create(&thread_path, spec) {
             Ok(w) => Arc::new(Mutex::new(Some(w))),
-            Err(e) => { let _ = ready_tx.send(Err(format!("{}: {e}", thread_path.display()))); return; }
+            Err(e) => { let _ = ready_tx.send(Err(Refusal::new("unavailable", format!("{}: {e}", thread_path.display())))); return; }
         };
         let emit_every = (sr / 20).max(1) as usize;
         rate_cell().store(sr, Ordering::Relaxed);
+        room_cell().store(room(sr), Ordering::Relaxed);
 
         macro_rules! cb {
             ($ty:ty, $to_f:expr) => {{
@@ -143,7 +185,8 @@ pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), Strin
                 move |data: &[$ty], _: &cpal::InputCallbackInfo| {
                     if let Ok(mut g) = w.lock() {
                         if let Some(wr) = g.as_mut() {
-                            for frame in data.chunks(ch) {
+                            let fit = take_room(data.len() / ch);
+                            for frame in data.chunks(ch).take(fit) {
                                 let mono = frame.iter().map(|&s| $to_f(s)).sum::<f32>() / ch as f32;
                                 peak = peak.max(mono.abs());
                                 let _ = wr.write_sample((mono.clamp(-1.0, 1.0) * i16::MAX as f32) as i16);
@@ -164,14 +207,14 @@ pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), Strin
             cpal::SampleFormat::F32 => device.build_input_stream(config, cb!(f32, |s: f32| s), err_fn, None),
             cpal::SampleFormat::I16 => device.build_input_stream(config, cb!(i16, |s: i16| s as f32 / i16::MAX as f32), err_fn, None),
             cpal::SampleFormat::U16 => device.build_input_stream(config, cb!(u16, |s: u16| (s as f32 - 32768.0) / 32768.0), err_fn, None),
-            other => { let _ = ready_tx.send(Err(format!("The microphone's sample format {other:?} is not supported."))); return; }
+            other => { let _ = ready_tx.send(Err(Refusal::new("unavailable", format!("The microphone's sample format {other:?} is not supported.")))); return; }
         };
         let stream = match built {
             Ok(s) => s,
-            Err(e) => { let _ = ready_tx.send(Err(format!("The microphone could not be opened: {e}"))); return; }
+            Err(e) => { let _ = ready_tx.send(Err(Refusal::new("in_use", format!("The microphone could not be opened: {e}")))); return; }
         };
         if let Err(e) = stream.play() {
-            let _ = ready_tx.send(Err(format!("The microphone did not start: {e}")));
+            let _ = ready_tx.send(Err(Refusal::new("in_use", format!("The microphone did not start: {e}"))));
             return;
         }
         let _ = ready_tx.send(Ok(()));
@@ -182,7 +225,7 @@ pub fn start(path: &std::path::Path, device: Option<String>) -> Result<(), Strin
         }
     });
 
-    match ready_rx.recv().map_err(|e| e.to_string())? {
+    match ready_rx.recv().map_err(|e| Refusal::new("unavailable", e.to_string()))? {
         Ok(()) => { *guard = Some(RecState { stop_tx, path: path_buf, since: std::time::Instant::now() }); Ok(()) }
         Err(e) => Err(e),
     }
@@ -195,6 +238,7 @@ pub fn stop() -> Result<std::path::PathBuf, String> {
     let _ = st.stop_tx.send(());
     std::thread::sleep(std::time::Duration::from_millis(200));
     peak_cell().store(0, Ordering::Relaxed);
+    room_cell().store(u64::MAX, Ordering::Relaxed);
     Ok(st.path)
 }
 
