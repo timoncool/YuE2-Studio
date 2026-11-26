@@ -1786,7 +1786,11 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
     state.acpp.register(acpp_server::ModelEntry::htdemucs(acpp::HTDEMUCS, &state.separator.model_path()));
     state.acpp.register(restore::entry(&state.separator.restore_model_path()));
     for size in &midi::SIZES {
-        state.acpp.register(acpp_server::ModelEntry::muscriptor(&acpp::muscriptor_id(size.id), &state.midi.model_dir(size)));
+        state.acpp.register(if size.every_instrument() {
+            acpp_server::ModelEntry::muscriptor(&acpp::muscriptor_id(size.id), &state.midi.model_dir(size))
+        } else {
+            midi::sung_entry(&state.midi.model_file(size))
+        });
     }
     prepare::resume(&state);
     tokio::spawn(resume_unfinished_jobs(state.clone()));
@@ -3920,7 +3924,7 @@ async fn midi_runtime(State(state): State<AppState>) -> Json<Value> {
     assets.extend(midi::SIZES.iter().map(|size| {
         serde_json::json!({
             "id": size.id,
-            "label": format!("MuScriptor {} · {}", size.id, size.params),
+            "label": if size.every_instrument() { format!("MuScriptor {} · {}", size.id, size.params) } else { format!("ROSVOT · {}", size.params) },
             "bytes": size.bytes,
             "note": "",
             "installed": state.midi.model_installed(size),
@@ -9988,7 +9992,7 @@ fn midi_sidecar(midi: &std::path::Path) -> PathBuf {
 
 /// The size offered first: the largest one downloaded, as the one picked for its quality, else the default.
 fn preferred_midi_size(state: &AppState) -> &'static str {
-    midi::SIZES.iter().rev().find(|size| state.midi.model_installed(size)).map_or(midi::DEFAULT_SIZE, |size| size.id)
+    midi::SIZES.iter().rev().find(|size| size.every_instrument() && state.midi.model_installed(size)).map_or(midi::DEFAULT_SIZE, |size| size.id)
 }
 
 fn midi_size(asked: Option<&str>) -> Result<&'static midi::Size, (StatusCode, Json<ApiError>)> {
@@ -10117,8 +10121,9 @@ async fn start_midi(State(state): State<AppState>, Json(input): Json<MidiRequest
     state.midi_notes.write().await.clear();
     *state.midi_run.write().await = Some(midi::Run { song_id: song_id.clone(), title, size: size.id, stage: "preparing", chunks_done: 0, chunks_total: 0, notes: 0, started_ms: unix_millis(), done: false, error: None, file: None, batch: None });
     let background = state.clone();
+    let transcribed = song_id.clone();
     tokio::spawn(async move {
-        let outcome = transcribe_to_midi(&background, size, &audio, &output).await;
+        let outcome = transcribe_to_midi(&background, size, transcribed.as_deref(), &audio, &output).await;
         finish_midi_run(&background, outcome, &output).await;
     });
     Ok(Json(serde_json::json!({ "started": true, "song_id": song_id, "size": size.id })))
@@ -10188,7 +10193,7 @@ async fn start_midi_batch(state: AppState, size: &'static midi::Size, ids: Vec<S
             let Some(id) = run.song_id.clone() else { continue };
             let output = midi_path(&background, &id);
             let outcome = match background.library.get_song(&id).ok().flatten().and_then(|song| background.library.media_path_for_song(&song)) {
-                Some(audio) => transcribe_to_midi(&background, size, &audio, &output).await,
+                Some(audio) => transcribe_to_midi(&background, size, Some(&id), &audio, &output).await,
                 None => Err(anyhow::anyhow!("the track is no longer in the library")),
             };
             if let Err(error) = &outcome {
@@ -10223,7 +10228,54 @@ fn midi_stopped(state: &AppState) -> bool {
 
 /// Fetches what is missing, reads the audio as the transcriber wants it and
 /// runs it on audio.cpp's server. Returns how many notes it heard.
-async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: &std::path::Path, output: &std::path::Path) -> anyhow::Result<usize> {
+/// The quarter-note tempo of a score's `Q:1/4=` line.
+fn score_tempo(abc: &str) -> Option<u32> {
+    abc.lines().find_map(|line| line.trim().strip_prefix("Q:1/4=")?.trim().parse::<u32>().ok()).filter(|bpm| (20..=400).contains(bpm))
+}
+
+/// The tempo a track's MIDI is written at, so its bars match the music: the tempo of the track's score or the BPM it was
+/// generated at, or those of the track it was made from; else the beat measured by the listening pack; none when
+/// neither is there.
+async fn midi_tempo(state: &AppState, song_id: Option<&str>, audio: &std::path::Path) -> Option<u32> {
+    let song = song_id.and_then(|id| state.library.get_song(id).ok().flatten());
+    let source = song.as_ref().and_then(derived_from).and_then(|(id, _)| state.library.get_song(&id).ok().flatten());
+    let asked = |song: &library::Song| {
+        let settings = &song.generation_settings;
+        settings.get("abc").and_then(Value::as_str).and_then(score_tempo).or_else(|| {
+            let bpm = settings.get("bpm")?;
+            bpm.as_u64().or_else(|| bpm.as_f64().map(|value| value.round() as u64)).or_else(|| bpm.as_str()?.trim().parse().ok())
+                .and_then(|value| u32::try_from(value).ok()).filter(|value| (20..=400).contains(value))
+        })
+    };
+    if let Some(bpm) = [song.as_ref(), source.as_ref()].into_iter().flatten().find_map(asked) {
+        return Some(bpm);
+    }
+    let models = state.training.audio_facts_dir();
+    if !models.join(audio_facts::BEAT_MODEL).is_file() || state.lyrics_sync.bind_ort().is_err() {
+        return None;
+    }
+    let shown = audio.display().to_string();
+    let audio = audio.to_path_buf();
+    let measured = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<u32>> {
+        let mono = audio_facts::decode(&audio)?;
+        let facts = audio_facts::Measurer::load(&models)?.measure_mono(&mono)?;
+        Ok(((40..=240).contains(&facts.bpm) && audio_facts::supports_backing_tempo(&mono, facts.bpm)).then(|| u32::try_from(facts.bpm).ok()).flatten())
+    })
+    .await;
+    match measured {
+        Ok(Ok(bpm)) => bpm,
+        Ok(Err(error)) => {
+            studio_log!("[ERROR] the tempo of {shown} was not measured for its MIDI: {error:#}");
+            None
+        }
+        Err(error) => {
+            studio_log!("[ERROR] the tempo measurement of {shown} stopped: {error}");
+            None
+        }
+    }
+}
+
+async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, song_id: Option<&str>, audio: &std::path::Path, output: &std::path::Path) -> anyhow::Result<usize> {
     let build = tool_build(&state, "midi").await?;
     let missing = state.midi.missing(size);
     if !missing.is_empty() || !state.acpp.installed(build) {
@@ -10265,7 +10317,12 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
     let model = state.midi.model_dir(size);
     let id = acpp::muscriptor_id(size.id);
     let background = state.clone();
+    let sung = !size.every_instrument();
+    let sung_model = state.midi.model_file(size);
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+        if sung {
+            return acpp::run(&background.acpp, build, midi::sung_entry(&sung_model), serde_json::json!({ "audio": input }), &|| midi_stopped(&background));
+        }
         // the notes and the chunks as the server streams them; the file and the count come from the answer
         let mut live = midi::Events::default();
         let mut shown = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap_or_else(std::time::Instant::now);
@@ -10301,15 +10358,22 @@ async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: 
         let _ = std::fs::remove_file(wav);
     }
     let result = result?;
+    let name = if sung { "ROSVOT" } else { "MuScriptor" };
     let midi = acpp_server::task_artifact(&result, "midi")
-        .map_err(|error| anyhow::anyhow!("MuScriptor: {}", acpp::describe(&error)))?
-        .context("MuScriptor returned no MIDI")?;
+        .map_err(|error| anyhow::anyhow!("{name}: {}", acpp::describe(&error)))?
+        .with_context(|| format!("{name} returned no MIDI"))?;
     let mut events = midi::Events::default();
-    events.take_all(result.get("text").and_then(Value::as_str).unwrap_or_default()).map_err(|error| anyhow::anyhow!(error))?;
+    let text = result.get("text").and_then(Value::as_str).unwrap_or_default();
+    if sung { events.take_sung(text) } else { events.take_all(text) }.map_err(|error| anyhow::anyhow!(error))?;
+    let bpm = midi_tempo(state, song_id, audio).await;
+    let payload = match bpm {
+        Some(bpm) => midi::with_tempo(&midi.payload, bpm).with_context(|| format!("set {name}'s MIDI to {bpm} BPM"))?,
+        None => midi.payload.clone(),
+    };
     let partial = PathBuf::from(format!("{}.part", output.display()));
-    std::fs::write(&partial, &midi.payload).with_context(|| format!("write {}", partial.display()))?;
+    std::fs::write(&partial, &payload).with_context(|| format!("write {}", partial.display()))?;
     std::fs::rename(&partial, output).with_context(|| format!("keep {}", output.display()))?;
-    let sidecar = midi::Sidecar { size: size.id.to_string(), made_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|since| since.as_secs().to_string()).unwrap_or_default(), instruments: events.instruments(), notes: events.notes.clone() };
+    let sidecar = midi::Sidecar { size: size.id.to_string(), bpm, made_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|since| since.as_secs().to_string()).unwrap_or_default(), instruments: events.instruments(), notes: events.notes.clone() };
     std::fs::write(midi_sidecar(output), serde_json::to_vec(&sidecar)?).with_context(|| format!("write {}", midi_sidecar(output).display()))?;
     let heard = events.notes.len();
     if let Some(run) = state.midi_run.write().await.as_mut() {
@@ -10368,7 +10432,8 @@ async fn write_song_midi(State(state): State<AppState>, Path(id): Path<String>, 
     let notes = midi_edit::read(&data).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("this file could not be read as MIDI: {error}")))?;
     let file = midi_path(&state, &id);
     let made_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|since| since.as_secs().to_string()).unwrap_or_default();
-    let sidecar = midi::Sidecar { size: "edited".into(), made_at, instruments: midi_edit::instruments(&notes), notes };
+    let bpm = score::smf::read(&data).ok().and_then(|song| song.tempos.first().copied()).filter(|(_, micros)| *micros > 0).map(|(_, micros)| (60_000_000.0 / f64::from(micros)).round() as u32);
+    let sidecar = midi::Sidecar { size: "edited".into(), bpm, made_at, instruments: midi_edit::instruments(&notes), notes };
     let sidecar_bytes = serde_json::to_vec(&sidecar).map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
     tokio::fs::write(&file, data).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", file.display())))?;
     tokio::fs::write(midi_sidecar(&file), sidecar_bytes).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("write {}: {error}", midi_sidecar(&file).display())))?;

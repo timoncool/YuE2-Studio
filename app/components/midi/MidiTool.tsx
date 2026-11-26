@@ -23,7 +23,7 @@ import { formatSize } from '../../services/fileSize';
  */
 
 interface MidiSize {
-  id: 'small' | 'medium' | 'large';
+  id: 'small' | 'medium' | 'large' | 'vocal';
   params: string;
   bytes: number;
   installed: boolean;
@@ -85,7 +85,9 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
   const running = Boolean(run && !run.done);
   const batch = status?.run?.batch ?? null;
   const batchActive = Boolean(batch && (batch.queued.length > 0 || !status?.run?.done));
-  const chosen = size ?? status?.default_size ?? 'medium';
+  // the track's MIDI was made with one of the models: that one stays chosen until the person picks another
+  const made = status?.sizes.find(entry => entry.id === songMidi?.size)?.id;
+  const chosen = size ?? made ?? status?.default_size ?? 'medium';
   const chosenSize = status?.sizes.find(entry => entry.id === chosen);
 
   const loadSongMidi = useCallback(async () => {
@@ -166,7 +168,8 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
   const audioUrl = songId ? apiUrl(`/v1/library/media/${encodeURIComponent(songId)}`) : undefined;
   const missing = chosenSize && (!status?.tool_installed || !chosenSize.installed) ? chosenSize.missing_bytes : 0;
   const sizeName = tt(`midiSize_${chosen}`);
-  const modelName = `MuScriptor (${sizeName.toLowerCase()})`;
+  const sung = chosen === 'vocal';
+  const modelName = sung ? 'ROSVOT' : `MuScriptor (${sizeName.toLowerCase()})`;
   const bytesText = (bytes: number) => formatSize(bytes, language);
   const reason = !songId ? page.chooseTrack : null;
   const failure = run?.error || error || (missing > 0 ? status?.download?.error : null);
@@ -202,7 +205,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
       <ToolCard icon={<Piano size={17} />} title={t('midiTitle')}
         state={status && (missing > 0 ? (download ? <ToolState tone="busy">{page.downloading(modelName, bytesText(download.downloaded_bytes), bytesText(download.total_bytes))}</ToolState>
           : <ToolState tone="missing">{page.needsDownload(bytesText(missing))}</ToolState>) : <ToolState tone="ready">{page.ready}</ToolState>)}
-        description={t('midiHint')}
+        description={sung ? tt('midiHint_vocal') : t('midiHint')}
         action={action}
         result={<>
           {batch && (
@@ -245,9 +248,10 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
           <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{failure}</p>
           {missing > 0 && status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={page.download(modelName, bytesText(missing))} />}
         </>}
-        footer={<>{page.model}: MuScriptor (Kyutai, Mirelo) · {page.license} CC BY-NC 4.0 — <span className="text-zinc-700 dark:text-zinc-200">{page.nonCommercial}</span></>}>
+        footer={sung ? <>{page.model}: ROSVOT (Ruiqi Li), RMVPE · {page.license} MIT, Apache 2.0</>
+          : <>{page.model}: MuScriptor (Kyutai, Mirelo) · {page.license} CC BY-NC 4.0 — <span className="text-zinc-700 dark:text-zinc-200">{page.nonCommercial}</span></>}>
         <ToolModelPicker<MidiSize['id']> tool="midi" value={chosen} onChange={setSize} disabled={running}
-          models={(status?.sizes ?? []).map(entry => ({ id: entry.id, name: tt(`midiSize_${entry.id}`), bytes: entry.bytes, installed: entry.installed }))} />
+          models={(status?.sizes ?? []).map(entry => ({ id: entry.id, name: tt(`midiSize_${entry.id}`), hint: tt(entry.id === 'vocal' ? 'midiHint_vocal' : 'midiHint_all'), bytes: entry.bytes, installed: entry.installed }))} />
       </ToolCard>
       <ConfirmDialog isOpen={confirmDelete} title={page.midiDeleteTitle} message={page.midiDeleteMessage} confirmLabel={page.midiDelete}
         onConfirm={() => { setConfirmDelete(false); void remove(); }} onCancel={() => setConfirmDelete(false)} />

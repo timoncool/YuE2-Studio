@@ -99,6 +99,15 @@
       "path": "models/muscriptor-small/config.json",
       "note": "CC BY-NC 4.0: for non-commercial use."
     },
+    "rosvot": {
+      "label": "ROSVOT (114M)",
+      "kind": "model",
+      "url": "https://huggingface.co/audio-cpp/SoulX-Singer-GGUF/resolve/ded36295f789661e590e4bf6ad49a25470cf830d/ROSVOT-GGUF/rosvot-f32.gguf",
+      "bytes": 456486848,
+      "sha256": "2b034b15126b21bd3f8ba7008f35aca51500f0443e5c36bdc85eba957c02ee38",
+      "path": "models/rosvot/rosvot-f32.gguf",
+      "note": "The sung melody to notes: ROSVOT with RWBD and RMVPE, MIT and Apache 2.0, runs on audio.cpp's server."
+    },
     "muscriptor-small-model": {
       "label": "MuScriptor small (103M)",
       "kind": "model",

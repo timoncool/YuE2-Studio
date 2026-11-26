@@ -309,7 +309,7 @@ pub(crate) const REQUIRED: &[&str] = &[
     "yue2-convrot-base", "yue2-vae-encoder", "yue2-semantic-tokenizer", "yue2-sheetsage", "yue2-lyric-aligner",
     "moss-audio", "moss-lm", "moss-lm-q4", "beat-this", "ruach-rs-tw-2.0x0.75", "ruach-rs-fw-2.4x0.75",
     "muscriptor-small-config", "muscriptor-small-model", "muscriptor-medium-config", "muscriptor-medium-model",
-    "muscriptor-large-config", "muscriptor-large-model",
+    "muscriptor-large-config", "muscriptor-large-model", "rosvot",
 ];
 
 /// A file this build downloads by id: one of `REQUIRED`.

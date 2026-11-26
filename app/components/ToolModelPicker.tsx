@@ -30,7 +30,7 @@ export function ToolModelPicker<T extends string>({ tool, models, value, onChang
 }) {
   const { t, language } = useI18n();
   const page = toolsPageStrings[language];
-  const columns = models.length >= 3 ? 'sm:grid-cols-3' : models.length === 2 ? 'sm:grid-cols-2' : '';
+  const columns = models.length === 3 ? 'sm:grid-cols-3' : models.length >= 2 ? 'sm:grid-cols-2' : '';
   return (
     <div className="grid gap-3">
       <div role="radiogroup" aria-label={page.model} className="grid">
