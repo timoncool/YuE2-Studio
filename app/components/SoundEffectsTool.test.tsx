@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SoundEffectsTool } from './SoundEffectsTool';
 
 vi.mock('../context/I18nContext', () => ({
-  useI18n: () => ({ language: 'en' }),
+  useI18n: () => ({ language: 'en', t: (key: string) => key }),
 }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,7 +20,7 @@ afterEach(() => {
 it('keeps Create disabled until the effect model is ready, then sends the description', async () => {
   const source = 'https://huggingface.co/audio-cpp/audio.cpp-gguf/blob/example/moss-soundeffect-v2-q8_0.gguf';
   let ready = false;
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url === '/v1/tools/devices' ? Response.json({ tools: { effects: { device: 'auto', build: 'CUDA 13', error: null, card: 'CUDA 13' } } }) : Response.json({
     id: 'moss_soundeffect', name: 'MOSS-SoundEffect v2', ready,
     missing: ready ? [] : ['moss-soundeffect-v2-q8_0.gguf'],
     missing_bytes: ready ? 0 : 4_001_175_520, model_directory: 'audiocpp/models/moss_soundeffect',

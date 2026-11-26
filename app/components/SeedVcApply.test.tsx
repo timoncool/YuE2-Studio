@@ -3,11 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
 import { SeedVcApply } from './SeedVcApply';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en' }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 
 it('uploads the sample, converts the selected source and exposes the separate take', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const requests = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/v1/tools/devices') return Response.json({ tools: { voice: { device: 'auto', build: 'CUDA 13', error: null, card: 'CUDA 13' } } });
     if (url.endsWith('/processing/reference')) return Response.json({ upload_id: 'reference-42.wav' });
     if (init?.method === 'POST') return Response.json({ song_id: 'new-take', audio_url: '/v1/library/media/new-take' });
     return Response.json({ ready: true, model_ready: true, runtime_ready: true });

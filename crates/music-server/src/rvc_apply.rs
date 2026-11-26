@@ -97,7 +97,8 @@ async fn fast_availability(data_root: &FsPath, metal: bool) -> Result<(), String
 async fn selected_build(
     state: &AppState,
 ) -> Result<acpp_server::asset::Build, rvc_voices::ApiFailure> {
-    separation_build(state.separation_config.read().await.runtime)
+    tool_build(state, "voice")
+        .await
         .map_err(|error| api_error(StatusCode::CONFLICT, error.to_string()))
 }
 

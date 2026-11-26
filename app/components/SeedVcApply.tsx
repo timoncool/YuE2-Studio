@@ -4,6 +4,7 @@ import { apiUrl } from '../services/apiBase';
 import { responseJson } from '../services/rvcVoices';
 import type { RvcSourceSong } from './RvcApplyVoice';
 import { AudioCppModelInstall } from './HeartMuLaControls';
+import { ToolDevice } from './ToolDevice';
 
 const URL = '/v1/seed-vc';
 const accompaniment = ['drums', 'bass', 'other', 'guitar', 'piano'];
@@ -97,6 +98,7 @@ export function SeedVcApply({ song, control, onSaved }: { song: RvcSourceSong; c
         <button type="button" className={control} disabled={busy || !file || !hasStems || !setup?.ready} onClick={() => void apply()}>
           {busy ? converting : convert}
         </button>
+        <ToolDevice tool="voice" disabled={busy} onChange={() => void refresh()} />
         {error && <p role="alert">{error}</p>}
         {take && <audio controls preload="none" aria-label={listen} src={apiUrl(take.audio_url)} />}
       </div>

@@ -631,6 +631,7 @@ const JOURNAL: &[(&str, &str, &str)] = &[
     ("engine_fitted_cache_reset", "updated", "settings"),
     ("karaoke_settings_set", "updated", "settings"),
     ("separator_settings_set", "updated", "settings"),
+    ("tool_device_set", "updated", "settings"),
     ("cover_templates_set", "updated", "settings"),
     ("library_file_tags_set", "updated", "settings"),
     ("assistant_set", "updated", "settings"),
@@ -2764,6 +2765,21 @@ fn tools() -> &'static [Tool] {
                 description: "Save separator settings: the object as separator_settings_get returns it, with your changes. engine htdemucs splits six stems; roformer (Mel-Band RoFormer, Dub Studio's separator) splits the vocals and the instrumental, more cleanly, and also separates the vocals of vocals-only songs and of training; install it with separator_install after choosing it.",
                 schema: || json!({ "type": "object" }),
                 call: |args| send(Method::PUT, "/v1/separation/settings".into(), args.clone()),
+            },
+            Tool {
+                name: "tool_devices_get",
+                description: "Where each tool computes: for stems, midi, restore, effects, foley and voice its device (auto, cuda for the card of any make, cpu), the audio.cpp build that becomes on this computer (CUDA 13, CUDA 12, Vulkan, Metal, cpu) and the card's build here.",
+                schema: nothing,
+                call: |_| get("/v1/tools/devices".into()),
+            },
+            Tool {
+                name: "tool_device_set",
+                description: "Choose where one tool computes: auto, cuda (the card of any make: CUDA, Vulkan or Metal) or cpu. Audio to MIDI on a non-NVIDIA card computes on the processor. A build not yet installed downloads on the tool's next use or its install action.",
+                schema: || object(json!({
+                    "tool": { "type": "string", "enum": ["stems", "midi", "restore", "effects", "foley", "voice"] },
+                    "device": { "type": "string", "enum": ["auto", "cuda", "cpu"] },
+                }), &["tool", "device"]),
+                call: |args| send(Method::PUT, format!("/v1/tools/devices/{}", segment(&text(args, "tool")?)), json!({ "device": text(args, "device")? })),
             },
             Tool {
                 name: "library_song_files",

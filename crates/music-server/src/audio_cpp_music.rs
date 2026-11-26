@@ -400,7 +400,17 @@ fn entry(path: PathBuf) -> ModelEntry {
     }
 }
 
-async fn build(state: &AppState) -> anyhow::Result<Build> {
+/// The audio.cpp build a family computes on: sound for video and sound effects on their tools' devices, music on the
+/// music engine's.
+async fn build(state: &AppState, family: Family) -> anyhow::Result<Build> {
+    match family {
+        Family::ControlFoley => tool_build(state, "foley").await,
+        Family::Moss => tool_build(state, "effects").await,
+        _ => engine_build(state).await,
+    }
+}
+
+async fn engine_build(state: &AppState) -> anyhow::Result<Build> {
     use music_engine::yue_server::ComputeBackend;
     match state.engine_options.read().await.backend {
         ComputeBackend::Auto | ComputeBackend::Hip => acpp::build_for("auto"),
@@ -422,7 +432,7 @@ pub(super) async fn sound_effect_model(State(state): State<AppState>) -> Json<Va
 }
 
 async fn tool_family_catalog(state: &AppState, family: Family) -> Json<Value> {
-    let runtime_ready = build(state)
+    let runtime_ready = build(state, family)
         .await
         .is_ok_and(|build| state.acpp.exe(build).is_file() && state.acpp.installed(build));
     let mut model = family.catalog(studio_data_root().as_deref(), runtime_ready, true);
@@ -453,7 +463,7 @@ async fn describe_install(state: &AppState, model: &mut Value) {
 
 pub(super) async fn models(State(state): State<AppState>) -> Json<Value> {
     let root = studio_data_root();
-    let build = build(&state).await;
+    let build = engine_build(&state).await;
     let runtime_ready = build
         .as_ref()
         .is_ok_and(|build| state.acpp.exe(*build).is_file() && state.acpp.installed(*build));
@@ -509,7 +519,7 @@ pub(super) async fn install(
             "This audio.cpp music model has no managed installation.".into(),
         ));
     };
-    let build = build(&state)
+    let build = build(&state, managed.family)
         .await
         .map_err(|error| api_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
     let root = studio_data_root().ok_or_else(|| {
@@ -882,7 +892,7 @@ async fn submit_with_source(
             ),
         );
     }
-    let build = match build(&state).await {
+    let build = match build(&state, family).await {
         Ok(build) if state.acpp.exe(build).is_file() && state.acpp.installed(build) => build,
         Ok(_) => {
             return reject(

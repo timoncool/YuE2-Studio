@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { PrimaryButton, SecondaryButton } from '../kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from '../kit/ToolCard';
 import { FieldLabel } from '../kit/FieldLabel';
+import { ToolDevice } from '../ToolDevice';
 import { toolsPageStrings } from '../../i18n/toolsPage';
 import { formatSize } from '../../services/fileSize';
 
@@ -48,10 +49,9 @@ interface MidiRun {
   batch: { done: number; total: number; queued: string[]; failed: string[] } | null;
 }
 
-const runtimeLabels = { cpu: 'CPU', cuda12: 'CUDA 12', cuda13: 'CUDA 13', metal: 'Metal', vulkan: 'Vulkan' };
 
 interface MidiStatus {
-  runtime_build?: keyof typeof runtimeLabels | null;
+  runtime_build?: string | null;
   tool_installed: boolean;
   sizes: MidiSize[];
   default_size: MidiSize['id'];
@@ -245,7 +245,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
           <p role="alert" className="select-text rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 wrap-anywhere dark:text-rose-300">{failure}</p>
           {missing > 0 && status?.download?.error && <ManualRuntimeArchive archive={status.download.manual_archive} retryLabel={page.download(modelName, bytesText(missing))} />}
         </>}
-        footer={<>{page.model}: MuScriptor (Kyutai, Mirelo) · {page.license} CC BY-NC 4.0 — <span className="text-zinc-700 dark:text-zinc-200">{page.nonCommercial}</span>{status?.runtime_build ? ` · ${page.runsOn(runtimeLabels[status.runtime_build])}` : ''}</>}>
+        footer={<>{page.model}: MuScriptor (Kyutai, Mirelo) · {page.license} CC BY-NC 4.0 — <span className="text-zinc-700 dark:text-zinc-200">{page.nonCommercial}</span></>}>
         <div role="radiogroup" aria-label={t('midiModel')} className="grid">
           <FieldLabel hidden>{t('midiModel')}</FieldLabel>
           <div className="flex gap-2">
@@ -258,6 +258,7 @@ export const MidiTool: React.FC<{ songId: string; songTitle: string }> = ({ song
             ))}
           </div>
         </div>
+        <ToolDevice tool="midi" disabled={running} />
       </ToolCard>
       <ConfirmDialog isOpen={confirmDelete} title={page.midiDeleteTitle} message={page.midiDeleteMessage} confirmLabel={page.midiDelete}
         onConfirm={() => { setConfirmDelete(false); void remove(); }} onCancel={() => setConfirmDelete(false)} />

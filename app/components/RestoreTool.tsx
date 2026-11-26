@@ -12,6 +12,7 @@ import { WorkProgress } from './WorkProgress';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { CatalogSegments } from './kit/Catalog';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
+import { ToolDevice } from './ToolDevice';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
 
@@ -191,6 +192,7 @@ export const RestoreTool: React.FC<{
             onChange={event => { setFile(event.target.files?.[0] ?? null); event.target.value = ''; }} />
         </div>
       )}
+      <ToolDevice tool="restore" disabled={running} />
     </ToolCard>
   );
 };

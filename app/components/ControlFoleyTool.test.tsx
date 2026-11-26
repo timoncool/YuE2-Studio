@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ControlFoleyTool } from './ControlFoleyTool';
 import { queryClient } from '../services/studioQueries';
 
-vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en' }) }));
+vi.mock('../context/I18nContext', () => ({ useI18n: () => ({ language: 'en', t: (key: string) => key }) }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root;
@@ -20,6 +20,7 @@ afterEach(() => {
 it('uploads the original clip and sends the stored name to ControlFoley', async () => {
   const source = new File(['original video bytes'], 'scene.mp4', { type: 'video/mp4' });
   const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url === '/v1/tools/devices') return Response.json({ tools: { foley: { device: 'auto', build: 'CUDA 13', error: null, card: 'CUDA 13' } } });
     if (url.includes('/v1/videos?name=')) {
       expect(options?.body).toBe(source);
       return Response.json({ name: 'stored-clip.mp4' });

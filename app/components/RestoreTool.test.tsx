@@ -26,7 +26,7 @@ const ready = { model, runtime_installed: true, ready: true, missing_bytes: 0, e
 function serve(status: unknown, answers: Record<string, { status: number; body: unknown }> = {}) {
   vi.stubGlobal('fetch', vi.fn(async (path: string, init?: RequestInit) => {
     calls.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    const answer = path === '/v1/restore' ? { status: 200, body: status } : answers[path] ?? { status: 200, body: { started: true } };
+    const answer = path === '/v1/restore' ? { status: 200, body: status } : path === '/v1/tools/devices' ? { status: 200, body: { tools: { restore: { device: 'auto', build: 'CUDA 13', error: null, card: 'CUDA 13' } } } } : answers[path] ?? { status: 200, body: { started: true } };
     return new Response(JSON.stringify(answer.body), { status: answer.status, headers: { 'Content-Type': 'application/json' } });
   }));
 }

@@ -8,6 +8,7 @@ import { AudioCompare } from './AudioCompare';
 import { RvcNativeRuntime } from './RvcNativeRuntime';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { Select } from './kit/Select';
+import { ToolDevice } from './ToolDevice';
 
 const URL = '/v1/rvc/apply';
 const accompaniment = ['drums', 'bass', 'other', 'guitar', 'piano'];
@@ -217,6 +218,8 @@ export function RvcApplyVoice({ song, voice, control, onSaved }: {
             { value: 'audio.cpp', label: labels.engineSpare },
           ]} />
         </label>
+        {!burnVoice && (backend === 'audio.cpp' || (backend === 'auto' && fastSetup?.supported === false)) &&
+          <div className="mt-2"><ToolDevice tool="voice" disabled={!!busy} onChange={reloadSetup} /></div>}
       </details>
     </div>
   );

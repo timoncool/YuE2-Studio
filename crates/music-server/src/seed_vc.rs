@@ -28,7 +28,7 @@ fn ready(model: &FsPath) -> bool {
 }
 
 async fn build(state: &AppState) -> anyhow::Result<acpp_server::asset::Build> {
-    separation_build(state.separation_config.read().await.runtime)
+    tool_build(state, "voice").await
 }
 
 pub(super) async fn status(State(state): State<AppState>) -> Json<Value> {

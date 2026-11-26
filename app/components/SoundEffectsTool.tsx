@@ -8,6 +8,7 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 import { AudioWaveform } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
+import { ToolDevice } from './ToolDevice';
 import { FieldHint, FieldLabel } from './kit/FieldLabel';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
@@ -106,5 +107,6 @@ export function SoundEffectsTool({ control, busy, onGenerate }: {
       <input type="number" className={`${control} max-w-32`} value={duration} min={limit?.min} max={limit?.max}
         step={0.1} onChange={event => setDuration(event.target.value)} />
     </label>
+    <ToolDevice tool="effects" onChange={() => refresh(value => value + 1)} />
   </ToolCard>;
 }

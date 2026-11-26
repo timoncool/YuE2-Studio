@@ -9,6 +9,7 @@ import { AudioCppModelInstall } from './HeartMuLaControls';
 import { Clapperboard, FileVideo } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './kit/Buttons';
 import { ActionReason, ToolCard, ToolState } from './kit/ToolCard';
+import { ToolDevice } from './ToolDevice';
 import { FieldHint, FieldLabel } from './kit/FieldLabel';
 import { toolsPageStrings } from '../i18n/toolsPage';
 import { formatSize } from '../services/fileSize';
@@ -134,5 +135,6 @@ export function ControlFoleyTool({ control, busy, onGenerate }: {
       <input type="number" className={`${control} max-w-32`} value={duration} min={limits?.min} max={limits?.max}
         step={0.1} onChange={event => setDuration(event.target.value)} />
     </label>
+    <ToolDevice tool="foley" disabled={uploading} onChange={() => void model.refetch()} />
   </ToolCard>;
 }

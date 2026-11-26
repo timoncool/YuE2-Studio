@@ -82,6 +82,7 @@ mod request_log;
 mod resources;
 #[cfg(windows)]
 mod gpu_memory;
+mod tool_device;
 // The video memory of an Intel card on Linux, whose driver publishes none.
 #[cfg(not(any(windows, target_os = "macos")))]
 mod vulkan_mem;
@@ -226,6 +227,8 @@ struct AppState {
     cover_template_default: Arc<RwLock<Option<String>>>,
     separator: Arc<separation::Separator>,
     separation_config: Arc<RwLock<separation::SeparationConfig>>,
+    /// Where each tool computes, as chosen in its window; stems keep theirs in `separation_config`.
+    tool_devices: Arc<RwLock<tool_device::ToolDevices>>,
     /// audio.cpp's server: HT-Demucs, MuScriptor and SheetSage2.
     acpp: Arc<acpp::Acpp>,
     /// Draw a cover as soon as a track is finished.
@@ -943,6 +946,8 @@ struct PersistedStudioSettings {
     cover_template_default: Option<String>,
     #[serde(default)]
     separation: Option<separation::SeparationConfig>,
+    #[serde(default)]
+    tool_devices: Option<tool_device::ToolDevices>,
     /// Whether a finished track gets its cover drawn without being asked.
     #[serde(default)]
     cover_auto: Option<bool>,
@@ -1684,6 +1689,9 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         separation_config: Arc::new(RwLock::new(
             persisted.as_ref().and_then(|settings| settings.separation.clone()).unwrap_or_default(),
         )),
+        tool_devices: Arc::new(RwLock::new(
+            persisted.as_ref().and_then(|settings| settings.tool_devices.clone()).unwrap_or_default(),
+        )),
         separator: Arc::new(separation::Separator::new(
             &studio_data_root().unwrap_or_else(|| std::path::PathBuf::from(".")),
         )),
@@ -1900,6 +1908,8 @@ pub async fn serve_on_port(port: u16) -> anyhow::Result<()> {
         .route("/v1/separation/runtime/cancel", post(cancel_separation_download))
         .route("/v1/separation/status", get(separation_status))
         .route("/v1/separation/settings", get(read_separation_settings).put(write_separation_settings))
+        .route("/v1/tools/devices", get(read_tool_devices))
+        .route("/v1/tools/devices/{tool}", axum::routing::put(write_tool_device))
         .route("/v1/separation/install", post(install_separation_model))
         .route("/v1/separation/remove", post(remove_separation_model))
         .route("/v1/restore", get(restore_status))
@@ -2730,6 +2740,73 @@ fn separation_download_progress(
 /// Vulkan on a card of another make) or Auto.
 fn separation_build(runtime: lyrics_sync::OnnxFlavour) -> anyhow::Result<acpp_server::asset::Build> {
     acpp::build_for_runtime(runtime)
+}
+
+/// Where a tool computes. A tool never set in the window keeps the setting it followed before it had one of its own:
+/// the music engine's device for MIDI, sound effects and sound for video, the stems' device for the rest.
+async fn tool_device_of(state: &AppState, tool: &str) -> tool_device::Device {
+    let stems = tool_device::Device::from_runtime(state.separation_config.read().await.runtime);
+    if tool == "stems" {
+        return stems;
+    }
+    if let Some(device) = state.tool_devices.read().await.get(tool) {
+        return *device;
+    }
+    match tool {
+        "midi" | "effects" | "foley" => {
+            if state.engine_options.read().await.backend == music_engine::yue_server::ComputeBackend::Cpu {
+                tool_device::Device::Cpu
+            } else {
+                tool_device::Device::Auto
+            }
+        }
+        _ => stems,
+    }
+}
+
+/// The audio.cpp build a tool computes on now.
+async fn tool_build(state: &AppState, tool: &str) -> anyhow::Result<acpp_server::asset::Build> {
+    tool_device::build(tool, tool_device_of(state, tool).await)
+}
+
+/// Every tool's device, the build it becomes on this computer, and what the card is here.
+async fn read_tool_devices(State(state): State<AppState>) -> Json<Value> {
+    let mut tools = serde_json::Map::new();
+    for tool in tool_device::TOOLS {
+        let device = tool_device_of(&state, tool).await;
+        let build = tool_device::build(tool, device);
+        tools.insert(tool.into(), serde_json::json!({
+            "device": device,
+            "build": build.as_ref().ok().map(|build| tool_device::build_name(*build)),
+            "error": build.as_ref().err().map(|error| format!("{error:#}")),
+            "card": tool_device::build(tool, tool_device::Device::Card).ok().map(tool_device::build_name),
+        }));
+    }
+    Json(serde_json::json!({ "tools": tools }))
+}
+
+#[derive(Deserialize)]
+struct ToolDeviceRequest {
+    device: tool_device::Device,
+}
+
+/// Sets where one tool computes; stems write it into the separation settings, the others into their own.
+async fn write_tool_device(
+    State(state): State<AppState>,
+    Path(tool): Path<String>,
+    Json(request): Json<ToolDeviceRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
+    if !tool_device::TOOLS.contains(&tool.as_str()) {
+        return Err(api_error(StatusCode::NOT_FOUND, format!("unknown tool {tool}")));
+    }
+    tool_device::build(&tool, request.device).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    if tool == "stems" {
+        state.separation_config.write().await.runtime = request.device.runtime();
+    } else {
+        state.tool_devices.write().await.insert(tool.clone(), request.device);
+    }
+    persist_studio_settings(&state).await.map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(read_tool_devices(State(state)).await)
 }
 
 /// Downloads what audio.cpp's server of `build` still lacks: the program and its libraries, and the CUDA libraries it
@@ -3812,7 +3889,7 @@ async fn listen_download(state: &AppState) -> Option<downloads::DownloadProgress
 }
 
 async fn midi_runtime(State(state): State<AppState>) -> Json<Value> {
-    let build = midi_build(&*state.engine_options.read().await);
+    let build = tool_build(&state, "midi").await;
     let server: Vec<&'static downloads::Asset> = build.as_ref().map(|build| acpp::assets(*build)).unwrap_or_default();
     let mut assets: Vec<Value> = server
         .iter()
@@ -3843,14 +3920,6 @@ async fn midi_runtime(State(state): State<AppState>) -> Json<Value> {
         "active_download": separation_download_progress(state.midi.downloader().active().await, acpp_download(&state, "midi").await),
         "chosen_model": preferred_midi_size(&state),
     }))
-}
-
-/// The audio.cpp build MuScriptor transcribes on: the processor when the engine is set to it, else a CUDA card or a
-/// Mac's Metal when there is one. MuScriptor was checked note for note on CUDA only, so Vulkan's cards transcribe on
-/// the processor.
-fn midi_build(options: &EngineOptions) -> anyhow::Result<acpp_server::asset::Build> {
-    let build = acpp::build_for(if options.backend == music_engine::yue_server::ComputeBackend::Cpu { "cpu" } else { "auto" })?;
-    Ok(if build == acpp_server::asset::Build::Vulkan { acpp_server::asset::Build::Cpu } else { build })
 }
 
 async fn install_training_base(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
@@ -4685,11 +4754,10 @@ async fn restore_download(state: &AppState) -> Option<downloads::DownloadProgres
     }
 }
 
-/// Restoring after compression: the model, the server it runs in (the stems' device), what is still to download, the
-/// download and the run.
+/// Restoring after compression: the model, the server it runs in (the restoration's device), what is still to
+/// download, the download and the run.
 async fn restore_status(State(state): State<AppState>) -> Json<Value> {
-    let runtime = state.separation_config.read().await.runtime;
-    let build = separation_build(runtime);
+    let build = tool_build(&state, "restore").await;
     let model_installed = state.separator.restore_installed();
     let server_installed = build.as_ref().is_ok_and(|build| state.acpp.installed(*build));
     let missing_bytes = (if model_installed { 0 } else { restore::model().bytes }) + build.as_ref().map(|build| acpp_missing_bytes(&state, *build)).unwrap_or(0);
@@ -4710,10 +4778,9 @@ async fn restore_status(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-/// Restoring after compression on the models page: audio.cpp's server of the stems' device and Apollo's weights.
+/// Restoring after compression on the models page: audio.cpp's server of the restoration's device and Apollo's weights.
 async fn restore_runtime(State(state): State<AppState>) -> Json<Value> {
-    let runtime = state.separation_config.read().await.runtime;
-    let build = separation_build(runtime);
+    let build = tool_build(&state, "restore").await;
     let server: Vec<&'static downloads::Asset> = build.as_ref().map(|build| acpp::assets(*build)).unwrap_or_default();
     let mut assets: Vec<Value> = server
         .iter()
@@ -4737,10 +4804,9 @@ async fn restore_runtime(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-/// Downloads Apollo and audio.cpp's server of the stems' device, whichever is missing.
+/// Downloads Apollo and audio.cpp's server of the restoration's device, whichever is missing.
 async fn install_restore(State(state): State<AppState>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
-    let runtime = state.separation_config.read().await.runtime;
-    let build = separation_build(runtime).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    let build = tool_build(&state, "restore").await.map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
     let model: Vec<&'static downloads::Asset> = if state.separator.restore_installed() { Vec::new() } else { vec![restore::model()] };
     if model.is_empty() && state.acpp.installed(build) {
         return Ok(Json(serde_json::json!({ "installed": true })));
@@ -4784,8 +4850,7 @@ async fn start_restore(State(state): State<AppState>, Json(request): Json<Restor
     if slot.as_ref().is_some_and(|run| !run.done) {
         return Err(api_error(StatusCode::CONFLICT, "a track is already being restored".into()));
     }
-    let runtime = state.separation_config.read().await.runtime;
-    let build = separation_build(runtime).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    let build = tool_build(&state, "restore").await.map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
     if let Some(why) = restore::not_ready(state.separator.restore_installed(), state.acpp.installed(build)) {
         return Err(api_error(StatusCode::BAD_REQUEST, why.into()));
     }
@@ -7931,6 +7996,7 @@ async fn write_studio_settings(state: &AppState, selection: Option<SetupSelectRe
         cover_templates: Some(state.cover_templates.read().await.clone()),
         cover_template_default: state.cover_template_default.read().await.clone(),
         separation: Some(state.separation_config.read().await.clone()),
+        tool_devices: Some(state.tool_devices.read().await.clone()),
         cover_auto: Some(*state.cover_auto.read().await),
         file_tags_settings: Some(*state.file_tags_settings.read().await),
         cover_look: Some(state.cover_look.read().await.clone()),
@@ -9910,7 +9976,7 @@ fn midi_size(asked: Option<&str>) -> Result<&'static midi::Size, (StatusCode, Js
 
 /// The transcriber, its model sizes, the download and the run.
 async fn midi_status(State(state): State<AppState>) -> Json<Value> {
-    let build = midi_build(&*state.engine_options.read().await);
+    let build = tool_build(&state, "midi").await;
     let sizes: Vec<Value> = midi::SIZES
         .iter()
         .map(|size| {
@@ -9951,7 +10017,7 @@ struct MidiSizeRequest {
 /// Downloads audio.cpp's server and a model size ahead of the first use.
 async fn install_midi(State(state): State<AppState>, Json(input): Json<MidiSizeRequest>) -> Result<Json<Value>, (StatusCode, Json<ApiError>)> {
     let size = midi_size(input.size.as_deref())?;
-    let build = midi_build(&*state.engine_options.read().await).map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
+    let build = tool_build(&state, "midi").await.map_err(|error| api_error(StatusCode::BAD_REQUEST, format!("{error:#}")))?;
     let missing = state.midi.missing(size);
     if missing.is_empty() && state.acpp.installed(build) {
         return Ok(Json(serde_json::json!({ "installed": true, "size": size.id })));
@@ -10136,7 +10202,7 @@ fn midi_stopped(state: &AppState) -> bool {
 /// Fetches what is missing, reads the audio as the transcriber wants it and
 /// runs it on audio.cpp's server. Returns how many notes it heard.
 async fn transcribe_to_midi(state: &AppState, size: &'static midi::Size, audio: &std::path::Path, output: &std::path::Path) -> anyhow::Result<usize> {
-    let build = midi_build(&*state.engine_options.read().await)?;
+    let build = tool_build(&state, "midi").await?;
     let missing = state.midi.missing(size);
     if !missing.is_empty() || !state.acpp.installed(build) {
         // the first use fetches what the tool needs, as the karaoke recogniser does
@@ -11224,7 +11290,7 @@ fn update_acpp_builds(
     state: &AppState,
     leftovers: &[update_screen::Leftover],
     separation: lyrics_sync::OnnxFlavour,
-    options: &EngineOptions,
+    midi: tool_device::Device,
     karaoke: &lyrics_sync::LyricsSyncConfig,
 ) -> Vec<(acpp_server::asset::Build, &'static str)> {
     let left = |what: &str| leftovers.iter().any(|leftover| leftover.what == what && !leftover.paths.is_empty());
@@ -11240,7 +11306,7 @@ fn update_acpp_builds(
         }
     }
     if left("midi-hotstep") && midi::SIZES.iter().any(|size| state.midi.model_installed(size)) {
-        if let Ok(build) = midi_build(options) {
+        if let Ok(build) = tool_device::build("midi", midi) {
             builds.push((build, "midi"));
         }
     }
@@ -11252,7 +11318,7 @@ fn update_acpp_builds(
 fn update_plan_now(
     state: &AppState,
     separation: lyrics_sync::OnnxFlavour,
-    options: &EngineOptions,
+    midi: tool_device::Device,
     karaoke: &lyrics_sync::LyricsSyncConfig,
     decoder: Option<model_manager::MissingDecoder>,
 ) -> update_screen::Plan {
@@ -11330,7 +11396,7 @@ fn update_plan_now(
             take(Part::Karaoke, asset, state.lyrics_sync.downloader());
         }
     }
-    for (build, _) in update_acpp_builds(state, &leftovers, separation, options, karaoke) {
+    for (build, _) in update_acpp_builds(state, &leftovers, separation, midi, karaoke) {
         for asset in state.acpp.missing(build) {
             take(Part::Audiocpp, asset, state.acpp.downloader());
         }
@@ -11340,14 +11406,14 @@ fn update_plan_now(
 
 async fn update_plan(state: &AppState) -> Result<update_screen::Plan, (StatusCode, Json<ApiError>)> {
     let separation = state.separation_config.read().await.runtime;
-    let options = state.engine_options.read().await.clone();
+    let midi = tool_device_of(state, "midi").await;
     let karaoke = state.lyrics_sync_config.read().await.clone();
     let picked = state.selected_component_ids.read().await.clone();
     let profile = state.selected_profile_id.read().await.clone();
     let state = state.clone();
     tokio::task::spawn_blocking(move || {
         let decoder = state.model_manager.decoder_to_fetch(profile.as_deref(), picked.as_deref());
-        update_plan_now(&state, separation, &options, &karaoke, decoder)
+        update_plan_now(&state, separation, midi, &karaoke, decoder)
     })
         .await
         .map_err(|error| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("the update plan was not read: {error}")))
@@ -11434,7 +11500,7 @@ async fn setup_update_apply(State(state): State<AppState>) -> Result<Json<Value>
 /// leftovers whose replacement is in place.
 async fn run_update(state: &AppState, rows: &[update_screen::Row], hint: &mut Option<downloads::ManualArchive>) -> anyhow::Result<()> {
     let separation = state.separation_config.read().await.runtime;
-    let options = state.engine_options.read().await.clone();
+    let midi = tool_device_of(state, "midi").await;
     let karaoke = state.lyrics_sync_config.read().await.clone();
     let data_root = update_data_root(state).to_path_buf();
     let mut parts: Vec<update_screen::Part> = Vec::new();
@@ -11455,7 +11521,7 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row], hint: &mut Op
                 let assets: Vec<&'static downloads::Asset> = update_catalogue(part).into_iter().filter(|asset| ids.contains(&asset.id)).collect();
                 state.acpp.downloader().install_with_hint("audiocpp", &assets, hint).await?;
                 // the CUDA 13 build runs on the engine's cuBLAS 13, which the engine's downloader keeps
-                for (build, scope) in update_acpp_builds(state, &retired::leftovers(&data_root), separation, &options, &karaoke) {
+                for (build, scope) in update_acpp_builds(state, &retired::leftovers(&data_root), separation, midi, &karaoke) {
                     install_acpp(state, build, scope).await?;
                 }
             }
@@ -11467,7 +11533,7 @@ async fn run_update(state: &AppState, rows: &[update_screen::Row], hint: &mut Op
         }
     }
     let demucs_ready = htdemucs_installed(state, separation);
-    let midi_ready = !midi::SIZES.iter().any(|size| state.midi.model_installed(size)) || midi_build(&options).is_ok_and(|build| state.acpp.installed(build));
+    let midi_ready = !midi::SIZES.iter().any(|size| state.midi.model_installed(size)) || tool_device::build("midi", midi).is_ok_and(|build| state.acpp.installed(build));
     let tempo_ready = !state.training.listen_ready() || state.lyrics_sync.onnxruntime_library().is_some();
     let whisper_ready = !karaoke_on_whisper(&karaoke) || state.lyrics_sync.crisper_ready(karaoke.runtime);
     tokio::task::spawn_blocking(move || {
@@ -15795,6 +15861,7 @@ mod tests {
             proxy: None,
             network: None,
             separation: Some(separation::SeparationConfig::default()),
+            tool_devices: None,
             cover_template_default: Some("photographic".into()),
         };
         let restored: PersistedStudioSettings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
