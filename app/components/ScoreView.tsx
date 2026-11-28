@@ -6,7 +6,7 @@ import { MidiSynth, type PlayNote } from './midi/midiSynth';
 import { cueIndex, scoreCues, scoreNotes, type Cue } from '../services/scorePlayback';
 import { saveFile } from '../services/saveFile';
 import { failed as refusedScore, instrumentalScore, vocalOctave } from '../services/scoreApi';
-import { engravedScore } from '../services/scoreEngraving';
+import { engravedScore, fontScoreAccidentals } from '../services/scoreEngraving';
 import { SongbookDialog } from './SongbookDialog';
 import { songbookStrings } from '../i18n/songbook';
 
@@ -343,6 +343,13 @@ export async function scorePdf(abc: string): Promise<ArrayBuffer> {
       foregroundColor: '#000000',
     });
     const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+    // The built-in PDF fonts cannot encode the musical accidental characters.
+    const accidentalFont = 'ScoreAccidentals';
+    if (fontScoreAccidentals(host, accidentalFont)) {
+      const { default: font } = await import('../assets/score-accidentals.ttf?inline');
+      doc.addFileToVFS('score-accidentals.ttf', font.slice(font.indexOf(',') + 1));
+      doc.addFont('score-accidentals.ttf', accidentalFont, 'normal');
+    }
     const margin = 36;
     const pageWidth = doc.internal.pageSize.getWidth() - margin * 2;
     const pageBottom = doc.internal.pageSize.getHeight() - margin;

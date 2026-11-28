@@ -36,3 +36,28 @@ export function engravedScore(abc: string): string {
       })))
     .join('\n');
 }
+
+/** Use the PDF's embedded font only for accidentals, leaving the rest of each chord in its usual font. */
+export function fontScoreAccidentals(host: ParentNode, fontFamily: string): boolean {
+  let found = false;
+  for (const chord of host.querySelectorAll('text[data-name="chord"]')) {
+    const walker = document.createTreeWalker(chord, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for (const node of nodes) {
+      const parts = node.data.split(/([♭♮♯]+)/);
+      if (parts.length === 1) continue;
+      found = true;
+      node.replaceWith(...parts.map((part, index) => {
+        if (index % 2 === 0) return part;
+        const span = document.createElementNS(chord.namespaceURI, 'tspan');
+        span.setAttribute('font-family', fontFamily);
+        span.setAttribute('font-style', 'normal');
+        span.setAttribute('font-weight', 'normal');
+        span.textContent = part;
+        return span;
+      }));
+    }
+  }
+  return found;
+}
